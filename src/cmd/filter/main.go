@@ -16,15 +16,15 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, err
 	}
 
-	sumAmount, err := strconv.Atoi(os.Getenv("SUM_AMOUNT"))
-	if err != nil {
-		return filter.FilterConfig{}, err
-	}
+	// sumAmount, err := strconv.Atoi(os.Getenv("SUM_AMOUNT"))
+	// if err != nil {
+	// 	return filter.FilterConfig{}, err
+	// }
 
-	aggregationAmount, err := strconv.Atoi(os.Getenv("AGGREGATION_AMOUNT"))
-	if err != nil {
-		return filter.FilterConfig{}, err
-	}
+	// aggregationAmount, err := strconv.Atoi(os.Getenv("AGGREGATION_AMOUNT"))
+	// if err != nil {
+	// 	return filter.FilterConfig{}, err
+	// }
 
 	momPort, err := strconv.Atoi(os.Getenv("MOM_PORT"))
 	if err != nil {
@@ -52,14 +52,9 @@ func loadConfig() (filter.FilterConfig, error) {
 	}
 
 	return filter.FilterConfig{
-		Id:                id,
-		MomHost:           momHost,
-		MomPort:           momPort,
-		InputQueue:        inputQueue,
-		SumAmount:         sumAmount,
-		SumPrefix:         sumPrefix,
-		AggregationAmount: aggregationAmount,
-		AggregationPrefix: aggregationPrefix,
+		Id:      id,
+		MomHost: momHost,
+		MomPort: momPort,
 	}, nil
 }
 
@@ -70,7 +65,7 @@ func run() int {
 		return 1
 	}
 	var server worker.Worker
-	switch config.FilterType {
+	switch config.Type {
 	case filter.CURRENCY:
 		server, err = filter.CreateCurrencyFilter(config)
 	case filter.AMOUNT:

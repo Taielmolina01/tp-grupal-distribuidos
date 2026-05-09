@@ -13,13 +13,13 @@ func CreateCurrencyFilter(config FilterConfig) (worker.Worker, error) {
 
 func CreateAmountFilter(config FilterConfig) (worker.Worker, error) {
 	return newFilter(config, func(t transfer.Transfer) bool {
-		return t.PaymentCurrency > config.Amount
+		return t.AmountPaid > config.Amount
 	})
 }
 
 func CreateDateRangeFilter(config FilterConfig) (worker.Worker, error) {
 	return newFilter(config, func(t transfer.Transfer) bool {
-		return t.Timestamp < config.EndDateRange && t.Timestamp > config.StartDateRange
+		return t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
 	})
 }
 
@@ -31,6 +31,6 @@ func CreateDateRangeAndPaymentMethod(config FilterConfig) (worker.Worker, error)
 				found = true
 			}
 		}
-		return t.Timestamp < config.EndDateRange && t.Timestamp > config.StartDateRange && found
+		return t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange) && found
 	})
 }

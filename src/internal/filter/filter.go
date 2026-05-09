@@ -2,6 +2,7 @@ package filter
 
 import (
 	"log/slog"
+	"time"
 
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/worker"
@@ -21,8 +22,14 @@ type FilterConfig struct {
 	Id             int
 	MomHost        string
 	MomPort        int
-	inputExchange  string
-	outputExchange string
+	InputExchange  string
+	OutputExchange string
+	// parameters used by constructors
+	Currency       string
+	Amount         float32
+	StartDateRange time.Time
+	EndDateRange   time.Time
+	Currencies     []string
 }
 
 type Filter[T comparable] struct {
@@ -37,13 +44,13 @@ type Filter[T comparable] struct {
 func newFilter[T comparable](config FilterConfig, callback func(T) bool) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := middleware.CreateExchangeMiddleware(config.inputExchange, []string{}, connSettings)
+	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, []string{}, connSettings)
 
 	if err != nil {
 		return nil, err
 	}
 
-	outputExchange, err := middleware.CreateExchangeMiddleware(config.outputExchange, []string{}, connSettings)
+	outputExchange, err := middleware.CreateExchangeMiddleware(config.OutputExchange, []string{}, connSettings)
 	if err != nil {
 		inputExchange.Close()
 		return nil, err
