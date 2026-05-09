@@ -8,9 +8,9 @@ type Transfer struct {
 	FromBankAccount   string
 	ToBank            string
 	ToBankAccount     string
-	AmountReceived    float
+	AmountReceived    float32
 	ReceivingCurrency string
-	AmountPaid        float
+	AmountPaid        float32
 	PaymentCurrency   string
 	PaymentFormat     string
 	IsLaundering      bool

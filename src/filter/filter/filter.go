@@ -6,7 +6,17 @@ import (
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/common/middleware"
 )
 
+type FilterType int
+
+const (
+	CURRENCY FilterType = iota
+	AMOUNT
+	DATE_RANGE
+	DATE_RANGE_AND_PAYMENT
+)
+
 type FilterConfig struct {
+	Type           FilterType
 	Id             int
 	MomHost        string
 	MomPort        int
