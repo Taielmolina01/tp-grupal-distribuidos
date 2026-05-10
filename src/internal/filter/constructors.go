@@ -34,3 +34,7 @@ func CreateDateRangeAndPaymentMethod(config FilterConfig) (worker.Worker, error)
 		return isValidCurrency(t, config) && t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
 	})
 }
+
+func CreateCountAndFilter(config CountAndFilterConfig) (worker.Worker, error) {
+	return newCountAndFilter[transfer.Transfer](config)
+}
