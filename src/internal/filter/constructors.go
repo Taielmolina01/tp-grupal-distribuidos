@@ -7,7 +7,12 @@ import (
 
 func CreateCurrencyFilter(config FilterConfig) (worker.Worker, error) {
 	return newFilter(config, func(t transfer.Transfer) bool {
-		return t.PaymentCurrency == config.Currency
+		for _, currency := range config.Currencies {
+			if t.PaymentCurrency == currency {
+				return true
+			}
+		}
+		return false
 	})
 }
 

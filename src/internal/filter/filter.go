@@ -8,13 +8,13 @@ import (
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/worker"
 )
 
-type FilterType int
+type FilterType string
 
 const (
-	CURRENCY FilterType = iota
-	AMOUNT
-	DATE_RANGE
-	DATE_RANGE_AND_PAYMENT
+	CURRENCY               FilterType = "CURRENCY"
+	AMOUNT                 FilterType = "AMOUNT"
+	DATE_RANGE             FilterType = "DATE_RANGE"
+	DATE_RANGE_AND_PAYMENT FilterType = "DATE_RANGE_AND_PAYMENT"
 )
 
 type FilterConfig struct {
@@ -24,8 +24,6 @@ type FilterConfig struct {
 	MomPort        int
 	InputExchange  string
 	OutputExchange string
-	// parameters used by constructors
-	Currency       string
 	Amount         float32
 	StartDateRange time.Time
 	EndDateRange   time.Time
