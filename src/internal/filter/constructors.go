@@ -1,18 +1,19 @@
 package filter
 
 import (
+	"slices"
+
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/worker"
 )
 
+func isValidCurrency(t transfer.Transfer, config FilterConfig) bool {
+	return slices.Contains(config.Currencies, t.PaymentCurrency)
+}
+
 func CreateCurrencyFilter(config FilterConfig) (worker.Worker, error) {
 	return newFilter(config, func(t transfer.Transfer) bool {
-		for _, currency := range config.Currencies {
-			if t.PaymentCurrency == currency {
-				return true
-			}
-		}
-		return false
+		return isValidCurrency(t, config)
 	})
 }
 
@@ -30,12 +31,6 @@ func CreateDateRangeFilter(config FilterConfig) (worker.Worker, error) {
 
 func CreateDateRangeAndPaymentMethod(config FilterConfig) (worker.Worker, error) {
 	return newFilter(config, func(t transfer.Transfer) bool {
-		found := false
-		for _, currency := range config.Currencies {
-			if currency == t.PaymentCurrency {
-				found = true
-			}
-		}
-		return t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange) && found
+		return isValidCurrency(t, config) && t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
 	})
 }
