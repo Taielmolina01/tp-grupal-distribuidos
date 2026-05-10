@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"sort"
@@ -39,7 +40,7 @@ func awaitClientContainers(containerNames []string) error {
 	cmd := exec.Command("docker", args...)
 	output, err := cmd.Output()
 	if err != nil {
-		return errors.New("Failed to wait for client containers")
+		return errors.New("failed to wait for client containers")
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
@@ -50,7 +51,7 @@ func awaitClientContainers(containerNames []string) error {
 		}
 	}
 	if zeroCount != len(containerNames) {
-		return errors.New("One or more clients exited with an error code")
+		return errors.New("one or more clients exited with an error code")
 	}
 	return nil
 }
@@ -66,13 +67,17 @@ func findEnvVar(environment []string, target string) string {
 }
 
 func buildInputFruitTop(inputFile string) ([]fruititem.FruitItem, error) {
-	buildInputFruitTopError := errors.New("Couldn't build input file fruit top")
+	buildInputFruitTopError := errors.New("couldn't build input file fruit top")
 
 	f, err := os.Open(inputFile)
 	if err != nil {
 		return nil, buildInputFruitTopError
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			slog.Error("While closing input file", "err", err)
+		}
+	}()
 
 	amountByFruit := map[string]fruititem.FruitItem{}
 	reader := csv.NewReader(f)
@@ -110,13 +115,17 @@ func buildInputFruitTop(inputFile string) ([]fruititem.FruitItem, error) {
 }
 
 func readOutputFruitTop(outputFile string) ([]fruititem.FruitItem, error) {
-	readOutputFruitTop := errors.New("Couldn't read output file fruit top")
+	readOutputFruitTop := errors.New("couldn't read output file fruit top")
 
 	f, err := os.Open(outputFile)
 	if err != nil {
 		return nil, readOutputFruitTop
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			slog.Error("While closing output file", "err", err)
+		}
+	}()
 
 	var items []fruititem.FruitItem
 	reader := csv.NewReader(f)
@@ -146,7 +155,7 @@ func verifyClientOutput(topSize int, svc service) error {
 	outputFile := "." + findEnvVar(svc.Environment, "OUTPUT_FILE")
 
 	if inputFile == "." || outputFile == "." {
-		return errors.New("Bad file environment variable config")
+		return errors.New("bad file environment variable config")
 	}
 
 	expectedFruitTop, err := buildInputFruitTop(inputFile)
@@ -176,11 +185,11 @@ func verifyClientOutput(topSize int, svc service) error {
 		}
 	}
 	if mismatchFound {
-		return errors.New("Mismatch in expected and received fruit tops")
+		return errors.New("mismatch in expected and received fruit tops")
 	}
 
 	if topSize != len(receivedFruitTop) {
-		return errors.New(fmt.Sprintf("Mismatch in expected and received fruit tops length %d/%d", len(receivedFruitTop), topSize))
+		return fmt.Errorf("mismatch in expected and received fruit tops length %d/%d", len(receivedFruitTop), topSize)
 	}
 
 	log.Println("OK")

@@ -45,7 +45,9 @@ func NewJoin(config JoinConfig) (*Join, error) {
 
 	outputQueue, err := middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
 	if err != nil {
-		inputQueue.Close()
+		if err := inputQueue.Close(); err != nil {
+			slog.Error("While closing input queue", "err", err)
+		}
 		return nil, err
 	}
 
@@ -62,9 +64,11 @@ func NewJoin(config JoinConfig) (*Join, error) {
 }
 
 func (join *Join) Run() {
-	join.inputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := join.inputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		join.handleMessage(msg, ack, nack)
-	})
+	}); err != nil {
+		slog.Error("While consuming from input queue", "err", err)
+	}
 }
 
 func (join *Join) handleMessage(msg middleware.Message, ack func(), nack func()) {
@@ -175,7 +179,9 @@ func (join *Join) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	join.Close()
+	if err := join.Close(); err != nil {
+		slog.Error("While closing join node", "err", err)
+	}
 }
 
 func (join *Join) Close() error {

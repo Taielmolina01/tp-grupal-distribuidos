@@ -26,7 +26,7 @@ func run() int {
 	case filter.DATE_RANGE_AND_PAYMENT:
 		server, err = filter.CreateDateRangeAndPaymentMethod(config)
 	default:
-		slog.Error("While loading filter type", "err", errors.New("Invalid filter type"))
+		slog.Error("While loading filter type", "err", errors.New("invalid filter type"))
 		return 1
 	}
 

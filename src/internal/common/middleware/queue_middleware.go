@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"log"
+	"log/slog"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -31,7 +32,9 @@ func CreateQueueMiddlewareHelper(
 
 	ch, err := conn.Channel()
 	if err != nil {
-		middleware.Close()
+		if err := middleware.Close(); err != nil {
+			slog.Error("While closing middleware", "err", err)
+		}
 		return nil, ErrMessageMiddlewareDisconnected
 	}
 
@@ -48,7 +51,9 @@ func CreateQueueMiddlewareHelper(
 		},
 	)
 	if err != nil {
-		middleware.Close()
+		if err := middleware.Close(); err != nil {
+			slog.Error("While closing middleware", "err", err)
+		}
 		return nil, ErrMessageMiddlewareDisconnected
 	}
 
@@ -103,8 +108,16 @@ func (q *queueMiddleware) StartConsuming(callbackFunc func(msg Message, ack func
 		case d := <-msgs:
 			callbackFunc(
 				Message{Body: string(d.Body)},
-				func() { d.Ack(false) },
-				func() { d.Nack(false, false) },
+				func() {
+					if err := d.Ack(false); err != nil {
+						slog.Error("While sending ack", "err", err)
+					}
+				},
+				func() {
+					if err := d.Nack(false, false); err != nil {
+						slog.Error("While sending nack", "err", err)
+					}
+				},
 			)
 		case <-stopCh:
 			return nil

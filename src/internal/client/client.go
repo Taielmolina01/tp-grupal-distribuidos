@@ -63,7 +63,11 @@ func connectToServer(host, port string) (net.Conn, error) {
 }
 
 func (client *Client) Run() error {
-	defer client.conn.Close()
+	defer func() {
+		if err := client.conn.Close(); err != nil {
+			slog.Error("While closing client's socket", "err", err)
+		}
+	}()
 	go client.handleSignals()
 
 	if err := client.sendFruitRecords(); err != nil {
@@ -89,7 +93,9 @@ func (client *Client) handleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received")
 	client.running.Store(false)
-	client.conn.Close()
+	if err := client.conn.Close(); err != nil {
+		slog.Error("While closing client's socket from handleSignals", "err", err)
+	}
 }
 
 func (client *Client) expectMsgType(expectedMsgType external.MsgType) error {
@@ -99,7 +105,7 @@ func (client *Client) expectMsgType(expectedMsgType external.MsgType) error {
 		return err
 	}
 	if msgType != expectedMsgType {
-		return errors.New("Unexpected message type")
+		return errors.New("unexpected message type")
 	}
 	return nil
 }
@@ -110,7 +116,11 @@ func (client *Client) sendFruitRecords() error {
 		slog.Debug("Error while runninging input file", "err", err)
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Error("While closing input file", "err", err)
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

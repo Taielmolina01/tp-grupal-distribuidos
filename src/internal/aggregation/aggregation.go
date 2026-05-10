@@ -47,7 +47,9 @@ func NewAggregation(config AggregationConfig) (*Aggregation, error) {
 	inputExchangeRoutingKey := []string{fmt.Sprintf("%s_%d", config.AggregationPrefix, config.Id)}
 	inputExchange, err := middleware.CreateExchangeMiddleware(config.AggregationPrefix, inputExchangeRoutingKey, connSettings)
 	if err != nil {
-		outputQueue.Close()
+		if err := outputQueue.Close(); err != nil {
+			slog.Error("While closing output queue", "err", err)
+		}
 		return nil, err
 	}
 
@@ -63,9 +65,11 @@ func NewAggregation(config AggregationConfig) (*Aggregation, error) {
 }
 
 func (aggregation *Aggregation) Run() {
-	aggregation.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := aggregation.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		aggregation.handleMessage(msg, ack, nack)
-	})
+	}); err != nil {
+		slog.Error("While consuming from inputExchange", "err", err)
+	}
 }
 
 func (aggregation *Aggregation) handleMessage(msg middleware.Message, ack func(), nack func()) {
@@ -159,7 +163,9 @@ func (aggregation *Aggregation) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	aggregation.Close()
+	if err := aggregation.Close(); err != nil {
+		slog.Error("While closing aggregation node", "err", err)
+	}
 }
 
 func (aggregation *Aggregation) Close() error {

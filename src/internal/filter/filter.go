@@ -50,7 +50,9 @@ func newFilter[T comparable](config FilterConfig, callback func(T) bool) (worker
 
 	outputExchange, err := middleware.CreateExchangeMiddleware(config.OutputExchange, []string{}, connSettings)
 	if err != nil {
-		inputExchange.Close()
+		if err := inputExchange.Close(); err != nil {
+			slog.Error("while closing input exchange", "err", err)
+		}
 		return nil, err
 	}
 
@@ -64,9 +66,11 @@ func newFilter[T comparable](config FilterConfig, callback func(T) bool) (worker
 
 func (filter *Filter[T]) Run() {
 	slog.Info("Starting filter consumers", "filter_id", filter.id)
-	go filter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := filter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		filter.handleMessage(msg, ack, nack)
-	})
+	}); err != nil {
+		slog.Error("While consuming from input exchange", "err", err)
+	}
 }
 
 func (filter *Filter[T]) handleMessage(msg middleware.Message, ack, nack func()) {

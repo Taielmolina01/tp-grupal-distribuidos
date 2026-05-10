@@ -41,14 +41,20 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 
 	outputQueue, err := middleware.CreateQueueMiddleware(config.InputQueueName, connSettings)
 	if err != nil {
-		inputQueue.Close()
+		if err := inputQueue.Close(); err != nil {
+			slog.Error("While closing input queue", "err", err)
+		}
 		return nil, err
 	}
 
 	listener, err := net.Listen("tcp", config.ServerHost+":"+config.ServerPort)
 	if err != nil {
-		inputQueue.Close()
-		outputQueue.Close()
+		if err := inputQueue.Close(); err != nil {
+			slog.Error("While closing input queue", "err", err)
+		}
+		if err := outputQueue.Close(); err != nil {
+			slog.Error("While closing input queue", "err", err)
+		}
 		return nil, err
 	}
 
@@ -58,11 +64,19 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 }
 
 func (gateway *Gateway) Run() error {
-	defer gateway.listener.Close()
+	defer func() {
+		if err := gateway.listener.Close(); err != nil {
+			slog.Error("While closing gateway's acceptor socket", "err", err)
+		}
+	}()
 
-	go gateway.outputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		gateway.handleClientResponse(msg, ack, nack)
-	})
+	go func() {
+		if err := gateway.outputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+			gateway.handleClientResponse(msg, ack, nack)
+		}); err != nil {
+			slog.Error("While consuming output queue", "err", err)
+		}
+	}()
 	go gateway.handleSignals()
 
 	slog.Info("Accepting connections...")
@@ -86,10 +100,14 @@ func (gateway *Gateway) Run() error {
 		go gateway.handleClientRequest(client)
 	}
 
-	gateway.outputQueue.StopConsuming()
+	if err := gateway.outputQueue.StopConsuming(); err != nil {
+		slog.Error("While stopping output queue", "err", err)
+	}
 	gateway.registry.WithLock(func(clients []clientregistry.ClientState) {
 		for _, client := range clients {
-			client.Conn.Close()
+			if err := client.Conn.Close(); err != nil {
+				slog.Error("While closing client's socket", "err", err)
+			}
 		}
 	})
 	return nil
@@ -101,7 +119,9 @@ func (gateway *Gateway) handleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received")
 	gateway.running.Store(false)
-	gateway.listener.Close()
+	if err := gateway.listener.Close(); err != nil {
+		slog.Error("While closing acceptor socket", "err", err)
+	}
 }
 
 func (gateway *Gateway) handleClientRequest(client clientregistry.ClientState) {
@@ -145,7 +165,9 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 			if err != nil {
 				slog.Debug("While reading from output queue", "err", err)
 				nack()
-				gateway.outputQueue.StopConsuming()
+				if err := gateway.outputQueue.StopConsuming(); err != nil {
+					slog.Error("While stopping output queue", "err", err)
+				}
 				return
 			}
 

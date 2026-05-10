@@ -28,10 +28,10 @@ func deserializeJson(message []byte) ([]interface{}, error) {
 func parseClientID(raw interface{}) (int, error) {
 	clientIDAsFloat, ok := raw.(float64)
 	if !ok {
-		return 0, errors.New("Client ID is not a valid number")
+		return 0, errors.New("client ID is not a valid number")
 	}
 	if clientIDAsFloat < 0 || math.Trunc(clientIDAsFloat) != clientIDAsFloat {
-		return 0, errors.New("Client ID must be a non-negative integer")
+		return 0, errors.New("client ID must be a non-negative integer")
 	}
 	return int(clientIDAsFloat), nil
 }
@@ -83,17 +83,17 @@ func DeserializeMessage(message *middleware.Message) (*fruititem.FruitItemFromCl
 					true,
 					nil
 			}
-			return nil, nil, false, errors.New("Datum is not an array")
+			return nil, nil, false, errors.New("datum is not an array")
 		}
 
 		fruit, ok := fruitPair[0].(string)
 		if !ok {
-			return nil, nil, false, errors.New("Datum is not a (fruit, amount) pair")
+			return nil, nil, false, errors.New("datum is not a (fruit, amount) pair")
 		}
 
 		fruitAmount, ok := fruitPair[1].(float64)
 		if !ok {
-			return nil, nil, false, errors.New("Datum is not a (fruit, amount) pair")
+			return nil, nil, false, errors.New("datum is not a (fruit, amount) pair")
 		}
 
 		fruitRecord := fruititem.FruitItem{Fruit: fruit, Amount: uint32(fruitAmount)}
@@ -107,15 +107,15 @@ func DeserializeMessage(message *middleware.Message) (*fruititem.FruitItemFromCl
 func DeserializeEofRingMessage(data []interface{}) (*eofringmessage.EofRingMessage, error) {
 	leaderAsFloat, ok := data[0].(float64)
 	if !ok {
-		return nil, errors.New("LeaderID is not a non negative number")
+		return nil, errors.New("leaderID is not a non negative number")
 	}
 	actualAmountAsFloat, ok := data[1].(float64)
 	if !ok {
-		return nil, errors.New("Actual amount of messages handled is not a non negative number")
+		return nil, errors.New("actual amount of messages handled is not a non negative number")
 	}
 	realAmountAsFloat, ok := data[2].(float64)
 	if !ok {
-		return nil, errors.New("Real amount of messages handled is not a non negative number")
+		return nil, errors.New("real amount of messages handled is not a non negative number")
 	}
 	parsedClientID, err := parseClientID(data[3])
 	if err != nil {
@@ -138,7 +138,7 @@ func DeserializeEofCommitRingMessage(data []interface{}) (*eofringmessage.EofMes
 
 	hopsAsFloat, ok := data[1].(float64)
 	if !ok {
-		return nil, errors.New("Hops is not a valid number")
+		return nil, errors.New("hops is not a valid number")
 	}
 
 	return &eofringmessage.EofMessageCommit{ClientID: parsedClientID, Hops: int(hopsAsFloat)}, nil
@@ -221,12 +221,12 @@ func DeserializeAggregationEofMessage(message *middleware.Message) (*eofmessage.
 
 	clientID, err := parseClientID(data[1])
 	if err != nil {
-		return nil, false, errors.New("Aggregation EOF message has invalid client ID")
+		return nil, false, errors.New("aggregation EOF message has invalid client ID")
 	}
 
 	aggregationIDRaw, ok := data[2].(float64)
 	if !ok {
-		return nil, false, errors.New("Aggregation EOF message has invalid aggregation ID")
+		return nil, false, errors.New("aggregation EOF message has invalid aggregation ID")
 	}
 
 	return &eofmessage.AggregationEofMessage{
