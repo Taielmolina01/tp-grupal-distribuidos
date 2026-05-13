@@ -30,3 +30,18 @@ type SplittedTransfer struct {
 	IsLaundering      bool
 	IsLeftPart        bool
 }
+
+// Capaz sobren comparaciones idk
+func (t Transfer) Equals(other Transfer) bool {
+	return t.Timestamp.Equal(other.Timestamp) &&
+		t.FromBank == other.FromBank &&
+		t.FromBankAccount == other.FromBankAccount &&
+		t.ToBank == other.ToBank &&
+		t.ToBankAccount == other.ToBankAccount &&
+		t.AmountReceived == other.AmountReceived &&
+		t.ReceivingCurrency == other.ReceivingCurrency &&
+		t.AmountPaid == other.AmountPaid &&
+		t.PaymentCurrency == other.PaymentCurrency &&
+		t.PaymentFormat == other.PaymentFormat &&
+		t.IsLaundering == other.IsLaundering
+}

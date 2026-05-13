@@ -44,9 +44,10 @@ type FilterAndSplitter struct {
 	splitFunction  func(transfer.Transfer) (transfer.SplittedTransfer, transfer.SplittedTransfer)
 }
 
-type DistinctFilter struct {
+type DistinctFilter[T comparable] struct {
 	id             uint32
 	inputExchange  middleware.Middleware
 	outputExchange middleware.Middleware
-	alreadySeen    map[transfer.Transfer]bool
+	alreadySeen    map[T]bool
+	compareFunc    func(T, T) bool
 }

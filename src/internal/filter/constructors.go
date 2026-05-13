@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/account"
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/worker"
 )
@@ -44,4 +45,16 @@ func CreateFilterAndSplitter(config FilterConfig) (worker.Worker, error) {
 			return transfer.SplittedTransfer{}, transfer.SplittedTransfer{}
 		},
 	)
+}
+
+func CreateTransferDistinctFilter(config FilterConfig) (worker.Worker, error) {
+	return newDistinctFilter(config, func(t1 transfer.Transfer, t2 transfer.Transfer) bool {
+		return t1.Equals(t2)
+	})
+}
+
+func CreateFilterByAccountId(config FilterConfig) (worker.Worker, error) {
+	return newDistinctFilter(config, func(ac1 account.Account, ac2 account.Account) bool {
+		return ac1.Equals(ac2)
+	})
 }
