@@ -58,3 +58,12 @@ func CreateFilterByAccountId(config FilterConfig) (worker.Worker, error) {
 		return ac1.Equals(ac2)
 	})
 }
+
+func CreateAverageFilter(config FilterConfig) (worker.Worker, error) {
+	// Precondiciones:
+	// - Primer número: monto de la transferencia cruda
+	// - Segundo número: monto promedio de las transferencias
+	return newAverageFilter(config, func(n1 float32, n2 float32) bool {
+		return n1 <= n2+config.Amount && n1 >= n2-config.Amount
+	})
+}

@@ -51,3 +51,10 @@ type DistinctFilter[T comparable] struct {
 	alreadySeen    map[T]bool
 	compareFunc    func(T, T) bool
 }
+
+type AverageFilter struct {
+	id             uint32
+	inputExchange  middleware.Middleware
+	outputExchange middleware.Middleware
+	compareFunc    func(float32, float32) bool
+}
