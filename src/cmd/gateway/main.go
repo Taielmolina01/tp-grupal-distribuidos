@@ -10,14 +10,19 @@ import (
 )
 
 func loadConfig() (gateway.GatewayConfig, error) {
-	inputQueueName := os.Getenv("INPUT_QUEUE")
-	if inputQueueName == "" {
-		return gateway.GatewayConfig{}, errors.New("INPUT_QUEUE environment variable is required")
+	accountsExchange := os.Getenv("ACCOUNTS_EXCHANGE")
+	if accountsExchange == "" {
+		return gateway.GatewayConfig{}, errors.New("ACCOUNTS_EXCHANGE environment variable is required")
 	}
 
-	outputQueueName := os.Getenv("OUTPUT_QUEUE")
-	if outputQueueName == "" {
-		return gateway.GatewayConfig{}, errors.New("OUTPUT_QUEUE environment variable is required")
+	transfersExchange := os.Getenv("TRANSFERS_EXCHANGE")
+	if transfersExchange == "" {
+		return gateway.GatewayConfig{}, errors.New("TRANSFERS_EXCHANGE environment variable is required")
+	}
+
+	resultsQueue := os.Getenv("RESULTS_QUEUE")
+	if resultsQueue == "" {
+		return gateway.GatewayConfig{}, errors.New("RESULTS_QUEUE environment variable is required")
 	}
 
 	serverHost := os.Getenv("SERVER_HOST")
@@ -41,12 +46,13 @@ func loadConfig() (gateway.GatewayConfig, error) {
 	}
 
 	return gateway.GatewayConfig{
-		InputQueueName:  inputQueueName,
-		OutputQueueName: outputQueueName,
-		ServerHost:      serverHost,
-		ServerPort:      serverPort,
-		MomHost:         momHost,
-		MomPort:         momPort,
+		AccountsExchange:  accountsExchange,
+		TransfersExchange: transfersExchange,
+		ResultsQueue:      resultsQueue,
+		ServerHost:        serverHost,
+		ServerPort:        serverPort,
+		MomHost:           momHost,
+		MomPort:           momPort,
 	}, nil
 }
 

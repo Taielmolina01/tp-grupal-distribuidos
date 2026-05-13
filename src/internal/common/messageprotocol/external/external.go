@@ -15,7 +15,43 @@ const (
 	FruitTop
 	Ack
 	EndOfRecords
+	AccountRecord
+	TransferRecord
+	EOFAccounts
+	EOFTransfers
+	Result
 )
+
+type Account struct {
+	BankName      string
+	BankID        string
+	AccountNumber string
+}
+
+type Transfer struct {
+	Timestamp         string
+	FromBank          string
+	FromAccount       string
+	ToBank            string
+	ToAccount         string
+	AmountReceived    string
+	ReceivingCurrency string
+	AmountPaid        string
+	PaymentCurrency   string
+	PaymentFormat     string
+}
+
+func ReadAccountRecord(reader io.Reader) (*Account, error) {
+	return &Account{}, nil
+}
+
+func ReadTransferRecord(reader io.Reader) (*Transfer, error) {
+	return &Transfer{}, nil
+}
+
+func WriteResult(writer io.Writer, queryID uint8, data string) error {
+	return nil
+}
 
 func serializeFruitRecord(fruit *fruititem.FruitItem) []byte {
 	msg := serializer.SerializeString(fruit.Fruit)

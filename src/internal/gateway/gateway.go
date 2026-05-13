@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net"
 	"os"
@@ -15,50 +16,71 @@ import (
 )
 
 type GatewayConfig struct {
-	InputQueueName  string
-	OutputQueueName string
-	ServerHost      string
-	ServerPort      string
-	MomHost         string
-	MomPort         int
+	AccountsExchange  string
+	TransfersExchange string
+	ResultsQueue      string
+	ServerHost        string
+	ServerPort        string
+	MomHost           string
+	MomPort           int
 }
 
 type Gateway struct {
-	registry    clientregistry.ClientRegistry
-	inputQueue  middleware.Middleware
-	outputQueue middleware.Middleware
-	listener    net.Listener
-	running     atomic.Bool
+	registry          clientregistry.ClientRegistry
+	accountsExchange  middleware.Middleware
+	transfersExchange middleware.Middleware
+	resultsQueue      middleware.Middleware
+	listener          net.Listener
+	running           atomic.Bool
 }
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputQueue, err := middleware.CreateQueueMiddleware(config.OutputQueueName, connSettings)
+	accountsExchange, err := middleware.CreateExchangeMiddleware(config.AccountsExchange, []string{}, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	outputQueue, err := middleware.CreateQueueMiddleware(config.InputQueueName, connSettings)
+	transfersExchange, err := middleware.CreateExchangeMiddleware(config.TransfersExchange, []string{}, connSettings)
 	if err != nil {
-		if err := inputQueue.Close(); err != nil {
-			slog.Error("While closing input queue", "err", err)
+		if err := accountsExchange.Close(); err != nil {
+			slog.Error("While closing accounts exchange", "err", err)
+		}
+		return nil, err
+	}
+
+	resultsQueue, err := middleware.CreateQueueMiddleware(config.ResultsQueue, connSettings)
+	if err != nil {
+		if err := accountsExchange.Close(); err != nil {
+			slog.Error("While closing accounts exchange", "err", err)
+		}
+		if err := transfersExchange.Close(); err != nil {
+			slog.Error("While closing transfers exchange", "err", err)
 		}
 		return nil, err
 	}
 
 	listener, err := net.Listen("tcp", config.ServerHost+":"+config.ServerPort)
 	if err != nil {
-		if err := inputQueue.Close(); err != nil {
-			slog.Error("While closing input queue", "err", err)
+		if err := accountsExchange.Close(); err != nil {
+			slog.Error("While closing accounts exchange", "err", err)
 		}
-		if err := outputQueue.Close(); err != nil {
-			slog.Error("While closing input queue", "err", err)
+		if err := transfersExchange.Close(); err != nil {
+			slog.Error("While closing transfers exchange", "err", err)
+		}
+		if err := resultsQueue.Close(); err != nil {
+			slog.Error("While closing results queue", "err", err)
 		}
 		return nil, err
 	}
 
-	gateway := &Gateway{outputQueue: outputQueue, inputQueue: inputQueue, listener: listener}
+	gateway := &Gateway{
+		accountsExchange:  accountsExchange,
+		transfersExchange: transfersExchange,
+		resultsQueue:      resultsQueue,
+		listener:          listener,
+	}
 	gateway.running.Store(true)
 	return gateway, nil
 }
@@ -71,10 +93,10 @@ func (gateway *Gateway) Run() error {
 	}()
 
 	go func() {
-		if err := gateway.outputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+		if err := gateway.resultsQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 			gateway.handleClientResponse(msg, ack, nack)
 		}); err != nil {
-			slog.Error("While consuming output queue", "err", err)
+			slog.Error("While consuming results queue", "err", err)
 		}
 	}()
 	go gateway.handleSignals()
@@ -100,8 +122,8 @@ func (gateway *Gateway) Run() error {
 		go gateway.handleClientRequest(client)
 	}
 
-	if err := gateway.outputQueue.StopConsuming(); err != nil {
-		slog.Error("While stopping output queue", "err", err)
+	if err := gateway.resultsQueue.StopConsuming(); err != nil {
+		slog.Error("While stopping results queue consumer", "err", err)
 	}
 	gateway.registry.WithLock(func(clients []clientregistry.ClientState) {
 		for _, client := range clients {
@@ -125,98 +147,81 @@ func (gateway *Gateway) handleSignals() {
 }
 
 func (gateway *Gateway) handleClientRequest(client clientregistry.ClientState) {
-loop:
+accountsLoop:
 	for {
 		msgType, err := external.ReadMsgType(client.Conn)
 		if err != nil {
-			slog.Debug("While reading message type", "err", err)
+			slog.Debug("While reading message type (accounts phase)", "err", err)
 			return
 		}
 
 		switch msgType {
-		case external.FruitRecord:
-			if err := gateway.handleFruitRecordMessage(client); err != nil {
-				slog.Debug("While handling record message", "err", err)
+		case external.AccountRecord:
+			if err := gateway.handleAccountMessage(client); err != nil {
+				slog.Debug("While handling account message", "err", err)
 				return
 			}
 
-		case external.EndOfRecords:
-			if err := gateway.handleEndOfRecordsMessage(client); err != nil {
-				slog.Debug("While handling end of records message", "err", err)
+		case external.EOFAccounts:
+			if err := gateway.handleEOFAccountsMessage(client); err != nil {
+				slog.Debug("While handling EOF accounts message", "err", err)
 				return
 			}
-			break loop
+			break accountsLoop
 
 		default:
-			slog.Debug("Read unexpected message type")
+			slog.Debug("Unexpected message type in accounts phase", "got", msgType)
+			return
+		}
+	}
+
+transfersLoop:
+	for {
+		msgType, err := external.ReadMsgType(client.Conn)
+		if err != nil {
+			slog.Debug("While reading message type (transfers phase)", "err", err)
+			return
+		}
+
+		switch msgType {
+		case external.TransferRecord:
+			if err := gateway.handleTransferMessage(client); err != nil {
+				slog.Debug("While handling transfer message", "err", err)
+				return
+			}
+
+		case external.EOFTransfers:
+			if err := gateway.handleEOFTransfersMessage(client); err != nil {
+				slog.Debug("While handling EOF transfers message", "err", err)
+				return
+			}
+			break transfersLoop
+
+		default:
+			slog.Debug("Unexpected message type in transfers phase", "got", msgType)
 			return
 		}
 	}
 }
 
 func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
-
-	clientIndex := -1
-
-	gateway.registry.WithLock(func(clients []clientregistry.ClientState) {
-		for i, client := range clients {
-			fruitTop, err := client.Handler.DeserializeResultMessage(&msg)
-
-			if err != nil {
-				slog.Debug("While reading from output queue", "err", err)
-				nack()
-				if err := gateway.outputQueue.StopConsuming(); err != nil {
-					slog.Error("While stopping output queue", "err", err)
-				}
-				return
-			}
-
-			// The message handler can't process this message
-			if fruitTop == nil {
-				continue
-			}
-
-			if err := external.WriteFruitTop(client.Conn, fruitTop); err != nil {
-				slog.Debug("While writing FRUIT_TOP message", "err", err)
-				return
-			}
-			msgType, err := external.ReadMsgType(client.Conn)
-			if err != nil {
-				slog.Debug("While reading message type", "err", err)
-				return
-			}
-			if msgType != external.Ack {
-				slog.Debug("Expected ACK message")
-				return
-			}
-
-			clientIndex = i
-			return
-		}
-		slog.Warn("No client handler could process this message")
-		nack()
-	})
-
-	if clientIndex >= 0 {
-		gateway.registry.Remove(clientIndex)
-		ack()
-		return
-	}
+	slog.Info("Received result from pipeline", "body", msg.Body)
+	ack()
 }
 
-func (gateway *Gateway) handleFruitRecordMessage(client clientregistry.ClientState) error {
-	fruitRecord, err := external.ReadFruitRecord(client.Conn)
+func (gateway *Gateway) handleAccountMessage(client clientregistry.ClientState) error {
+	account, err := external.ReadAccountRecord(client.Conn)
 	if err != nil {
-		slog.Debug("While reading FRUIT_RECORD", "err", err)
+		slog.Debug("While reading ACCOUNT_RECORD", "err", err)
 		return err
 	}
-	message, err := client.Handler.SerializeDataMessage(*fruitRecord)
+	body, err := json.Marshal(account)
 	if err != nil {
-		slog.Debug("While serializing data message", "err", err)
+		slog.Debug("While serializing account", "err", err)
 		return err
 	}
-	if err := gateway.inputQueue.Send(*message); err != nil {
-		slog.Debug("While sending data message", "err", err)
+	if err := gateway.accountsExchange.Send(middleware.Message{Body: string(body)}); err != nil {
+		slog.Debug("While sending account to accounts exchange", "err", err)
 		return err
 	}
 	if err := external.WriteAck(client.Conn); err != nil {
@@ -226,15 +231,45 @@ func (gateway *Gateway) handleFruitRecordMessage(client clientregistry.ClientSta
 	return nil
 }
 
-func (gateway *Gateway) handleEndOfRecordsMessage(client clientregistry.ClientState) error {
-	slog.Info("Received END_OF_RECORDS message")
-	message, err := client.Handler.SerializeEOFMessage()
+func (gateway *Gateway) handleTransferMessage(client clientregistry.ClientState) error {
+	transfer, err := external.ReadTransferRecord(client.Conn)
 	if err != nil {
-		slog.Debug("While serializing END_OF_RECORDS  message", "err", err)
+		slog.Debug("While reading TRANSFER_RECORD", "err", err)
 		return err
 	}
-	if err := gateway.inputQueue.Send(*message); err != nil {
-		slog.Debug("While sending eof message", "err", err)
+	body, err := json.Marshal(transfer)
+	if err != nil {
+		slog.Debug("While serializing transfer", "err", err)
+		return err
+	}
+	if err := gateway.transfersExchange.Send(middleware.Message{Body: string(body)}); err != nil {
+		slog.Debug("While sending transfer to transfers exchange", "err", err)
+		return err
+	}
+	if err := external.WriteAck(client.Conn); err != nil {
+		slog.Debug("While writing ACK message", "err", err)
+		return err
+	}
+	return nil
+}
+
+func (gateway *Gateway) handleEOFAccountsMessage(client clientregistry.ClientState) error {
+	slog.Info("Received EOF_ACCOUNTS message")
+	if err := gateway.accountsExchange.Send(middleware.Message{Body: `{"eof":"accounts"}`}); err != nil {
+		slog.Debug("While sending EOF accounts", "err", err)
+		return err
+	}
+	if err := external.WriteAck(client.Conn); err != nil {
+		slog.Debug("While writing ACK message", "err", err)
+		return err
+	}
+	return nil
+}
+
+func (gateway *Gateway) handleEOFTransfersMessage(client clientregistry.ClientState) error {
+	slog.Info("Received EOF_TRANSFERS message")
+	if err := gateway.transfersExchange.Send(middleware.Message{Body: `{"eof":"transfers"}`}); err != nil {
+		slog.Debug("While sending EOF transfers", "err", err)
 		return err
 	}
 	if err := external.WriteAck(client.Conn); err != nil {
