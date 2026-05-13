@@ -9,7 +9,7 @@ import (
 
 // Inicializadores
 
-func newFilter[T comparable](config FilterConfig, callback func(T) bool) (worker.Worker, error) {
+func newDistinctFilter(config FilterConfig) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, []string{}, connSettings)
@@ -26,34 +26,30 @@ func newFilter[T comparable](config FilterConfig, callback func(T) bool) (worker
 		return nil, err
 	}
 
-	return &Filter[T]{
+	return &DistinctFilter{
 		id:             uint32(config.Id),
 		inputExchange:  inputExchange,
 		outputExchange: outputExchange,
-		callback:       callback,
 	}, nil
 }
 
-func (filter *Filter[T]) Run() {
-	slog.Info("Starting filter consumers", "filter_id", filter.id)
-	if err := filter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		filter.handleMessage(msg, ack, nack)
+func (distinctfilter *DistinctFilter) Run() {
+	slog.Info("Starting filter consumers", "filter_id", distinctfilter.id)
+	if err := distinctfilter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+		distinctfilter.handleMessage(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
 	}
 }
 
-func (filter *Filter[T]) handleMessage(msg middleware.Message, ack, nack func()) {
-	// if filter.callback(msg.toTransferDTO()) {
-	// 	filter.outputExchange.Send(msg)
+func (distinctfilter *DistinctFilter) handleMessage(msg middleware.Message, ack, nack func()) {
+	// if value, _ := distinctfilter.alreadySeen[msg.toTransferDTO()]; !value {
+	// 	distinctfilter.outputExchange.Send(msg)
+	//  distinctfilter.alreadySeen[msg.toTransferDTO()] = true
 	// }
 }
 
-func (filter *Filter[T]) HandleSignals() {
-
-}
-
-func (filter *Filter[T]) Close() {
+func (distinctfilter *DistinctFilter) HandleSignals() {
 
 }
 

@@ -1,15 +1,9 @@
 package filter
 
 import (
-	"slices"
-
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/worker"
 )
-
-func isValidCurrency(t transfer.Transfer, config FilterConfig) bool {
-	return slices.Contains(config.Currencies, t.PaymentCurrency)
-}
 
 func CreateCurrencyFilter(config FilterConfig) (worker.Worker, error) {
 	return newFilter(config, func(t transfer.Transfer) bool {
@@ -37,4 +31,17 @@ func CreateDateRangeAndPaymentMethod(config FilterConfig) (worker.Worker, error)
 
 func CreateCountAndFilter(config CountAndFilterConfig) (worker.Worker, error) {
 	return newCountAndFilter[transfer.Transfer](config)
+}
+
+func CreateFilterAndSplitter(config FilterConfig) (worker.Worker, error) {
+	return newFilterAndSplitter(
+		config,
+		func(t transfer.Transfer) bool {
+			return t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
+		},
+		func(t transfer.Transfer) (t1 transfer.SplittedTransfer, t2 transfer.SplittedTransfer) {
+			// TO DO: rellenar esto
+			return transfer.SplittedTransfer{}, transfer.SplittedTransfer{}
+		},
+	)
 }
