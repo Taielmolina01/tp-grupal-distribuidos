@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -209,19 +210,14 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 	ack()
 }
 
-func (gateway *Gateway) handleAccountMessage(client clientregistry.ClientState) error {
-	account, err := external.ReadAccountRecord(client.Conn)
+func (gateway *Gateway) forwardRecord(client clientregistry.ClientState, record any, exchange middleware.Middleware) error {
+	body, err := json.Marshal(record)
 	if err != nil {
-		slog.Debug("While reading ACCOUNT_RECORD", "err", err)
+		slog.Debug("While serializing record", "err", err)
 		return err
 	}
-	body, err := json.Marshal(account)
-	if err != nil {
-		slog.Debug("While serializing account", "err", err)
-		return err
-	}
-	if err := gateway.accountsExchange.Send(middleware.Message{Body: string(body)}); err != nil {
-		slog.Debug("While sending account to accounts exchange", "err", err)
+	if err := exchange.Send(middleware.Message{Body: string(body)}); err != nil {
+		slog.Debug("While sending record to exchange", "err", err)
 		return err
 	}
 	if err := external.WriteAck(client.Conn); err != nil {
@@ -229,6 +225,29 @@ func (gateway *Gateway) handleAccountMessage(client clientregistry.ClientState) 
 		return err
 	}
 	return nil
+}
+
+func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind string, exchange middleware.Middleware) error {
+	slog.Info("Received EOF message", "kind", kind)
+	body := fmt.Sprintf(`{"eof":%q}`, kind)
+	if err := exchange.Send(middleware.Message{Body: body}); err != nil {
+		slog.Debug("While sending EOF", "kind", kind, "err", err)
+		return err
+	}
+	if err := external.WriteAck(client.Conn); err != nil {
+		slog.Debug("While writing ACK message", "err", err)
+		return err
+	}
+	return nil
+}
+
+func (gateway *Gateway) handleAccountMessage(client clientregistry.ClientState) error {
+	account, err := external.ReadAccountRecord(client.Conn)
+	if err != nil {
+		slog.Debug("While reading ACCOUNT_RECORD", "err", err)
+		return err
+	}
+	return gateway.forwardRecord(client, account, gateway.accountsExchange)
 }
 
 func (gateway *Gateway) handleTransferMessage(client clientregistry.ClientState) error {
@@ -237,44 +256,13 @@ func (gateway *Gateway) handleTransferMessage(client clientregistry.ClientState)
 		slog.Debug("While reading TRANSFER_RECORD", "err", err)
 		return err
 	}
-	body, err := json.Marshal(transfer)
-	if err != nil {
-		slog.Debug("While serializing transfer", "err", err)
-		return err
-	}
-	if err := gateway.transfersExchange.Send(middleware.Message{Body: string(body)}); err != nil {
-		slog.Debug("While sending transfer to transfers exchange", "err", err)
-		return err
-	}
-	if err := external.WriteAck(client.Conn); err != nil {
-		slog.Debug("While writing ACK message", "err", err)
-		return err
-	}
-	return nil
+	return gateway.forwardRecord(client, transfer, gateway.transfersExchange)
 }
 
 func (gateway *Gateway) handleEOFAccountsMessage(client clientregistry.ClientState) error {
-	slog.Info("Received EOF_ACCOUNTS message")
-	if err := gateway.accountsExchange.Send(middleware.Message{Body: `{"eof":"accounts"}`}); err != nil {
-		slog.Debug("While sending EOF accounts", "err", err)
-		return err
-	}
-	if err := external.WriteAck(client.Conn); err != nil {
-		slog.Debug("While writing ACK message", "err", err)
-		return err
-	}
-	return nil
+	return gateway.forwardEOF(client, "accounts", gateway.accountsExchange)
 }
 
 func (gateway *Gateway) handleEOFTransfersMessage(client clientregistry.ClientState) error {
-	slog.Info("Received EOF_TRANSFERS message")
-	if err := gateway.transfersExchange.Send(middleware.Message{Body: `{"eof":"transfers"}`}); err != nil {
-		slog.Debug("While sending EOF transfers", "err", err)
-		return err
-	}
-	if err := external.WriteAck(client.Conn); err != nil {
-		slog.Debug("While writing ACK message", "err", err)
-		return err
-	}
-	return nil
+	return gateway.forwardEOF(client, "transfers", gateway.transfersExchange)
 }
