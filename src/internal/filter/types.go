@@ -10,10 +10,15 @@ import (
 type FilterType string
 
 const (
-	CURRENCY               FilterType = "CURRENCY"
-	AMOUNT                 FilterType = "AMOUNT"
-	DATE_RANGE             FilterType = "DATE_RANGE"
-	DATE_RANGE_AND_PAYMENT FilterType = "DATE_RANGE_AND_PAYMENT"
+	CURRENCY                FilterType = "CURRENCY"
+	AMOUNT                  FilterType = "AMOUNT"
+	DATE_RANGE              FilterType = "DATE_RANGE"
+	DATE_RANGE_AND_PAYMENT  FilterType = "DATE_RANGE_AND_PAYMENT"
+	COUNT_AND_FILTER        FilterType = "COUNT_AND_FILTER"
+	DATE_RANGE_AND_SPLITTER FilterType = "DATE_RANGE_AND_SPLITTER"
+	TRANSFER_DISTINCT       FilterType = "TRANSFER_DISTINCT"
+	ACCOUNT_DISTINCT        FilterType = "ACCOUNT_DISTINCT"
+	AVERAGE_FILTER          FilterType = "AVERAGE_FILTER"
 )
 
 type FilterConfig struct {
@@ -27,6 +32,7 @@ type FilterConfig struct {
 	StartDateRange time.Time
 	EndDateRange   time.Time
 	Currencies     []string
+	AmountTreshold int
 }
 
 type Filter[T comparable] struct {

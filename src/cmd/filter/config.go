@@ -95,6 +95,16 @@ func loadDateRangeVenv(config *filter.FilterConfig) error {
 	return nil
 }
 
+func loadCountAndFilterVenv(config *filter.FilterConfig) error {
+	amountTresholdStr := os.Getenv("AMOUNT_TRESHOLD")
+	amountTreshold, err := strconv.Atoi(amountTresholdStr)
+	if err != nil {
+		return errors.New("AMOUNT_TRESHOLD environment variable is required if FILTER_TYPE is COUNT_AND_FILTER and must be a number")
+	}
+	config.AmountTreshold = amountTreshold
+	return nil
+}
+
 func loadFilterTypeConfig(config *filter.FilterConfig) error {
 	filterTypeVenv := os.Getenv("FILTER_TYPE")
 	if filterTypeVenv == "" {
@@ -120,7 +130,22 @@ func loadFilterTypeConfig(config *filter.FilterConfig) error {
 		if err := loadDateRangeVenv(config); err != nil {
 			return err
 		}
-
+	case filter.COUNT_AND_FILTER:
+		if err := loadCountAndFilterVenv(config); err != nil {
+			return err
+		}
+	case filter.DATE_RANGE_AND_SPLITTER:
+		if err := loadDateRangeVenv(config); err != nil {
+			return err
+		}
+	case filter.TRANSFER_DISTINCT:
+		break
+	case filter.ACCOUNT_DISTINCT:
+		break
+	case filter.AVERAGE_FILTER:
+		if err := loadAmountVenv(config); err != nil {
+			return err
+		}
 	default:
 		return errors.New("FILTER_TYPE environment variable hasn't a valid value")
 	}
