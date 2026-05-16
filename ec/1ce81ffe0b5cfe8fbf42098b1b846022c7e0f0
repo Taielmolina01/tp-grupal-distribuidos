@@ -1,0 +1,22 @@
+src/internal/common/messageprotocol/external/external.go
+  s_479a5437416b88::t_76f9427584aa9a 102
+  s_479a5437416b88::t_b5dcb19b361cce 120,124,126,130,132,136,138,142,144,148
+  s_479a5437416b88::t_0209ececf49fe3 184-185,187,189-199,201-211,214-215,217,219-229,231-236,239-240,242,244-250,252-256,259-260,262,264-266,268,271-272,274,276
+  s_479a5437416b88::t_136e15fe43dfb6 101,104,111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "ec1ce81ffe0b5cfe8fbf42098b1b846022c7e0f0",
+  "prompts": {},
+  "sessions": {
+    "s_479a5437416b88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ba401880-c893-433a-956f-99ab199639a2",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
