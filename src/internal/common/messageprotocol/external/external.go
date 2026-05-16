@@ -2,26 +2,22 @@ package external
 
 import (
 	"io"
+	"time"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/fruititem"
+	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/account"
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/external/safeio"
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/external/serializer"
+	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
 )
 
 type MsgType uint32
 
 const (
-	FruitRecord MsgType = iota + 1
-	FruitTop
-	Ack
+	Ack MsgType = iota + 1
+	AccountBatch
+	TransBatch
 	EndOfRecords
 )
-
-func serializeFruitRecord(fruit *fruititem.FruitItem) []byte {
-	msg := serializer.SerializeString(fruit.Fruit)
-	msg = append(msg, serializer.SerializeUint32(fruit.Amount)...)
-	return msg
-}
 
 func writeMsgType(writer io.Writer, msgType MsgType) error {
 	msg := serializer.SerializeUint32(uint32(msgType))
@@ -34,67 +30,7 @@ func ReadMsgType(reader io.Reader) (MsgType, error) {
 		return 0, err
 	}
 	msgType := MsgType(serializer.DeserializeUint32(msgTypeSerialized))
-
 	return msgType, nil
-}
-
-func WriteFruitRecord(writer io.Writer, fruitItemRecord *fruititem.FruitItem) error {
-	msg := serializer.SerializeUint32(uint32(FruitRecord))
-	msg = append(msg, serializeFruitRecord(fruitItemRecord)...)
-
-	return safeio.WriteAll(writer, msg)
-}
-
-func ReadFruitRecord(reader io.Reader) (*fruititem.FruitItem, error) {
-	serializedFruitSize, err := safeio.ReadAll(reader, serializer.UINT32_SIZE)
-	if err != nil {
-		return nil, err
-	}
-	fruitSize := serializer.DeserializeUint32(serializedFruitSize)
-
-	serializedFruit, err := safeio.ReadAll(reader, fruitSize)
-	if err != nil {
-		return nil, err
-	}
-	fruit := serializer.DeserializeString(serializedFruit)
-
-	serializedAmount, err := safeio.ReadAll(reader, serializer.UINT32_SIZE)
-	if err != nil {
-		return nil, err
-	}
-	amount := serializer.DeserializeUint32(serializedAmount)
-
-	fruitItem := fruititem.FruitItem{Fruit: fruit, Amount: amount}
-	return &fruitItem, nil
-}
-
-func WriteFruitTop(writer io.Writer, fruitItemRecords []fruititem.FruitItem) error {
-	msg := serializer.SerializeUint32(uint32(FruitTop))
-	msg = append(msg, serializer.SerializeUint32(uint32(len(fruitItemRecords)))...)
-	for _, fruitItemRecord := range fruitItemRecords {
-		msg = append(msg, serializeFruitRecord(&fruitItemRecord)...)
-	}
-
-	return safeio.WriteAll(writer, msg)
-}
-
-func ReadFruitTop(reader io.Reader) ([]fruititem.FruitItem, error) {
-	fruitRecordsAmountSerialized, err := safeio.ReadAll(reader, serializer.UINT32_SIZE)
-	if err != nil {
-		return nil, err
-	}
-	fruitRecordsAmount := serializer.DeserializeUint32(fruitRecordsAmountSerialized)
-
-	fruitRecords := make([]fruititem.FruitItem, fruitRecordsAmount)
-	for i := 0; i < int(fruitRecordsAmount); i++ {
-		fruitRecord, err := ReadFruitRecord(reader)
-		if err != nil {
-			return nil, err
-		}
-		fruitRecords[i] = *fruitRecord
-	}
-
-	return fruitRecords, nil
 }
 
 func WriteAck(writer io.Writer) error {
@@ -103,4 +39,46 @@ func WriteAck(writer io.Writer) error {
 
 func WriteEndOfRecords(writer io.Writer) error {
 	return writeMsgType(writer, EndOfRecords)
+}
+
+func serializeAccountRecord(acc *account.Account) []byte {
+	msg := serializer.SerializeString(acc.BankName)
+	msg = append(msg, serializer.SerializeString(acc.BankId)...)
+	msg = append(msg, serializer.SerializeString(acc.AccountNumber)...)
+	msg = append(msg, serializer.SerializeString(acc.EntityId)...)
+	msg = append(msg, serializer.SerializeString(acc.EntityName)...)
+	return msg
+}
+
+func WriteAccountBatch(writer io.Writer, accounts []account.Account) error {
+	msg := serializer.SerializeUint32(uint32(AccountBatch))
+	msg = append(msg, serializer.SerializeUint32(uint32(len(accounts)))...)
+	for _, acc := range accounts {
+		msg = append(msg, serializeAccountRecord(&acc)...)
+	}
+	return safeio.WriteAll(writer, msg)
+}
+
+func serializeTransRecord(trans *transfer.Transfer) []byte {
+	msg := serializer.SerializeString(trans.Timestamp.Format(time.RFC3339))
+	msg = append(msg, serializer.SerializeString(trans.FromBank)...)
+	msg = append(msg, serializer.SerializeString(trans.FromBankAccount)...)
+	msg = append(msg, serializer.SerializeString(trans.ToBank)...)
+	msg = append(msg, serializer.SerializeString(trans.ToBankAccount)...)
+	msg = append(msg, serializer.SerializeFloat32(trans.AmountReceived)...)
+	msg = append(msg, serializer.SerializeString(trans.ReceivingCurrency)...)
+	msg = append(msg, serializer.SerializeFloat32(trans.AmountPaid)...)
+	msg = append(msg, serializer.SerializeString(trans.PaymentCurrency)...)
+	msg = append(msg, serializer.SerializeString(trans.PaymentFormat)...)
+	msg = append(msg, serializer.SerializeBool(trans.IsLaundering)...)
+	return msg
+}
+
+func WriteTransBatch(writer io.Writer, trans []transfer.Transfer) error {
+	msg := serializer.SerializeUint32(uint32(TransBatch))
+	msg = append(msg, serializer.SerializeUint32(uint32(len(trans)))...)
+	for _, t := range trans {
+		msg = append(msg, serializeTransRecord(&t)...)
+	}
+	return safeio.WriteAll(writer, msg)
 }

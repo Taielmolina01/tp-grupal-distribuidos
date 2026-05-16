@@ -2,6 +2,7 @@ package serializer
 
 import (
 	"encoding/binary"
+	"math"
 )
 
 const UINT32_SIZE uint32 = 4
@@ -30,4 +31,25 @@ func SerializeUint32(value uint32) []byte {
 
 func DeserializeUint32(bytes []byte) uint32 {
 	return binary.BigEndian.Uint32(bytes)
+}
+
+func SerializeFloat32(value float32) []byte {
+	data := make([]byte, UINT32_SIZE)
+	binary.BigEndian.PutUint32(data, math.Float32bits(value))
+	return data
+}
+
+func DeserializeFloat32(bytes []byte) float32 {
+	return math.Float32frombits(binary.BigEndian.Uint32(bytes))
+}
+
+func SerializeBool(value bool) []byte {
+	if value {
+		return []byte{1}
+	}
+	return []byte{0}
+}
+
+func DeserializeBool(bytes []byte) bool {
+	return bytes[0] == 1
 }
