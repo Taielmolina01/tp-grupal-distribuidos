@@ -60,9 +60,13 @@ func NewSum(config SumConfig) (*Sum, error) {
 	for _, routeKey := range outputExchangeRouteKeys {
 		outputExchange, exchangeErr := middleware.CreateExchangeMiddleware(config.AggregationPrefix, []string{routeKey}, connSettings)
 		if exchangeErr != nil {
-			inputQueue.Close()
+			if err := inputQueue.Close(); err != nil {
+				slog.Error("While closing input queue", "err", err)
+			}
 			for _, exchange := range outputExchanges {
-				exchange.Close()
+				if err := exchange.Close(); err != nil {
+					slog.Error("While closing exchange", "err", err)
+				}
 			}
 			return nil, exchangeErr
 		}
@@ -81,13 +85,25 @@ func NewSum(config SumConfig) (*Sum, error) {
 		connSettings,
 	)
 
+	if err != nil {
+		if err := inputQueue.Close(); err != nil {
+			slog.Error("While closing input queue", "err", err)
+		}
+		return nil, err
+	}
+
 	eofOutput, err := middleware.CreateQueueMiddleware(
 		strconv.Itoa(next),
 		connSettings,
 	)
 
 	if err != nil {
-		inputQueue.Close()
+		if err := inputQueue.Close(); err != nil {
+			slog.Error("While closing input queue", "err", err)
+		}
+		if err := eofInput.Close(); err != nil {
+			slog.Error("While closing eof input", "err", err)
+		}
 		return nil, err
 	}
 
@@ -106,12 +122,20 @@ func NewSum(config SumConfig) (*Sum, error) {
 
 func (sum *Sum) Run() {
 	slog.Info("Starting sum consumers", "sum_id", sum.id)
-	go sum.inputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		sum.handleMessage(msg, ack, nack)
-	})
-	go sum.eofInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		sum.handleEofMessageFromQueue(msg, ack, nack)
-	})
+	go func() {
+		if err := sum.inputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+			sum.handleMessage(msg, ack, nack)
+		}); err != nil {
+			slog.Error("While consuming from input queue")
+		}
+	}()
+	go func() {
+		if err := sum.eofInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+			sum.handleEofMessageFromQueue(msg, ack, nack)
+		}); err != nil {
+			slog.Error("While consuming from eof queue")
+		}
+	}()
 
 	<-sum.shutdown
 }
@@ -295,13 +319,17 @@ func (sum *Sum) broadcastEofMessageToAggregation(clientID int) error {
 
 func (sum *Sum) sendFinalMessagesToAggregation(clientID int) {
 	for _, value := range sum.sumMonitor.GetFruitsByClientID(clientID) {
-		sum.sendMessageToAggregation(&fruititem.FruitItemFromClient{
+		if err := sum.sendMessageToAggregation(&fruititem.FruitItemFromClient{
 			ClientId:   clientID,
 			FruitItems: []fruititem.FruitItem{value},
-		})
+		}); err != nil {
+			slog.Error("While sending message to aggregation", "err", err)
+		}
 	}
 
-	sum.broadcastEofMessageToAggregation(clientID)
+	if err := sum.broadcastEofMessageToAggregation(clientID); err != nil {
+		slog.Error("While broadcasting eof to aggregations", "err", err)
+	}
 }
 
 func (sum *Sum) handleEOFCommitMessage(msg *eofringmessage.EofMessageCommit) error {

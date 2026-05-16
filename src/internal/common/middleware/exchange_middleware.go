@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"log"
+	"log/slog"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -36,7 +37,9 @@ func CreateExchangeMiddlewareHelper(
 
 	ch, err := conn.Channel()
 	if err != nil {
-		middleware.Close()
+		if err := middleware.Close(); err != nil {
+			slog.Error("While closing middleware", "err", err)
+		}
 		return nil, ErrMessageMiddlewareDisconnected
 	}
 
@@ -53,7 +56,9 @@ func CreateExchangeMiddlewareHelper(
 	)
 
 	if err != nil {
-		middleware.Close()
+		if err := middleware.Close(); err != nil {
+			slog.Error("While closing middleware", "err", err)
+		}
 		return nil, ErrMessageMiddlewareDisconnected
 	}
 	q, err := ch.QueueDeclare(
@@ -67,7 +72,9 @@ func CreateExchangeMiddlewareHelper(
 	middleware.queue = q
 
 	if err != nil {
-		middleware.Close()
+		if err := middleware.Close(); err != nil {
+			slog.Error("While closing middleware", "err", err)
+		}
 		return nil, ErrMessageMiddlewareDisconnected
 	}
 
@@ -80,7 +87,9 @@ func CreateExchangeMiddlewareHelper(
 			nil,
 		)
 		if err != nil {
-			middleware.Close()
+			if err := middleware.Close(); err != nil {
+				slog.Error("While closing middleware", "err", err)
+			}
 			return nil, ErrMessageMiddlewareDisconnected
 		}
 	}
@@ -134,8 +143,16 @@ func (e *exchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack f
 		case d := <-msgs:
 			callbackFunc(
 				Message{Body: string(d.Body)},
-				func() { d.Ack(false) },
-				func() { d.Nack(false, false) },
+				func() {
+					if err := d.Ack(false); err != nil {
+						slog.Error("While sending ack", "err", err)
+					}
+				},
+				func() {
+					if err := d.Nack(false, false); err != nil {
+						slog.Error("While sending nack", "err", err)
+					}
+				},
 			)
 		case <-stopCh:
 			return nil

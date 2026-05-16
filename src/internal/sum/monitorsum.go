@@ -32,7 +32,7 @@ func NewSumMonitor() MonitorSum {
 func (monitor *MonitorSumImpl) GetProccessedMessagesAmountByClientId(clientID int) uint32 {
 	monitor.processedMessagesMutex.Lock()
 	defer monitor.processedMessagesMutex.Unlock()
-	amount, _ := monitor.processedMessagesByClient[clientID]
+	amount := monitor.processedMessagesByClient[clientID]
 	return amount
 }
 

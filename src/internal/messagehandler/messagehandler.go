@@ -15,10 +15,6 @@ type MessageHandler struct {
 	processedMessages uint32
 }
 
-type MessageEof struct {
-	actualAmount uint32
-}
-
 func NewMessageHandler() MessageHandler {
 	response := MessageHandler{clientId: clientId}
 	clientId++
