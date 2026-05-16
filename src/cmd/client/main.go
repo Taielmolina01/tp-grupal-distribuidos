@@ -10,7 +10,7 @@ import (
 )
 
 // Pongo acá las env vars para cuando haga la parte de docker tener a mano. Esto dsps lo volamos
-// Obligatorias: SERVER_HOST, SERVER_PORT, INPUT_FILE_ACCOUNTS, INPUT_FILE_TRANS, OUTPUT_FILE
+// Obligatorias: SERVER_HOST, SERVER_PORT, INPUT_FILE_ACCOUNTS, INPUT_FILE_TRANS, OUTPUT_FILE_PREFIX
 // Opcionales: MAX_BATCH_SIZE (default 100), CONNECTION_ATTEMPTS (default 3), CONNECTION_ATTEMPT_DELAY_MS (default 300)
 
 func loadConfig() (client.ClientConfig, error) {
@@ -34,9 +34,9 @@ func loadConfig() (client.ClientConfig, error) {
 		return client.ClientConfig{}, errors.New("INPUT_FILE_TRANS environment variable is required")
 	}
 
-	outputFile := os.Getenv("OUTPUT_FILE")
-	if outputFile == "" {
-		return client.ClientConfig{}, errors.New("OUTPUT_FILE environment variable is required")
+	outputFilePrefix := os.Getenv("OUTPUT_FILE_PREFIX")
+	if outputFilePrefix == "" {
+		return client.ClientConfig{}, errors.New("OUTPUT_FILE_PREFIX environment variable is required")
 	}
 
 	maxBatchSize := 100
@@ -71,7 +71,7 @@ func loadConfig() (client.ClientConfig, error) {
 		ServerPort:               serverPort,
 		InputFileAccounts:        inputFileAccounts,
 		InputFileTrans:           inputFileTrans,
-		OutputFile:               outputFile,
+		OutputFilePrefix:         outputFilePrefix,
 		MaxBatchSize:             maxBatchSize,
 		ConnectionAttempts:       connectionAttempts,
 		ConnectionAttemptDelayMs: connectionAttemptDelayMs,

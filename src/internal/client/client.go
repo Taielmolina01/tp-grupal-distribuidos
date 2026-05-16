@@ -2,7 +2,9 @@ package client
 
 import (
 	"bufio"
+	"encoding/csv"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/account"
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/external"
+	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/queryresult"
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
 )
 
@@ -25,7 +28,7 @@ type ClientConfig struct {
 	ServerPort               string
 	InputFileAccounts        string
 	InputFileTrans           string
-	OutputFile               string
+	OutputFilePrefix         string
 	MaxBatchSize             int
 	ConnectionAttempts       int
 	ConnectionAttemptDelayMs int
@@ -87,9 +90,13 @@ func (client *Client) Run() error {
 		return nil
 	}
 
-	// Acá tenemos que esperar las rtas pero todavía no estoy seguro como.
-	// Obvio todas de entrada no, así que supongo que sería medio por batches.
-	// Podemos recibir batches cruzados? Por ej, empezar a recibir la rta de la 1 y en el medio recibir la rta de la 2?
+	if err := client.recvResults(); err != nil {
+		if client.running.Load() {
+			return err
+		}
+		return nil
+	}
+
 	return nil
 }
 
@@ -117,7 +124,7 @@ func (client *Client) expectMsgType(expectedMsgType external.MsgType) error {
 }
 
 func accountSerializedSize(acc account.Account) int {
-	return 5*4 + len(acc.BankName) + len(acc.BankId) +
+	return 5*2 + len(acc.BankName) + len(acc.BankId) +
 		len(acc.AccountNumber) + len(acc.EntityId) + len(acc.EntityName)
 }
 
@@ -126,7 +133,7 @@ func transSerializedSize(t transfer.Transfer) int {
 	stringBytes := len(ts) + len(t.FromBank) + len(t.FromBankAccount) +
 		len(t.ToBank) + len(t.ToBankAccount) + len(t.ReceivingCurrency) +
 		len(t.PaymentCurrency) + len(t.PaymentFormat)
-	return 8*4 + stringBytes + 4 + 4 + 1
+	return 8*2 + stringBytes + 4 + 4 + 1
 }
 
 func (client *Client) readNextAccountBatch(
@@ -282,4 +289,95 @@ func (client *Client) sendTransRecords() error {
 		return err
 	}
 	return client.expectMsgType(external.Ack)
+}
+
+func (client *Client) recvResults() error {
+	const numQueries = 5
+
+	files := make([]*os.File, numQueries)
+	writers := make([]*csv.Writer, numQueries)
+
+	defer func() {
+		for i, f := range files {
+			if f != nil {
+				writers[i].Flush()
+				f.Close()
+			}
+		}
+	}()
+
+	for i := range numQueries {
+		path := fmt.Sprintf("%s_%d.csv", client.config.OutputFilePrefix, i+1)
+		f, err := os.Create(path)
+		if err != nil {
+			slog.Debug("Error while creating output file", "query", i+1, "err", err)
+			return err
+		}
+		files[i] = f
+		writers[i] = csv.NewWriter(f)
+	}
+
+	doneCount := 0
+	for doneCount < numQueries {
+		msgType, err := external.ReadMsgType(client.conn)
+		if err != nil {
+			slog.Debug("Error while reading message type", "err", err)
+			return err
+		}
+
+		switch msgType {
+		case external.ResultBatch:
+			results, err := external.ReadResultBatch(client.conn)
+			if err != nil {
+				slog.Debug("Error while reading result batch", "err", err)
+				return err
+			}
+			client.flushBatchToWriters(results, writers)
+			if err := external.WriteAck(client.conn); err != nil {
+				slog.Debug("Error while writing ack", "err", err)
+				return err
+			}
+
+		case external.QueryEOF:
+			queryId, err := external.ReadQueryEOF(client.conn)
+			if err != nil {
+				slog.Debug("Error while reading query EOF", "err", err)
+				return err
+			}
+			idx := int(queryId) - 1
+			writers[idx].Flush()
+			if err := files[idx].Close(); err != nil {
+				slog.Error("While closing output file", "query", queryId, "err", err)
+			}
+			files[idx] = nil
+			if err := external.WriteAck(client.conn); err != nil {
+				slog.Debug("Error while writing ack for query EOF", "err", err)
+				return err
+			}
+			doneCount++
+
+		default:
+			return errors.New("unexpected message type while receiving results")
+		}
+	}
+
+	return nil
+}
+
+func (client *Client) flushBatchToWriters(results *queryresult.BatchResults, writers []*csv.Writer) {
+	for _, r := range results.Query1 {
+		writers[0].Write([]string{r.FromBank, r.FromAccount, r.ToBank, r.ToAccount, fmt.Sprintf("%.2f", r.Amount)})
+	}
+	for _, r := range results.Query2 {
+		writers[1].Write([]string{r.BankName, r.FromBank, r.FromAccount, fmt.Sprintf("%.2f", r.Amount)})
+	}
+	for _, r := range results.Query3 {
+		writers[2].Write([]string{r.FromBank, r.FromAccount, fmt.Sprintf("%.2f", r.Amount)})
+	}
+	for _, r := range results.Query4 {
+		writers[3].Write([]string{r.BankId, r.AccountId})
+	}
+	for _, r := range results.Query5 {
+		writers[4].Write([]string{strconv.FormatUint(uint64(r.Qty), 10)})
+	}
 }
