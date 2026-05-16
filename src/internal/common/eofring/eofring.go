@@ -57,15 +57,15 @@ func (eofring *eofRingAlgorithmImpl) HandleEofMessageFromQueue(msg middleware.Me
 
 	if eofRingMessage.Leader == eofring.id && eofRingMessage.ActualAmount == eofRingMessage.RealAmount {
 		// Si soy el líder y la cantidad de todos los mensajes enviados por el cliente (contados por el gateway) y la suma de lo que cada uno
-		// de los sums me dice que proceso, entonces envio el commit otra vez en forma de anillo para que cada uno le pase al exchange de los
+		// de los nodos me dice que proceso, entonces envio el commit otra vez en forma de anillo para que cada uno le pase al exchange de los
 		// aggregations sus mensajes.
 		eofring.sendEofCommitToReplicas(eofRingMessage, ack)
 	} else {
 		value := eofring.messagesMonitor.GetProccessedMessagesAmountByClientId(eofRingMessage.ClientId)
 		if eofRingMessage.Leader == eofring.id {
 			// Si soy el líder y la cantidad de todos los mensajes enviados por el cliente (contados por el gateway) y la suma de lo que cada uno
-			// de los sums me dice que proceso no coinciden, simplemente inicio el anillo de nuevo. Esto porque estoy asumiendo que lo único que paso
-			// es que un sum no había terminado de procesar los mensajes de un cliente en particular. Como asumimos que no hay caida, eventualmente va a converger
+			// de los nodos me dice que proceso no coinciden, simplemente inicio el anillo de nuevo. Esto porque estoy asumiendo que lo único que paso
+			// es que un nodo no había terminado de procesar los mensajes de un cliente en particular. Como asumimos que no hay caida, eventualmente va a converger
 			// al primer caso.
 			eofRingMessage.ActualAmount = value
 		} else if eofRingMessage.Leader != eofring.id {
