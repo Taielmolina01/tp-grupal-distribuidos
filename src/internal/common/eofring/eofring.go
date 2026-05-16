@@ -3,9 +3,10 @@ package eofring
 import (
 	"log/slog"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/inner"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/msgmonitor"
 )
 
 type EofRingAlgorithm interface {
@@ -76,9 +77,9 @@ func (eofring *eofRingAlgorithmImpl) HandleEofMessageFromQueue(msg middleware.Me
 	}
 }
 
-func (eofring *eofRingAlgorithmImpl) sendEofCommitToReplicas(eofRingMessage *EofRingMessage, ack func()) {
+func (eofring *eofRingAlgorithmImpl) sendEofCommitToReplicas(eofRingMessage *eofmessagetypes.EofRingMessage, ack func()) {
 	defer ack()
-	msg, err := inner.SerializeEofMessageCommit(EofMessageCommit{ClientID: eofRingMessage.ClientId, Hops: 0})
+	msg, err := inner.SerializeEofMessageCommit(eofmessagetypes.EofMessageCommit{ClientID: eofRingMessage.ClientId, Hops: 0})
 	if err != nil {
 		slog.Error("Error serializing EOF commit", "sum_id", eofring.id, "client_id", eofRingMessage.ClientId, "err", err)
 		return
@@ -90,7 +91,7 @@ func (eofring *eofRingAlgorithmImpl) sendEofCommitToReplicas(eofRingMessage *Eof
 	slog.Info("EOF commit sent to ring", "sum_id", eofring.id, "client_id", eofRingMessage.ClientId)
 }
 
-func (eofring *eofRingAlgorithmImpl) sendEofMessageToQueue(eofRingMessage *EofRingMessage, ack func()) {
+func (eofring *eofRingAlgorithmImpl) sendEofMessageToQueue(eofRingMessage *eofmessagetypes.EofRingMessage, ack func()) {
 	defer ack()
 	serializedEofRingMessage, err := inner.SerializeEofFromQueueMsg(*eofRingMessage)
 	if err != nil {
@@ -103,7 +104,7 @@ func (eofring *eofRingAlgorithmImpl) sendEofMessageToQueue(eofRingMessage *EofRi
 	}
 }
 
-func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *EofMessageCommit) error {
+func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *eofmessagetypes.EofMessageCommit) error {
 
 	eofring.forwardFunction()
 

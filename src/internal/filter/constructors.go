@@ -1,9 +1,9 @@
 package filter
 
 import (
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/account"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/worker"
+	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 func CreateCurrencyFilter(config FilterConfig) (worker.Worker, error) {

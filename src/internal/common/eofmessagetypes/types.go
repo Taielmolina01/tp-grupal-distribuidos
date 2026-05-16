@@ -1,4 +1,4 @@
-package eofring
+package eofmessagetypes
 
 type EofRingMessage struct {
 	ActualAmount uint32

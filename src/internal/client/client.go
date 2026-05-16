@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/fruititem"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/external"
+	"tp-grupal-distribuidos/internal/common/fruititem"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/external"
 )
 
 const connectionAttempts = 3
