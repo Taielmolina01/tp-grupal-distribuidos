@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
@@ -12,8 +13,9 @@ import (
 
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/clientregistry"
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/external"
+	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/inner"
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/messagehandler"
+	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/queryresult"
 )
 
 type GatewayConfig struct {
@@ -37,6 +39,7 @@ type Gateway struct {
 	countsMu          sync.Mutex
 	accountsCount     map[int]uint32
 	transfersCount    map[int]uint32
+	queryEOFsByClient map[int]int
 }
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
@@ -87,6 +90,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		listener:          listener,
 		accountsCount:     map[int]uint32{},
 		transfersCount:    map[int]uint32{},
+		queryEOFsByClient: map[int]int{},
 	}
 	gateway.running.Store(true)
 	return gateway, nil
@@ -122,8 +126,7 @@ func (gateway *Gateway) Run() error {
 		clientID := int(gateway.nextClientID.Add(1))
 		slog.Info("Client connected", "client_id", clientID)
 
-		handler := messagehandler.NewMessageHandler()
-		client := clientregistry.ClientState{ID: clientID, Conn: conn, Handler: &handler}
+		client := clientregistry.ClientState{ID: clientID, Conn: conn}
 
 		gateway.registry.Add(client)
 
@@ -213,8 +216,123 @@ transfersLoop:
 }
 
 func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
-	slog.Info("Received result from pipeline", "body", msg.Body)
+	env, err := inner.DeserializeResult(&msg)
+	if err != nil {
+		slog.Error("While deserializing result envelope", "err", err)
+		nack()
+		return
+	}
+
+	client, ok := gateway.findClient(env.ClientID)
+	if !ok {
+		slog.Warn("Result for unknown client", "client_id", env.ClientID)
+		ack()
+		return
+	}
+
+	if env.IsQueryEOF {
+		if err := external.WriteQueryEOF(client.Conn, env.QueryID); err != nil {
+			slog.Error("While writing QueryEOF", "client_id", env.ClientID, "query_id", env.QueryID, "err", err)
+			nack()
+			return
+		}
+		if gateway.markQueryEOF(env.ClientID) {
+			gateway.closeClient(env.ClientID)
+		}
+		ack()
+		return
+	}
+
+	batch, err := batchFromEnvelope(env)
+	if err != nil {
+		slog.Error("While building result batch", "client_id", env.ClientID, "query_id", env.QueryID, "err", err)
+		nack()
+		return
+	}
+	if err := external.WriteResultBatch(client.Conn, batch); err != nil {
+		slog.Error("While writing result batch", "client_id", env.ClientID, "err", err)
+		nack()
+		return
+	}
 	ack()
+}
+
+const totalQueries = 5
+
+func (gateway *Gateway) markQueryEOF(clientID int) bool {
+	gateway.countsMu.Lock()
+	defer gateway.countsMu.Unlock()
+	gateway.queryEOFsByClient[clientID]++
+	return gateway.queryEOFsByClient[clientID] >= totalQueries
+}
+
+func (gateway *Gateway) closeClient(clientID int) {
+	client, ok := gateway.findClient(clientID)
+	if !ok {
+		return
+	}
+	if err := client.Conn.Close(); err != nil {
+		slog.Error("While closing client connection", "client_id", clientID, "err", err)
+	}
+	gateway.registry.RemoveByID(clientID)
+	gateway.countsMu.Lock()
+	delete(gateway.queryEOFsByClient, clientID)
+	gateway.countsMu.Unlock()
+	slog.Info("Client finished, connection closed", "client_id", clientID)
+}
+
+func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bool) {
+	var found clientregistry.ClientState
+	var ok bool
+	gateway.registry.WithLock(func(clients []clientregistry.ClientState) {
+		for _, c := range clients {
+			if c.ID == clientID {
+				found = c
+				ok = true
+				return
+			}
+		}
+	})
+	return found, ok
+}
+
+func batchFromEnvelope(env *inner.ResultEnvelope) (*queryresult.BatchResults, error) {
+	batch := &queryresult.BatchResults{}
+	switch env.QueryID {
+	case inner.Query1ID:
+		var r queryresult.Query1Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return nil, err
+		}
+		batch.Query1 = append(batch.Query1, r)
+	case inner.Query2ID:
+		var r queryresult.Query2Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return nil, err
+		}
+		batch.Query2 = append(batch.Query2, r)
+	case inner.Query3ID:
+		var r queryresult.Query3Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return nil, err
+		}
+		batch.Query3 = append(batch.Query3, r)
+	case inner.Query4ID:
+		var r queryresult.Query4Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return nil, err
+		}
+		batch.Query4 = append(batch.Query4, r)
+	case inner.Query5ID:
+		var r queryresult.Query5Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return nil, err
+		}
+		batch.Query5 = append(batch.Query5, r)
+	default:
+		return nil, fmt.Errorf("unknown query id: %d", env.QueryID)
+	}
+	return batch, nil
 }
 
 type innerEnvelope struct {
