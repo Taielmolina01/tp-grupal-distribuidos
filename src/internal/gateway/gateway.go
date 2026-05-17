@@ -157,15 +157,15 @@ accountsLoop:
 		}
 
 		switch msgType {
-		case external.AccountRecord:
-			if err := gateway.handleAccountMessage(client); err != nil {
-				slog.Debug("While handling account message", "err", err)
+		case external.AccountBatch:
+			if err := gateway.handleAccountBatch(client); err != nil {
+				slog.Debug("While handling account batch", "err", err)
 				return
 			}
 
-		case external.EOFAccounts:
-			if err := gateway.handleEOFAccountsMessage(client); err != nil {
-				slog.Debug("While handling EOF accounts message", "err", err)
+		case external.EndOfRecords:
+			if err := gateway.handleEndOfAccounts(client); err != nil {
+				slog.Debug("While handling EOF accounts", "err", err)
 				return
 			}
 			break accountsLoop
@@ -185,15 +185,15 @@ transfersLoop:
 		}
 
 		switch msgType {
-		case external.TransferRecord:
-			if err := gateway.handleTransferMessage(client); err != nil {
-				slog.Debug("While handling transfer message", "err", err)
+		case external.TransBatch:
+			if err := gateway.handleTransBatch(client); err != nil {
+				slog.Debug("While handling trans batch", "err", err)
 				return
 			}
 
-		case external.EOFTransfers:
-			if err := gateway.handleEOFTransfersMessage(client); err != nil {
-				slog.Debug("While handling EOF transfers message", "err", err)
+		case external.EndOfRecords:
+			if err := gateway.handleEndOfTransfers(client); err != nil {
+				slog.Debug("While handling EOF transfers", "err", err)
 				return
 			}
 			break transfersLoop
@@ -210,23 +210,6 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 	ack()
 }
 
-func (gateway *Gateway) forwardRecord(client clientregistry.ClientState, record any, exchange middleware.Middleware) error {
-	body, err := json.Marshal(record)
-	if err != nil {
-		slog.Debug("While serializing record", "err", err)
-		return err
-	}
-	if err := exchange.Send(middleware.Message{Body: string(body)}); err != nil {
-		slog.Debug("While sending record to exchange", "err", err)
-		return err
-	}
-	if err := external.WriteAck(client.Conn); err != nil {
-		slog.Debug("While writing ACK message", "err", err)
-		return err
-	}
-	return nil
-}
-
 func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind string, exchange middleware.Middleware) error {
 	slog.Info("Received EOF message", "kind", kind)
 	body := fmt.Sprintf(`{"eof":%q}`, kind)
@@ -241,28 +224,50 @@ func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind strin
 	return nil
 }
 
-func (gateway *Gateway) handleAccountMessage(client clientregistry.ClientState) error {
-	account, err := external.ReadAccountRecord(client.Conn)
+func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) error {
+	accounts, err := external.ReadAccountBatch(client.Conn)
 	if err != nil {
-		slog.Debug("While reading ACCOUNT_RECORD", "err", err)
+		slog.Debug("While reading ACCOUNT_BATCH", "err", err)
 		return err
 	}
-	return gateway.forwardRecord(client, account, gateway.accountsExchange)
+	for _, acc := range accounts {
+		body, err := json.Marshal(acc)
+		if err != nil {
+			slog.Debug("While serializing account", "err", err)
+			return err
+		}
+		if err := gateway.accountsExchange.Send(middleware.Message{Body: string(body)}); err != nil {
+			slog.Debug("While sending account to accounts exchange", "err", err)
+			return err
+		}
+	}
+	return external.WriteAck(client.Conn)
 }
 
-func (gateway *Gateway) handleTransferMessage(client clientregistry.ClientState) error {
-	transfer, err := external.ReadTransferRecord(client.Conn)
+func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState) error {
+	trans, err := external.ReadTransBatch(client.Conn)
 	if err != nil {
-		slog.Debug("While reading TRANSFER_RECORD", "err", err)
+		slog.Debug("While reading TRANS_BATCH", "err", err)
 		return err
 	}
-	return gateway.forwardRecord(client, transfer, gateway.transfersExchange)
+	for _, t := range trans {
+		body, err := json.Marshal(t)
+		if err != nil {
+			slog.Debug("While serializing transfer", "err", err)
+			return err
+		}
+		if err := gateway.transfersExchange.Send(middleware.Message{Body: string(body)}); err != nil {
+			slog.Debug("While sending transfer to transfers exchange", "err", err)
+			return err
+		}
+	}
+	return external.WriteAck(client.Conn)
 }
 
-func (gateway *Gateway) handleEOFAccountsMessage(client clientregistry.ClientState) error {
+func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState) error {
 	return gateway.forwardEOF(client, "accounts", gateway.accountsExchange)
 }
 
-func (gateway *Gateway) handleEOFTransfersMessage(client clientregistry.ClientState) error {
+func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState) error {
 	return gateway.forwardEOF(client, "transfers", gateway.transfersExchange)
 }
