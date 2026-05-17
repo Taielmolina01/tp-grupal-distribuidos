@@ -22,19 +22,9 @@ import (
 )
 
 const (
-	maxBatchBytes = 8 * 1024
-
-	numQueries              = 5
-	transTimestampLayout    = "2006/01/02"
-	stringLengthPrefixBytes = 2
-	accountStringFieldCount = 5
-	transStringFieldCount   = 8
-	float32SerializedBytes  = 4
-	boolSerializedBytes     = 1
-
-	accountStringOverhead = accountStringFieldCount * stringLengthPrefixBytes
-	transStringOverhead   = transStringFieldCount * stringLengthPrefixBytes
-	transFixedBytes       = 2*float32SerializedBytes + boolSerializedBytes
+	maxBatchBytes        = 8 * 1024
+	numQueries           = 5
+	transTimestampLayout = "2006/01/02"
 )
 
 type ClientConfig struct {
@@ -137,31 +127,21 @@ func (client *Client) expectMsgType(expectedMsgType external.MsgType) error {
 	return nil
 }
 
-func accountSerializedSize(acc account.Account) int {
-	return accountStringOverhead + len(acc.BankName) + len(acc.BankId) +
-		len(acc.AccountNumber) + len(acc.EntityId) + len(acc.EntityName)
-}
-
-func transSerializedSize(t transfer.Transfer) int {
-	ts := t.Timestamp.Format(time.RFC3339)
-	stringBytes := len(ts) + len(t.FromBank) + len(t.FromBankAccount) +
-		len(t.ToBank) + len(t.ToBankAccount) + len(t.ReceivingCurrency) +
-		len(t.PaymentCurrency) + len(t.PaymentFormat)
-	return transStringOverhead + stringBytes + transFixedBytes
-}
-
-func (client *Client) readNextAccountBatch(
-	scanner *bufio.Scanner, pending *account.Account,
-) ([]account.Account, *account.Account) {
-	var batch []account.Account
-	var batchBytes int
-
-	if pending != nil {
-		batch = append(batch, *pending)
-		batchBytes += accountSerializedSize(*pending)
+func (client *Client) sendAccountRecords() error {
+	file, err := os.Open(client.config.InputFileAccounts)
+	if err != nil {
+		slog.Debug("Error while opening accounts file", "err", err)
+		return err
 	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Error("While closing accounts file", "err", err)
+		}
+	}()
 
-	for len(batch) < client.config.MaxBatchSize && scanner.Scan() {
+	builder := external.NewAccountBatchBuilder(client.config.MaxBatchSize, maxBatchBytes)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
 		columns := strings.Split(scanner.Text(), ",")
 		if len(columns) < 5 {
 			continue
@@ -173,28 +153,46 @@ func (client *Client) readNextAccountBatch(
 			EntityId:      columns[3],
 			EntityName:    columns[4],
 		}
-		size := accountSerializedSize(acc)
-		if batchBytes+size > maxBatchBytes {
-			return batch, &acc
+		if !builder.TryAdd(acc) {
+			if err := builder.Flush(client.conn); err != nil {
+				return err
+			}
+			if err := client.expectMsgType(external.Ack); err != nil {
+				return err
+			}
+			builder.TryAdd(acc)
 		}
-		batch = append(batch, acc)
-		batchBytes += size
 	}
-	return batch, nil
+	if !builder.IsEmpty() {
+		if err := builder.Flush(client.conn); err != nil {
+			return err
+		}
+		if err := client.expectMsgType(external.Ack); err != nil {
+			return err
+		}
+	}
+
+	if err := external.WriteEndOfRecords(client.conn); err != nil {
+		return err
+	}
+	return client.expectMsgType(external.Ack)
 }
 
-func (client *Client) readNextTransBatch(
-	scanner *bufio.Scanner, pending *transfer.Transfer,
-) ([]transfer.Transfer, *transfer.Transfer) {
-	var batch []transfer.Transfer
-	var batchBytes int
-
-	if pending != nil {
-		batch = append(batch, *pending)
-		batchBytes += transSerializedSize(*pending)
+func (client *Client) sendTransRecords() error {
+	file, err := os.Open(client.config.InputFileTrans)
+	if err != nil {
+		slog.Debug("Error while opening trans file", "err", err)
+		return err
 	}
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Error("While closing trans file", "err", err)
+		}
+	}()
 
-	for len(batch) < client.config.MaxBatchSize && scanner.Scan() {
+	builder := external.NewTransBatchBuilder(client.config.MaxBatchSize, maxBatchBytes)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
 		columns := strings.Split(scanner.Text(), ",")
 		if len(columns) < 11 {
 			continue
@@ -227,71 +225,18 @@ func (client *Client) readNextTransBatch(
 			PaymentFormat:     columns[9],
 			IsLaundering:      columns[10] == "1",
 		}
-		size := transSerializedSize(t)
-		if batchBytes+size > maxBatchBytes {
-			return batch, &t
-		}
-		batch = append(batch, t)
-		batchBytes += size
-	}
-	return batch, nil
-}
-
-func (client *Client) sendAccountRecords() error {
-	file, err := os.Open(client.config.InputFileAccounts)
-	if err != nil {
-		slog.Debug("Error while opening accounts file", "err", err)
-		return err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			slog.Error("While closing accounts file", "err", err)
-		}
-	}()
-
-	scanner := bufio.NewScanner(file)
-	var pending *account.Account
-	for {
-		batch, next := client.readNextAccountBatch(scanner, pending)
-		if len(batch) == 0 {
-			break
-		}
-		pending = next
-		if err := external.WriteAccountBatch(client.conn, batch); err != nil {
-			return err
-		}
-		if err := client.expectMsgType(external.Ack); err != nil {
-			return err
+		if !builder.TryAdd(t) {
+			if err := builder.Flush(client.conn); err != nil {
+				return err
+			}
+			if err := client.expectMsgType(external.Ack); err != nil {
+				return err
+			}
+			builder.TryAdd(t)
 		}
 	}
-
-	if err := external.WriteEndOfRecords(client.conn); err != nil {
-		return err
-	}
-	return client.expectMsgType(external.Ack)
-}
-
-func (client *Client) sendTransRecords() error {
-	file, err := os.Open(client.config.InputFileTrans)
-	if err != nil {
-		slog.Debug("Error while opening trans file", "err", err)
-		return err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			slog.Error("While closing trans file", "err", err)
-		}
-	}()
-
-	scanner := bufio.NewScanner(file)
-	var pending *transfer.Transfer
-	for {
-		batch, next := client.readNextTransBatch(scanner, pending)
-		if len(batch) == 0 {
-			break
-		}
-		pending = next
-		if err := external.WriteTransBatch(client.conn, batch); err != nil {
+	if !builder.IsEmpty() {
+		if err := builder.Flush(client.conn); err != nil {
 			return err
 		}
 		if err := client.expectMsgType(external.Ack); err != nil {
