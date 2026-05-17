@@ -4,9 +4,14 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"strconv"
 
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/client"
 )
+
+// Pongo acá las env vars para cuando haga la parte de docker tener a mano. Esto dsps lo volamos
+// Obligatorias: SERVER_HOST, SERVER_PORT, INPUT_FILE_ACCOUNTS, INPUT_FILE_TRANS, OUTPUT_FILE_PREFIX
+// Opcionales: MAX_BATCH_SIZE (default 100), CONNECTION_ATTEMPTS (default 3), CONNECTION_ATTEMPT_DELAY_MS (default 300)
 
 func loadConfig() (client.ClientConfig, error) {
 	serverHost := os.Getenv("SERVER_HOST")
@@ -19,21 +24,57 @@ func loadConfig() (client.ClientConfig, error) {
 		return client.ClientConfig{}, errors.New("SERVER_PORT environment variable is required")
 	}
 
-	inputFile := os.Getenv("INPUT_FILE")
-	if inputFile == "" {
-		return client.ClientConfig{}, errors.New("INPUT_FILE environment variable is required")
+	inputFileAccounts := os.Getenv("INPUT_FILE_ACCOUNTS")
+	if inputFileAccounts == "" {
+		return client.ClientConfig{}, errors.New("INPUT_FILE_ACCOUNTS environment variable is required")
 	}
 
-	outputFile := os.Getenv("OUTPUT_FILE")
-	if outputFile == "" {
-		return client.ClientConfig{}, errors.New("OUTPUT_FILE environment variable is required")
+	inputFileTrans := os.Getenv("INPUT_FILE_TRANS")
+	if inputFileTrans == "" {
+		return client.ClientConfig{}, errors.New("INPUT_FILE_TRANS environment variable is required")
+	}
+
+	outputFilePrefix := os.Getenv("OUTPUT_FILE_PREFIX")
+	if outputFilePrefix == "" {
+		return client.ClientConfig{}, errors.New("OUTPUT_FILE_PREFIX environment variable is required")
+	}
+
+	maxBatchSize := 100
+	if v := os.Getenv("MAX_BATCH_SIZE"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return client.ClientConfig{}, errors.New("MAX_BATCH_SIZE must be an integer")
+		}
+		maxBatchSize = parsed
+	}
+
+	connectionAttempts := 3
+	if v := os.Getenv("CONNECTION_ATTEMPTS"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return client.ClientConfig{}, errors.New("CONNECTION_ATTEMPTS must be an integer")
+		}
+		connectionAttempts = parsed
+	}
+
+	connectionAttemptDelayMs := 300
+	if v := os.Getenv("CONNECTION_ATTEMPT_DELAY_MS"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return client.ClientConfig{}, errors.New("CONNECTION_ATTEMPT_DELAY_MS must be an integer")
+		}
+		connectionAttemptDelayMs = parsed
 	}
 
 	return client.ClientConfig{
-		ServerHost: serverHost,
-		ServerPort: serverPort,
-		InputFile:  inputFile,
-		OutputFile: outputFile,
+		ServerHost:               serverHost,
+		ServerPort:               serverPort,
+		InputFileAccounts:        inputFileAccounts,
+		InputFileTrans:           inputFileTrans,
+		OutputFilePrefix:         outputFilePrefix,
+		MaxBatchSize:             maxBatchSize,
+		ConnectionAttempts:       connectionAttempts,
+		ConnectionAttemptDelayMs: connectionAttemptDelayMs,
 	}, nil
 }
 
