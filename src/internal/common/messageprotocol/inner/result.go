@@ -3,7 +3,7 @@ package inner
 import (
 	"encoding/json"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 )
 
 const (
