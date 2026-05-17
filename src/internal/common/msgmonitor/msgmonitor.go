@@ -36,5 +36,7 @@ func (monitor *messageMonitorImpl) AddProcessedMessagesAmountByClientId(clientID
 }
 
 func (monitor *messageMonitorImpl) Close() {
+	monitor.processedMessagesMutex.Lock()
+	defer monitor.processedMessagesMutex.Unlock()
 	clear(monitor.processedMessagesByClient)
 }

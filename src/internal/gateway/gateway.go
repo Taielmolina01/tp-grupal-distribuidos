@@ -134,11 +134,11 @@ loop:
 		}
 
 		switch msgType {
-		case external.FruitRecord:
-			if err := gateway.handleFruitRecordMessage(client); err != nil {
-				slog.Debug("While handling record message", "err", err)
-				return
-			}
+		// case external.FruitRecord:
+		// 	if err := gateway.handleFruitRecordMessage(client); err != nil {
+		// 		slog.Debug("While handling record message", "err", err)
+		// 		return
+		// 	}
 
 		case external.EndOfRecords:
 			if err := gateway.handleEndOfRecordsMessage(client); err != nil {
@@ -176,23 +176,23 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 				continue
 			}
 
-			if err := external.WriteFruitTop(client.Conn, fruitTop); err != nil {
-				slog.Debug("While writing FRUIT_TOP message", "err", err)
-				return
-			}
-			msgType, err := external.ReadMsgType(client.Conn)
-			if err != nil {
-				slog.Debug("While reading message type", "err", err)
-				return
-			}
-			if msgType != external.Ack {
-				slog.Debug("Expected ACK message")
-				return
-			}
+		// 	if err := external.WriteFruitTop(client.Conn, fruitTop); err != nil {
+		// 		slog.Debug("While writing FRUIT_TOP message", "err", err)
+		// 		return
+		// 	}
+		// 	msgType, err := external.ReadMsgType(client.Conn)
+		// 	if err != nil {
+		// 		slog.Debug("While reading message type", "err", err)
+		// 		return
+		// 	}
+		// 	if msgType != external.Ack {
+		// 		slog.Debug("Expected ACK message")
+		// 		return
+		// 	}
 
-			clientIndex = i
-			return
-		}
+		// 	clientIndex = i
+		// 	return
+		// }
 		slog.Warn("No client handler could process this message")
 		nack()
 	})
