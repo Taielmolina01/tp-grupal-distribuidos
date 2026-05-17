@@ -5,7 +5,7 @@ import (
 )
 
 type MessageMonitor interface {
-	GetProccessedMessagesAmountByClientId(int) uint32
+	GetProcessedMessagesAmountByClientId(int) uint32
 	AddProcessedMessagesAmountByClientId(int, uint32)
 	Close()
 }
@@ -22,7 +22,7 @@ func NewMessageMonitor() MessageMonitor {
 	}
 }
 
-func (monitor *messageMonitorImpl) GetProccessedMessagesAmountByClientId(clientID int) uint32 {
+func (monitor *messageMonitorImpl) GetProcessedMessagesAmountByClientId(clientID int) uint32 {
 	monitor.processedMessagesMutex.Lock()
 	defer monitor.processedMessagesMutex.Unlock()
 	amount := monitor.processedMessagesByClient[clientID]
