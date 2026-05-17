@@ -6,7 +6,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/gateway"
+	"tp-grupal-distribuidos/internal/gateway"
 )
 
 func loadConfig() (gateway.GatewayConfig, error) {

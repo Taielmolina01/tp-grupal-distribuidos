@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/fruititem"
+	"tp-grupal-distribuidos/internal/common/fruititem"
 
 	"gopkg.in/yaml.v3"
 )

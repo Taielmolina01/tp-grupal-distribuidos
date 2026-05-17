@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/worker"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/filter"
+	"tp-grupal-distribuidos/internal/common/worker"
+	"tp-grupal-distribuidos/internal/filter"
 )
 
 func run() int {

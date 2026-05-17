@@ -3,9 +3,9 @@ package filter
 import (
 	"log/slog"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/worker"
+	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 // Inicializadores

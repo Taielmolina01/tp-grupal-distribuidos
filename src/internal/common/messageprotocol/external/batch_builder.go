@@ -3,8 +3,8 @@ package external
 import (
 	"io"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/account"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
 type BatchBuilder[T any] struct {

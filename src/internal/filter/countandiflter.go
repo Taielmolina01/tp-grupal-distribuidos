@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/worker"
+	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 type CountAndFilterConfig struct {

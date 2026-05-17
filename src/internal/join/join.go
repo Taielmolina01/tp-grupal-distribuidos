@@ -7,10 +7,10 @@ import (
 	"sort"
 	"syscall"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/eofmessage"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/fruititem"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/inner"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/eofmessage"
+	"tp-grupal-distribuidos/internal/common/fruititem"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/middleware"
 )
 
 type JoinConfig struct {

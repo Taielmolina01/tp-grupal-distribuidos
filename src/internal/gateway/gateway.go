@@ -11,11 +11,11 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/clientregistry"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/external"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/inner"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/clientregistry"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/external"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/queryresult"
 )
 
 type GatewayConfig struct {

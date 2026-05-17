@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/filter"
+	"tp-grupal-distribuidos/internal/filter"
 )
 
 const (

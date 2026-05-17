@@ -5,11 +5,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/account"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/external/safeio"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/external/serializer"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/queryresult"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/external/safeio"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/external/serializer"
+	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
 type MsgType uint8
