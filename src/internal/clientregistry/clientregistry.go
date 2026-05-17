@@ -4,7 +4,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/messagehandler"
+	"tp-grupal-distribuidos/internal/messagehandler"
 )
 
 type ClientState struct {

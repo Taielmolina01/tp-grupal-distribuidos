@@ -6,7 +6,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/client"
+	"tp-grupal-distribuidos/internal/client"
 )
 
 // Pongo acá las env vars para cuando haga la parte de docker tener a mano. Esto dsps lo volamos
