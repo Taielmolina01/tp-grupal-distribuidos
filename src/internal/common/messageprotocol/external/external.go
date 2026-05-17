@@ -121,6 +121,7 @@ func ReadAccountBatch(reader io.Reader) ([]account.Account, error) {
 	return accounts, nil
 }
 
+
 func serializeTransRecord(trans *transfer.Transfer) []byte {
 	msg := serializer.SerializeString(trans.Timestamp.Format(time.RFC3339))
 	msg = append(msg, serializer.SerializeString(trans.FromBank)...)
@@ -232,6 +233,7 @@ func ReadTransBatch(reader io.Reader) ([]transfer.Transfer, error) {
 	}
 	return trans, nil
 }
+
 
 func ReadResultBatch(reader io.Reader) (*queryresult.BatchResults, error) {
 	count, err := readCount(reader)
@@ -474,3 +476,4 @@ func WriteResultBatch(writer io.Writer, results *queryresult.BatchResults) error
 
 	return safeio.WriteAll(writer, msg)
 }
+
