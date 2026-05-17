@@ -2,11 +2,11 @@ package gateway
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"syscall"
 
@@ -33,6 +33,10 @@ type Gateway struct {
 	resultsQueue      middleware.Middleware
 	listener          net.Listener
 	running           atomic.Bool
+	nextClientID      atomic.Int32
+	countsMu          sync.Mutex
+	accountsCount     map[int]uint32
+	transfersCount    map[int]uint32
 }
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
@@ -81,6 +85,8 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		transfersExchange: transfersExchange,
 		resultsQueue:      resultsQueue,
 		listener:          listener,
+		accountsCount:     map[int]uint32{},
+		transfersCount:    map[int]uint32{},
 	}
 	gateway.running.Store(true)
 	return gateway, nil
@@ -113,10 +119,11 @@ func (gateway *Gateway) Run() error {
 			return err
 		}
 
-		slog.Info("Client connected...")
+		clientID := int(gateway.nextClientID.Add(1))
+		slog.Info("Client connected", "client_id", clientID)
 
 		handler := messagehandler.NewMessageHandler()
-		client := clientregistry.ClientState{Conn: conn, Handler: &handler}
+		client := clientregistry.ClientState{ID: clientID, Conn: conn, Handler: &handler}
 
 		gateway.registry.Add(client)
 
@@ -210,10 +217,50 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 	ack()
 }
 
-func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind string, exchange middleware.Middleware) error {
-	slog.Info("Received EOF message", "kind", kind)
-	body := fmt.Sprintf(`{"eof":%q}`, kind)
-	if err := exchange.Send(middleware.Message{Body: body}); err != nil {
+type innerEnvelope struct {
+	ClientID int             `json:"client_id"`
+	Payload  json.RawMessage `json:"payload,omitempty"`
+	EOF      *eofPayload     `json:"eof,omitempty"`
+}
+
+type eofPayload struct {
+	Kind          string `json:"kind"`
+	TotalMessages uint32 `json:"total_messages"`
+}
+
+func wrapForClient(clientID int, record any) ([]byte, error) {
+	payload, err := json.Marshal(record)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(innerEnvelope{ClientID: clientID, Payload: payload})
+}
+
+func (gateway *Gateway) addCount(counts map[int]uint32, clientID int, n uint32) {
+	gateway.countsMu.Lock()
+	defer gateway.countsMu.Unlock()
+	counts[clientID] += n
+}
+
+func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
+	gateway.countsMu.Lock()
+	defer gateway.countsMu.Unlock()
+	total := counts[clientID]
+	delete(counts, clientID)
+	return total
+}
+
+func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind string, total uint32, exchange middleware.Middleware) error {
+	slog.Info("Received EOF message", "kind", kind, "client_id", client.ID, "total", total)
+	body, err := json.Marshal(innerEnvelope{
+		ClientID: client.ID,
+		EOF:      &eofPayload{Kind: kind, TotalMessages: total},
+	})
+	if err != nil {
+		slog.Debug("While serializing EOF", "kind", kind, "err", err)
+		return err
+	}
+	if err := exchange.Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Debug("While sending EOF", "kind", kind, "err", err)
 		return err
 	}
@@ -231,7 +278,7 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) er
 		return err
 	}
 	for _, acc := range accounts {
-		body, err := json.Marshal(acc)
+		body, err := wrapForClient(client.ID, acc)
 		if err != nil {
 			slog.Debug("While serializing account", "err", err)
 			return err
@@ -241,6 +288,7 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) er
 			return err
 		}
 	}
+	gateway.addCount(gateway.accountsCount, client.ID, uint32(len(accounts)))
 	return external.WriteAck(client.Conn)
 }
 
@@ -251,7 +299,7 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState) erro
 		return err
 	}
 	for _, t := range trans {
-		body, err := json.Marshal(t)
+		body, err := wrapForClient(client.ID, t)
 		if err != nil {
 			slog.Debug("While serializing transfer", "err", err)
 			return err
@@ -261,13 +309,16 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState) erro
 			return err
 		}
 	}
+	gateway.addCount(gateway.transfersCount, client.ID, uint32(len(trans)))
 	return external.WriteAck(client.Conn)
 }
 
 func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState) error {
-	return gateway.forwardEOF(client, "accounts", gateway.accountsExchange)
+	total := gateway.takeCount(gateway.accountsCount, client.ID)
+	return gateway.forwardEOF(client, "accounts", total, gateway.accountsExchange)
 }
 
 func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState) error {
-	return gateway.forwardEOF(client, "transfers", gateway.transfersExchange)
+	total := gateway.takeCount(gateway.transfersCount, client.ID)
+	return gateway.forwardEOF(client, "transfers", total, gateway.transfersExchange)
 }

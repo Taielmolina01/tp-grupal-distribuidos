@@ -8,6 +8,7 @@ import (
 )
 
 type ClientState struct {
+	ID      int
 	Conn    net.Conn
 	Handler *messagehandler.MessageHandler
 }
