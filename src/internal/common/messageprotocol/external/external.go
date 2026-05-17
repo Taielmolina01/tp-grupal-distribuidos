@@ -2,6 +2,7 @@ package external
 
 import (
 	"io"
+	"log/slog"
 	"time"
 
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/account"
@@ -98,8 +99,6 @@ func WriteTransBatch(writer io.Writer, trans []transfer.Transfer) error {
 	return safeio.WriteAll(writer, msg)
 }
 
-// ReadResultBatch reads a result batch from the wire.
-// Format: [2B: count] repeated count times: [1B: query_id][fields...]
 func ReadResultBatch(reader io.Reader) (*queryresult.BatchResults, error) {
 	count, err := readCount(reader)
 	if err != nil {
@@ -146,6 +145,8 @@ func ReadResultBatch(reader io.Reader) (*queryresult.BatchResults, error) {
 				return nil, err
 			}
 			results.Query5 = append(results.Query5, item)
+		default:
+			slog.Warn("Received unexpected query ID in result batch", "queryId", queryId)
 		}
 	}
 

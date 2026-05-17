@@ -21,7 +21,21 @@ import (
 	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
 )
 
-const maxBatchBytes = 8 * 1024
+const (
+	maxBatchBytes = 8 * 1024
+
+	numQueries              = 5
+	transTimestampLayout    = "2006/01/02"
+	stringLengthPrefixBytes = 2
+	accountStringFieldCount = 5
+	transStringFieldCount   = 8
+	float32SerializedBytes  = 4
+	boolSerializedBytes     = 1
+
+	accountStringOverhead = accountStringFieldCount * stringLengthPrefixBytes
+	transStringOverhead   = transStringFieldCount * stringLengthPrefixBytes
+	transFixedBytes       = 2*float32SerializedBytes + boolSerializedBytes
+)
 
 type ClientConfig struct {
 	ServerHost               string
@@ -124,7 +138,7 @@ func (client *Client) expectMsgType(expectedMsgType external.MsgType) error {
 }
 
 func accountSerializedSize(acc account.Account) int {
-	return 5*2 + len(acc.BankName) + len(acc.BankId) +
+	return accountStringOverhead + len(acc.BankName) + len(acc.BankId) +
 		len(acc.AccountNumber) + len(acc.EntityId) + len(acc.EntityName)
 }
 
@@ -133,7 +147,7 @@ func transSerializedSize(t transfer.Transfer) int {
 	stringBytes := len(ts) + len(t.FromBank) + len(t.FromBankAccount) +
 		len(t.ToBank) + len(t.ToBankAccount) + len(t.ReceivingCurrency) +
 		len(t.PaymentCurrency) + len(t.PaymentFormat)
-	return 8*2 + stringBytes + 4 + 4 + 1
+	return transStringOverhead + stringBytes + transFixedBytes
 }
 
 func (client *Client) readNextAccountBatch(
@@ -185,7 +199,7 @@ func (client *Client) readNextTransBatch(
 		if len(columns) < 11 {
 			continue
 		}
-		timestamp, err := time.Parse("2006/01/02", columns[0])
+		timestamp, err := time.Parse(transTimestampLayout, columns[0])
 		if err != nil {
 			slog.Debug("Error while parsing trans timestamp", "err", err)
 			continue
@@ -292,8 +306,6 @@ func (client *Client) sendTransRecords() error {
 }
 
 func (client *Client) recvResults() error {
-	const numQueries = 5
-
 	files := make([]*os.File, numQueries)
 	writers := make([]*csv.Writer, numQueries)
 
