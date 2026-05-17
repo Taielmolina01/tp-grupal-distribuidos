@@ -1,0 +1,19 @@
+src/internal/common/messageprotocol/external/batch_builder.go
+  s_8ce88b703d5266::t_bddbacfc9b3592 10-16,19-20,24,29,33-34,40-45,49-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "62279322cff28c29d693e3536f685b701b5093bb",
+  "prompts": {},
+  "sessions": {
+    "s_8ce88b703d5266": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "76c702b8-b8f2-4ba6-a8f0-d01f189aa7e8",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
