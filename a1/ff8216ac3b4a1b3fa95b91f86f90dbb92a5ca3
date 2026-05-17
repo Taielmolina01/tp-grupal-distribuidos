@@ -1,0 +1,14 @@
+.gitignore
+  h_3c9b41718876fe 33-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "a1ff8216ac3b4a1b3fa95b91f86f90dbb92a5ca3",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
