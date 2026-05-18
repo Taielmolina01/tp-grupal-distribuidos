@@ -26,6 +26,7 @@ type GatewayConfig struct {
 	ServerPort        string
 	MomHost           string
 	MomPort           int
+	MaxBatchSize      int
 }
 
 type Gateway struct {
@@ -40,6 +41,9 @@ type Gateway struct {
 	accountsCount     map[int]uint32
 	transfersCount    map[int]uint32
 	queryEOFsByClient map[int]int
+	resultBuilders    map[int]*external.ResultBatchBuilder
+	maxBatchSize      int
+	maxBatchBytes     int
 }
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
@@ -91,6 +95,8 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		accountsCount:     map[int]uint32{},
 		transfersCount:    map[int]uint32{},
 		queryEOFsByClient: map[int]int{},
+		resultBuilders:    map[int]*external.ResultBatchBuilder{},
+		maxBatchSize:      config.MaxBatchSize,
 	}
 	gateway.running.Store(true)
 	return gateway, nil
@@ -215,6 +221,15 @@ transfersLoop:
 	}
 }
 
+func (gateway *Gateway) getOrCreateBuilder(clientID int) *external.ResultBatchBuilder {
+	if b, ok := gateway.resultBuilders[clientID]; ok {
+		return b
+	}
+	b := external.NewResultBatchBuilder(gateway.maxBatchSize, gateway.maxBatchBytes)
+	gateway.resultBuilders[clientID] = b
+	return b
+}
+
 func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
 	env, err := inner.DeserializeResult(&msg)
 	if err != nil {
@@ -230,7 +245,16 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 		return
 	}
 
+	builder := gateway.getOrCreateBuilder(env.ClientID)
+
 	if env.IsQueryEOF {
+		if !builder.IsEmpty() {
+			if err := builder.Flush(client.Conn); err != nil {
+				slog.Error("While flushing batch before QueryEOF", "client_id", env.ClientID, "err", err)
+				nack()
+				return
+			}
+		}
 		if err := external.WriteQueryEOF(client.Conn, env.QueryID); err != nil {
 			slog.Error("While writing QueryEOF", "client_id", env.ClientID, "query_id", env.QueryID, "err", err)
 			nack()
@@ -243,18 +267,62 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 		return
 	}
 
-	batch, err := batchFromEnvelope(env)
+	added, err := addResultToBuilder(builder, env)
 	if err != nil {
-		slog.Error("While building result batch", "client_id", env.ClientID, "query_id", env.QueryID, "err", err)
+		slog.Error("While adding result to batch", "client_id", env.ClientID, "query_id", env.QueryID, "err", err)
 		nack()
 		return
 	}
-	if err := external.WriteResultBatch(client.Conn, batch); err != nil {
-		slog.Error("While writing result batch", "client_id", env.ClientID, "err", err)
-		nack()
-		return
+	if !added {
+		if err := builder.Flush(client.Conn); err != nil {
+			slog.Error("While flushing full batch", "client_id", env.ClientID, "err", err)
+			nack()
+			return
+		}
+		if _, err := addResultToBuilder(builder, env); err != nil {
+			slog.Error("While adding result to batch after flush", "client_id", env.ClientID, "err", err)
+			nack()
+			return
+		}
 	}
 	ack()
+}
+
+func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.ResultEnvelope) (bool, error) {
+	switch env.QueryID {
+	case inner.Query1ID:
+		var r queryresult.Query1Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return false, err
+		}
+		return builder.TryAddQuery1(r), nil
+	case inner.Query2ID:
+		var r queryresult.Query2Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return false, err
+		}
+		return builder.TryAddQuery2(r), nil
+	case inner.Query3ID:
+		var r queryresult.Query3Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return false, err
+		}
+		return builder.TryAddQuery3(r), nil
+	case inner.Query4ID:
+		var r queryresult.Query4Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return false, err
+		}
+		return builder.TryAddQuery4(r), nil
+	case inner.Query5ID:
+		var r queryresult.Query5Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return false, err
+		}
+		return builder.TryAddQuery5(r), nil
+	default:
+		return false, fmt.Errorf("unknown query id: %d", env.QueryID)
+	}
 }
 
 const totalQueries = 5
@@ -278,6 +346,7 @@ func (gateway *Gateway) closeClient(clientID int) {
 	gateway.countsMu.Lock()
 	delete(gateway.queryEOFsByClient, clientID)
 	gateway.countsMu.Unlock()
+	delete(gateway.resultBuilders, clientID)
 	slog.Info("Client finished, connection closed", "client_id", clientID)
 }
 
@@ -294,45 +363,6 @@ func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bo
 		}
 	})
 	return found, ok
-}
-
-func batchFromEnvelope(env *inner.ResultEnvelope) (*queryresult.BatchResults, error) {
-	batch := &queryresult.BatchResults{}
-	switch env.QueryID {
-	case inner.Query1ID:
-		var r queryresult.Query1Result
-		if err := json.Unmarshal(env.Payload, &r); err != nil {
-			return nil, err
-		}
-		batch.Query1 = append(batch.Query1, r)
-	case inner.Query2ID:
-		var r queryresult.Query2Result
-		if err := json.Unmarshal(env.Payload, &r); err != nil {
-			return nil, err
-		}
-		batch.Query2 = append(batch.Query2, r)
-	case inner.Query3ID:
-		var r queryresult.Query3Result
-		if err := json.Unmarshal(env.Payload, &r); err != nil {
-			return nil, err
-		}
-		batch.Query3 = append(batch.Query3, r)
-	case inner.Query4ID:
-		var r queryresult.Query4Result
-		if err := json.Unmarshal(env.Payload, &r); err != nil {
-			return nil, err
-		}
-		batch.Query4 = append(batch.Query4, r)
-	case inner.Query5ID:
-		var r queryresult.Query5Result
-		if err := json.Unmarshal(env.Payload, &r); err != nil {
-			return nil, err
-		}
-		batch.Query5 = append(batch.Query5, r)
-	default:
-		return nil, fmt.Errorf("unknown query id: %d", env.QueryID)
-	}
-	return batch, nil
 }
 
 type innerEnvelope struct {
@@ -382,10 +412,6 @@ func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind strin
 		slog.Debug("While sending EOF", "kind", kind, "err", err)
 		return err
 	}
-	if err := external.WriteAck(client.Conn); err != nil {
-		slog.Debug("While writing ACK message", "err", err)
-		return err
-	}
 	return nil
 }
 
@@ -407,7 +433,7 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) er
 		}
 	}
 	gateway.addCount(gateway.accountsCount, client.ID, uint32(len(accounts)))
-	return external.WriteAck(client.Conn)
+	return nil
 }
 
 func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState) error {
@@ -428,7 +454,7 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState) erro
 		}
 	}
 	gateway.addCount(gateway.transfersCount, client.ID, uint32(len(trans)))
-	return external.WriteAck(client.Conn)
+	return nil
 }
 
 func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState) error {

@@ -15,8 +15,7 @@ import (
 type MsgType uint8
 
 const (
-	Ack MsgType = iota + 1
-	AccountBatch
+	AccountBatch MsgType = iota + 1
 	TransBatch
 	EndOfRecords
 	ResultBatch
@@ -33,10 +32,6 @@ func ReadMsgType(reader io.Reader) (MsgType, error) {
 		return 0, err
 	}
 	return MsgType(serializer.DeserializeUint8(b)), nil
-}
-
-func WriteAck(writer io.Writer) error {
-	return writeMsgType(writer, Ack)
 }
 
 func WriteEndOfRecords(writer io.Writer) error {
@@ -120,7 +115,6 @@ func ReadAccountBatch(reader io.Reader) ([]account.Account, error) {
 	}
 	return accounts, nil
 }
-
 
 func serializeTransRecord(trans *transfer.Transfer) []byte {
 	msg := serializer.SerializeString(trans.Timestamp.Format(time.RFC3339))
@@ -233,7 +227,6 @@ func ReadTransBatch(reader io.Reader) ([]transfer.Transfer, error) {
 	}
 	return trans, nil
 }
-
 
 func ReadResultBatch(reader io.Reader) (*queryresult.BatchResults, error) {
 	count, err := readCount(reader)
@@ -476,4 +469,3 @@ func WriteResultBatch(writer io.Writer, results *queryresult.BatchResults) error
 
 	return safeio.WriteAll(writer, msg)
 }
-

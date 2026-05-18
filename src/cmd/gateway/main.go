@@ -45,6 +45,15 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		return gateway.GatewayConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
+	maxBatchSize := 100
+	if v := os.Getenv("MAX_BATCH_SIZE"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil {
+			return gateway.GatewayConfig{}, errors.New("MAX_BATCH_SIZE must be an integer")
+		}
+		maxBatchSize = parsed
+	}
+
 	return gateway.GatewayConfig{
 		AccountsExchange:  accountsExchange,
 		TransfersExchange: transfersExchange,
@@ -53,6 +62,7 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		ServerPort:        serverPort,
 		MomHost:           momHost,
 		MomPort:           momPort,
+		MaxBatchSize:      maxBatchSize,
 	}, nil
 }
 
