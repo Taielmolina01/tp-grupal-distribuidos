@@ -18,11 +18,9 @@ type JoinConfig struct {
 }
 
 type Join[L, R, O any] struct {
-	leftInput   middleware.Middleware
-	rightInput  middleware.Middleware
-	output      middleware.Middleware
-	leftBuffer  map[int]map[string]L
-	rightBuffer map[int]map[string]R
+	output middleware.Middleware
+	leftBuffer  map[int]map[string]L //{clientID : {key : data}}
+	rightBuffer map[int]map[string]R //{clientID : {key : data}}
 	leftKey     func(L) string
 	rightKey    func(R) string
 	combine     func(L, R) O

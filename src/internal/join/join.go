@@ -6,97 +6,27 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 func newJoin[L, R, O any](
-	config JoinConfig,
+	output middleware.Middleware,
 	leftKey func(L) string,
 	rightKey func(R) string,
 	combine func(L, R) O,
-) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-
-	leftInput, err := middleware.CreateExchangeMiddleware(config.LeftInputExchange, []string{}, connSettings)
-	if err != nil {
-		return nil, err
-	}
-
-	rightInput, err := middleware.CreateExchangeMiddleware(config.RightInputExchange, []string{}, connSettings)
-	if err != nil {
-		if err := leftInput.Close(); err != nil {
-			slog.Error("while closing left input", "err", err)
-		}
-		return nil, err
-	}
-
-	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, []string{}, connSettings)
-	if err != nil {
-		if err := leftInput.Close(); err != nil {
-			slog.Error("while closing left input", "err", err)
-		}
-		if err := rightInput.Close(); err != nil {
-			slog.Error("while closing right input", "err", err)
-		}
-		return nil, err
-	}
-
+	queryID uint8,
+) *Join[L, R, O] {
 	return &Join[L, R, O]{
-		leftInput:   leftInput,
-		rightInput:  rightInput,
 		output:      output,
 		leftBuffer:  map[int]map[string]L{},
 		rightBuffer: map[int]map[string]R{},
 		leftKey:     leftKey,
 		rightKey:    rightKey,
 		combine:     combine,
-		queryID:     config.QueryID,
-	}, nil
+		queryID:     queryID,
+	}
 }
 
-func (j *Join[L, R, O]) Run() {
-	done := make(chan struct{})
-
-	go func() {
-		if err := j.leftInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-			j.handleLeft(msg, ack, nack)
-		}); err != nil {
-			slog.Error("while consuming left input", "err", err)
-		}
-		close(done)
-	}()
-
-	if err := j.rightInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		j.handleRight(msg, ack, nack)
-	}); err != nil {
-		slog.Error("while consuming right input", "err", err)
-	}
-
-	<-done
-}
-
-func (j *Join[L, R, O]) HandleSignals() {}
-
-func (j *Join[L, R, O]) handleLeft(msg middleware.Message, ack, nack func()) {
-	defer ack()
-
-	env, err := inner.DeserializeData(&msg)
-	if err != nil {
-		slog.Error("while deserializing left message", "err", err)
-		return
-	}
-
-	if env.IsEOF() {
-		return
-	}
-
-	var record L
-	if err := json.Unmarshal(env.Payload, &record); err != nil {
-		slog.Error("while unmarshaling left record", "err", err)
-		return
-	}
-
-	clientID := env.ClientID
+func (j *Join[L, R, O]) HandleLeft(clientID int, record L) {
 	key := j.leftKey(record)
 
 	if rightMap, ok := j.rightBuffer[clientID]; ok {
@@ -112,26 +42,7 @@ func (j *Join[L, R, O]) handleLeft(msg middleware.Message, ack, nack func()) {
 	j.leftBuffer[clientID][key] = record
 }
 
-func (j *Join[L, R, O]) handleRight(msg middleware.Message, ack, nack func()) {
-	defer ack()
-
-	env, err := inner.DeserializeData(&msg)
-	if err != nil {
-		slog.Error("while deserializing right message", "err", err)
-		return
-	}
-
-	if env.IsEOF() {
-		return
-	}
-
-	var record R
-	if err := json.Unmarshal(env.Payload, &record); err != nil {
-		slog.Error("while unmarshaling right record", "err", err)
-		return
-	}
-
-	clientID := env.ClientID
+func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
 	key := j.rightKey(record)
 
 	if leftMap, ok := j.leftBuffer[clientID]; ok {

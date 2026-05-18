@@ -10,7 +10,7 @@ import (
 
 func CreateTransferAccountByBankJoin(config JoinConfig) (worker.Worker, error) {
 	config.QueryID = inner.Query2ID
-	return newJoin(
+	return newTwoInputJoin(
 		config,
 		func(t transfer.Transfer) string { return t.FromBank },
 		func(a account.Account) string { return a.BankId },
