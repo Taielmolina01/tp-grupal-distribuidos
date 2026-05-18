@@ -1,0 +1,18 @@
+src/cmd/filter/Dockerfile
+  h_3c9b41718876fe 7-10,13
+src/cmd/filter/config.go
+  h_3c9b41718876fe 114,116
+docker-compose.yaml
+  h_3c9b41718876fe 56-91,93-94,97-98,100-101,103-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "6dc09c9df62deb71ca8cca4b38eb959141ef8f61",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
