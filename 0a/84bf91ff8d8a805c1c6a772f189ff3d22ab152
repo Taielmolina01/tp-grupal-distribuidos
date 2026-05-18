@@ -1,0 +1,14 @@
+replicate.sh
+  h_3c9b41718876fe 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "0a84bf91ff8d8a805c1c6a772f189ff3d22ab152",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
