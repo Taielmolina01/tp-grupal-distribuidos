@@ -5,11 +5,13 @@ RUN mkdir -p /build
 WORKDIR /build/
 COPY go.mod .
 COPY go.sum .
-COPY common ./common
+COPY internal/common ./internal/common
+COPY internal/clientregistry ./internal/clientregistry
+COPY internal/gateway ./internal/gateway
+COPY cmd/gateway ./cmd/gateway
 RUN go mod download
-COPY gateway .
 # CGO_ENABLED must be disabled to run go binary in Alpine
-RUN CGO_ENABLED=0 GOOS=linux go build -o bin/gateway
+RUN CGO_ENABLED=0 GOOS=linux go build -o bin/gateway ./cmd/gateway/
 
 FROM busybox:latest
 COPY --from=builder /build/bin/gateway /gateway

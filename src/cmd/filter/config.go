@@ -111,9 +111,9 @@ func loadFilterTypeConfig(config *filter.FilterConfig) error {
 		return errors.New("FILTER_TYPE environment variable is required")
 	}
 
-	filterType := filter.FilterType(filterTypeVenv)
+	config.Type = filter.FilterType(filterTypeVenv)
 
-	switch filterType {
+	switch config.Type {
 	case filter.CURRENCY:
 		if err := loadCurrenciesVenv(config); err != nil {
 			return err

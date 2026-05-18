@@ -11,7 +11,7 @@ import (
 
 // Pongo acá las env vars para cuando haga la parte de docker tener a mano. Esto dsps lo volamos
 // Obligatorias: SERVER_HOST, SERVER_PORT, INPUT_FILE_ACCOUNTS, INPUT_FILE_TRANS, OUTPUT_FILE_PREFIX
-// Opcionales: MAX_BATCH_SIZE (default 100), CONNECTION_ATTEMPTS (default 3), CONNECTION_ATTEMPT_DELAY_MS (default 300)
+// Opcionales: MAX_BATCH_SIZE (default 100), CONNECTION_ATTEMPTS (default 3), CONNECTION_ATTEMPT_DELAY_MS (default 300), LOG_LEVEL
 
 func loadConfig() (client.ClientConfig, error) {
 	serverHost := os.Getenv("SERVER_HOST")
