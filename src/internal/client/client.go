@@ -15,14 +15,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/account"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/external"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/queryresult"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/external"
+	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
 const (
-	maxBatchBytes        = 8 * 1024
 	numQueries           = 5
 	transTimestampLayout = "2006/01/02"
 )
@@ -115,18 +114,6 @@ func (client *Client) handleSignals() {
 	}
 }
 
-func (client *Client) expectMsgType(expectedMsgType external.MsgType) error {
-	msgType, err := external.ReadMsgType(client.conn)
-	if err != nil {
-		slog.Debug("Error while reading message type", "err", err)
-		return err
-	}
-	if msgType != expectedMsgType {
-		return errors.New("unexpected message type")
-	}
-	return nil
-}
-
 func (client *Client) sendAccountRecords() error {
 	file, err := os.Open(client.config.InputFileAccounts)
 	if err != nil {
@@ -139,7 +126,7 @@ func (client *Client) sendAccountRecords() error {
 		}
 	}()
 
-	builder := external.NewAccountBatchBuilder(client.config.MaxBatchSize, maxBatchBytes)
+	builder := external.NewAccountBatchBuilder(client.config.MaxBatchSize)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		columns := strings.Split(scanner.Text(), ",")
@@ -157,9 +144,6 @@ func (client *Client) sendAccountRecords() error {
 			if err := builder.Flush(client.conn); err != nil {
 				return err
 			}
-			if err := client.expectMsgType(external.Ack); err != nil {
-				return err
-			}
 			builder.TryAdd(acc)
 		}
 	}
@@ -167,15 +151,12 @@ func (client *Client) sendAccountRecords() error {
 		if err := builder.Flush(client.conn); err != nil {
 			return err
 		}
-		if err := client.expectMsgType(external.Ack); err != nil {
-			return err
-		}
 	}
 
 	if err := external.WriteEndOfRecords(client.conn); err != nil {
 		return err
 	}
-	return client.expectMsgType(external.Ack)
+	return nil
 }
 
 func (client *Client) sendTransRecords() error {
@@ -190,7 +171,7 @@ func (client *Client) sendTransRecords() error {
 		}
 	}()
 
-	builder := external.NewTransBatchBuilder(client.config.MaxBatchSize, maxBatchBytes)
+	builder := external.NewTransBatchBuilder(client.config.MaxBatchSize)
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		columns := strings.Split(scanner.Text(), ",")
@@ -229,9 +210,6 @@ func (client *Client) sendTransRecords() error {
 			if err := builder.Flush(client.conn); err != nil {
 				return err
 			}
-			if err := client.expectMsgType(external.Ack); err != nil {
-				return err
-			}
 			builder.TryAdd(t)
 		}
 	}
@@ -239,15 +217,12 @@ func (client *Client) sendTransRecords() error {
 		if err := builder.Flush(client.conn); err != nil {
 			return err
 		}
-		if err := client.expectMsgType(external.Ack); err != nil {
-			return err
-		}
 	}
 
 	if err := external.WriteEndOfRecords(client.conn); err != nil {
 		return err
 	}
-	return client.expectMsgType(external.Ack)
+	return nil
 }
 
 func (client *Client) recvResults() error {
@@ -290,10 +265,6 @@ func (client *Client) recvResults() error {
 				return err
 			}
 			client.flushBatchToWriters(results, writers)
-			if err := external.WriteAck(client.conn); err != nil {
-				slog.Debug("Error while writing ack", "err", err)
-				return err
-			}
 
 		case external.QueryEOF:
 			queryId, err := external.ReadQueryEOF(client.conn)
@@ -307,10 +278,6 @@ func (client *Client) recvResults() error {
 				slog.Error("While closing output file", "query", queryId, "err", err)
 			}
 			files[idx] = nil
-			if err := external.WriteAck(client.conn); err != nil {
-				slog.Debug("Error while writing ack for query EOF", "err", err)
-				return err
-			}
 			doneCount++
 
 		default:

@@ -3,8 +3,8 @@ package filter
 import (
 	"log/slog"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/worker"
+	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 func newAverageFilter(config FilterConfig, compareFunc func(float32, float32) bool) (worker.Worker, error) {

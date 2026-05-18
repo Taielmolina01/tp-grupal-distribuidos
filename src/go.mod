@@ -1,4 +1,4 @@
-module github.com/7574-sistemas-distribuidos/tp-coordinacion
+module tp-grupal-distribuidos
 
 go 1.24.1
 

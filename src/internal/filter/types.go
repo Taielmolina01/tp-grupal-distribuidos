@@ -3,8 +3,8 @@ package filter
 import (
 	"time"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
 type FilterType string
@@ -54,8 +54,8 @@ type DistinctFilter[T comparable] struct {
 	id             uint32
 	inputExchange  middleware.Middleware
 	outputExchange middleware.Middleware
-	alreadySeen    map[T]bool
-	compareFunc    func(T, T) bool
+	// alreadySeen    map[T]bool
+	compareFunc func(T, T) bool
 }
 
 type AverageFilter struct {

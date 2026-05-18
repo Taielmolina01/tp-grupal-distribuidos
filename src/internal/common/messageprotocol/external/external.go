@@ -5,18 +5,17 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/account"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/external/safeio"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/external/serializer"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/queryresult"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/external/safeio"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/external/serializer"
+	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
 type MsgType uint8
 
 const (
-	Ack MsgType = iota + 1
-	AccountBatch
+	AccountBatch MsgType = iota + 1
 	TransBatch
 	EndOfRecords
 	ResultBatch
@@ -33,10 +32,6 @@ func ReadMsgType(reader io.Reader) (MsgType, error) {
 		return 0, err
 	}
 	return MsgType(serializer.DeserializeUint8(b)), nil
-}
-
-func WriteAck(writer io.Writer) error {
-	return writeMsgType(writer, Ack)
 }
 
 func WriteEndOfRecords(writer io.Writer) error {
@@ -75,6 +70,52 @@ func WriteAccountBatch(writer io.Writer, accounts []account.Account) error {
 	return safeio.WriteAll(writer, msg)
 }
 
+func deserializeAccountRecord(reader io.Reader) (account.Account, error) {
+	bankName, err := readString(reader)
+	if err != nil {
+		return account.Account{}, err
+	}
+	bankId, err := readString(reader)
+	if err != nil {
+		return account.Account{}, err
+	}
+	accountNumber, err := readString(reader)
+	if err != nil {
+		return account.Account{}, err
+	}
+	entityId, err := readString(reader)
+	if err != nil {
+		return account.Account{}, err
+	}
+	entityName, err := readString(reader)
+	if err != nil {
+		return account.Account{}, err
+	}
+	return account.Account{
+		BankName:      bankName,
+		BankId:        bankId,
+		AccountNumber: accountNumber,
+		EntityId:      entityId,
+		EntityName:    entityName,
+	}, nil
+}
+
+func ReadAccountBatch(reader io.Reader) ([]account.Account, error) {
+	count, err := readCount(reader)
+	if err != nil {
+		return nil, err
+	}
+	accounts := make([]account.Account, 0, count)
+	for range count {
+		acc, err := deserializeAccountRecord(reader)
+		if err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, acc)
+	}
+	return accounts, nil
+}
+
 func serializeTransRecord(trans *transfer.Transfer) []byte {
 	msg := serializer.SerializeString(trans.Timestamp.Format(time.RFC3339))
 	msg = append(msg, serializer.SerializeString(trans.FromBank)...)
@@ -97,6 +138,94 @@ func WriteTransBatch(writer io.Writer, trans []transfer.Transfer) error {
 		msg = append(msg, serializeTransRecord(&t)...)
 	}
 	return safeio.WriteAll(writer, msg)
+}
+
+func readBool(reader io.Reader) (bool, error) {
+	b, err := safeio.ReadAll(reader, serializer.BOOL_SIZE)
+	if err != nil {
+		return false, err
+	}
+	return b[0] != 0, nil
+}
+
+func deserializeTransRecord(reader io.Reader) (transfer.Transfer, error) {
+	timestampStr, err := readString(reader)
+	if err != nil {
+		return transfer.Transfer{}, err
+	}
+	timestamp, err := time.Parse(time.RFC3339, timestampStr)
+	if err != nil {
+		return transfer.Transfer{}, err
+	}
+	fromBank, err := readString(reader)
+	if err != nil {
+		return transfer.Transfer{}, err
+	}
+	fromBankAccount, err := readString(reader)
+	if err != nil {
+		return transfer.Transfer{}, err
+	}
+	toBank, err := readString(reader)
+	if err != nil {
+		return transfer.Transfer{}, err
+	}
+	toBankAccount, err := readString(reader)
+	if err != nil {
+		return transfer.Transfer{}, err
+	}
+	amountReceived, err := readFloat32(reader)
+	if err != nil {
+		return transfer.Transfer{}, err
+	}
+	receivingCurrency, err := readString(reader)
+	if err != nil {
+		return transfer.Transfer{}, err
+	}
+	amountPaid, err := readFloat32(reader)
+	if err != nil {
+		return transfer.Transfer{}, err
+	}
+	paymentCurrency, err := readString(reader)
+	if err != nil {
+		return transfer.Transfer{}, err
+	}
+	paymentFormat, err := readString(reader)
+	if err != nil {
+		return transfer.Transfer{}, err
+	}
+	isLaundering, err := readBool(reader)
+	if err != nil {
+		return transfer.Transfer{}, err
+	}
+	return transfer.Transfer{
+		Timestamp:         timestamp,
+		FromBank:          fromBank,
+		FromBankAccount:   fromBankAccount,
+		ToBank:            toBank,
+		ToBankAccount:     toBankAccount,
+		AmountReceived:    amountReceived,
+		ReceivingCurrency: receivingCurrency,
+		AmountPaid:        amountPaid,
+		PaymentCurrency:   paymentCurrency,
+		PaymentFormat:     paymentFormat,
+		IsLaundering:      isLaundering,
+	}, nil
+}
+
+func ReadTransBatch(reader io.Reader) ([]transfer.Transfer, error) {
+	count, err := readCount(reader)
+	if err != nil {
+		return nil, err
+	}
+	trans := make([]transfer.Transfer, 0, count)
+	for range count {
+		t, err := deserializeTransRecord(reader)
+		if err != nil {
+			return nil, err
+		}
+		trans = append(trans, t)
+	}
+	return trans, nil
 }
 
 func ReadResultBatch(reader io.Reader) (*queryresult.BatchResults, error) {
@@ -275,4 +404,68 @@ func deserializeQuery5Result(r io.Reader) (queryresult.Query5Result, error) {
 		return queryresult.Query5Result{}, err
 	}
 	return queryresult.Query5Result{Qty: qty}, nil
+}
+
+func serializeQuery1Result(r *queryresult.Query1Result) []byte {
+	msg := serializer.SerializeString(r.FromBank)
+	msg = append(msg, serializer.SerializeString(r.FromAccount)...)
+	msg = append(msg, serializer.SerializeString(r.ToBank)...)
+	msg = append(msg, serializer.SerializeString(r.ToAccount)...)
+	msg = append(msg, serializer.SerializeFloat32(r.Amount)...)
+	return msg
+}
+
+func serializeQuery2Result(r *queryresult.Query2Result) []byte {
+	msg := serializer.SerializeString(r.BankName)
+	msg = append(msg, serializer.SerializeString(r.FromBank)...)
+	msg = append(msg, serializer.SerializeString(r.FromAccount)...)
+	msg = append(msg, serializer.SerializeFloat32(r.Amount)...)
+	return msg
+}
+
+func serializeQuery3Result(r *queryresult.Query3Result) []byte {
+	msg := serializer.SerializeString(r.FromBank)
+	msg = append(msg, serializer.SerializeString(r.FromAccount)...)
+	msg = append(msg, serializer.SerializeFloat32(r.Amount)...)
+	return msg
+}
+
+func serializeQuery4Result(r *queryresult.Query4Result) []byte {
+	msg := serializer.SerializeString(r.BankId)
+	msg = append(msg, serializer.SerializeString(r.AccountId)...)
+	return msg
+}
+
+func serializeQuery5Result(r *queryresult.Query5Result) []byte {
+	return serializer.SerializeUint16(uint16(r.Qty))
+}
+
+func WriteResultBatch(writer io.Writer, results *queryresult.BatchResults) error {
+	total := len(results.Query1) + len(results.Query2) + len(results.Query3) + len(results.Query4) + len(results.Query5)
+
+	msg := serializer.SerializeUint8(uint8(ResultBatch))
+	msg = append(msg, serializer.SerializeUint16(uint16(total))...)
+
+	for _, r := range results.Query1 {
+		msg = append(msg, serializer.SerializeUint8(1)...)
+		msg = append(msg, serializeQuery1Result(&r)...)
+	}
+	for _, r := range results.Query2 {
+		msg = append(msg, serializer.SerializeUint8(2)...)
+		msg = append(msg, serializeQuery2Result(&r)...)
+	}
+	for _, r := range results.Query3 {
+		msg = append(msg, serializer.SerializeUint8(3)...)
+		msg = append(msg, serializeQuery3Result(&r)...)
+	}
+	for _, r := range results.Query4 {
+		msg = append(msg, serializer.SerializeUint8(4)...)
+		msg = append(msg, serializeQuery4Result(&r)...)
+	}
+	for _, r := range results.Query5 {
+		msg = append(msg, serializer.SerializeUint8(5)...)
+		msg = append(msg, serializeQuery5Result(&r)...)
+	}
+
+	return safeio.WriteAll(writer, msg)
 }

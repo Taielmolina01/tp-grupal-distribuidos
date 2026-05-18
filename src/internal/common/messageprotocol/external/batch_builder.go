@@ -3,14 +3,16 @@ package external
 import (
 	"io"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/account"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/transfer"
 )
+
+const maxBatchBytes = 8 * 1024
 
 type BatchBuilder[T any] struct {
 	records   []T
 	byteSize  int
-	maxBytes  int
 	maxCount  int
 	serialize func(*T) []byte
 	write     func(io.Writer, []T) error
@@ -18,7 +20,7 @@ type BatchBuilder[T any] struct {
 
 func (b *BatchBuilder[T]) TryAdd(record T) bool {
 	size := len(b.serialize(&record))
-	if !b.IsEmpty() && (len(b.records) >= b.maxCount || b.byteSize+size > b.maxBytes) {
+	if !b.IsEmpty() && (len(b.records) >= b.maxCount || b.byteSize+size > maxBatchBytes) {
 		return false
 	}
 	b.records = append(b.records, record)
@@ -37,20 +39,96 @@ func (b *BatchBuilder[T]) Flush(w io.Writer) error {
 	return err
 }
 
-func NewAccountBatchBuilder(maxCount, maxBytes int) *BatchBuilder[account.Account] {
+func NewAccountBatchBuilder(maxCount int) *BatchBuilder[account.Account] {
 	return &BatchBuilder[account.Account]{
-		maxBytes:  maxBytes,
 		maxCount:  maxCount,
 		serialize: serializeAccountRecord,
 		write:     WriteAccountBatch,
 	}
 }
 
-func NewTransBatchBuilder(maxCount, maxBytes int) *BatchBuilder[transfer.Transfer] {
+func NewTransBatchBuilder(maxCount int) *BatchBuilder[transfer.Transfer] {
 	return &BatchBuilder[transfer.Transfer]{
-		maxBytes:  maxBytes,
 		maxCount:  maxCount,
 		serialize: serializeTransRecord,
 		write:     WriteTransBatch,
 	}
+}
+
+type ResultBatchBuilder struct {
+	batch    queryresult.BatchResults
+	byteSize int
+	maxBytes int
+	maxCount int
+}
+
+func NewResultBatchBuilder(maxCount, maxBytes int) *ResultBatchBuilder {
+	return &ResultBatchBuilder{maxCount: maxCount, maxBytes: maxBytes}
+}
+
+func (b *ResultBatchBuilder) count() int {
+	return len(b.batch.Query1) + len(b.batch.Query2) + len(b.batch.Query3) +
+		len(b.batch.Query4) + len(b.batch.Query5)
+}
+
+func (b *ResultBatchBuilder) IsEmpty() bool {
+	return b.count() == 0
+}
+
+func (b *ResultBatchBuilder) tryAdd(itemPayloadSize int) bool {
+	size := 1 + itemPayloadSize
+	if !b.IsEmpty() && (b.count() >= b.maxCount || b.byteSize+size > maxBatchBytes) {
+		return false
+	}
+	b.byteSize += size
+	return true
+}
+
+func (b *ResultBatchBuilder) TryAddQuery1(r queryresult.Query1Result) bool {
+	if !b.tryAdd(len(serializeQuery1Result(&r))) {
+		return false
+	}
+	b.batch.Query1 = append(b.batch.Query1, r)
+	return true
+}
+
+func (b *ResultBatchBuilder) TryAddQuery2(r queryresult.Query2Result) bool {
+	if !b.tryAdd(len(serializeQuery2Result(&r))) {
+		return false
+	}
+	b.batch.Query2 = append(b.batch.Query2, r)
+	return true
+}
+
+func (b *ResultBatchBuilder) TryAddQuery3(r queryresult.Query3Result) bool {
+	if !b.tryAdd(len(serializeQuery3Result(&r))) {
+		return false
+	}
+	b.batch.Query3 = append(b.batch.Query3, r)
+	return true
+}
+
+func (b *ResultBatchBuilder) TryAddQuery4(r queryresult.Query4Result) bool {
+	if !b.tryAdd(len(serializeQuery4Result(&r))) {
+		return false
+	}
+	b.batch.Query4 = append(b.batch.Query4, r)
+	return true
+}
+
+func (b *ResultBatchBuilder) TryAddQuery5(r queryresult.Query5Result) bool {
+	if !b.tryAdd(len(serializeQuery5Result(&r))) {
+		return false
+	}
+	b.batch.Query5 = append(b.batch.Query5, r)
+	return true
+}
+
+func (b *ResultBatchBuilder) Flush(w io.Writer) error {
+	if err := WriteResultBatch(w, &b.batch); err != nil {
+		return err
+	}
+	b.batch = queryresult.BatchResults{}
+	b.byteSize = 0
+	return nil
 }

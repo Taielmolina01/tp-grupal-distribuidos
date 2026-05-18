@@ -5,10 +5,10 @@ import (
 	"errors"
 	"math"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/eofmessage"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/eofringmessage"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/fruititem"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/eofmessage"
+	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
+	"tp-grupal-distribuidos/internal/common/fruititem"
+	"tp-grupal-distribuidos/internal/common/middleware"
 )
 
 const _AGGREGATION_ID = "agg"
@@ -104,7 +104,7 @@ func DeserializeMessage(message *middleware.Message) (*fruititem.FruitItemFromCl
 	return &result, nil, len(result.FruitItems) == 0, nil
 }
 
-func DeserializeEofRingMessage(data []interface{}) (*eofringmessage.EofRingMessage, error) {
+func DeserializeEofRingMessage(data []interface{}) (*eofmessagetypes.EofRingMessage, error) {
 	leaderAsFloat, ok := data[0].(float64)
 	if !ok {
 		return nil, errors.New("leaderID is not a non negative number")
@@ -122,7 +122,7 @@ func DeserializeEofRingMessage(data []interface{}) (*eofringmessage.EofRingMessa
 		return nil, err
 	}
 
-	return &eofringmessage.EofRingMessage{
+	return &eofmessagetypes.EofRingMessage{
 		Leader:       uint32(leaderAsFloat),
 		ActualAmount: uint32(actualAmountAsFloat),
 		RealAmount:   uint32(realAmountAsFloat),
@@ -130,7 +130,7 @@ func DeserializeEofRingMessage(data []interface{}) (*eofringmessage.EofRingMessa
 	}, nil
 }
 
-func DeserializeEofCommitRingMessage(data []interface{}) (*eofringmessage.EofMessageCommit, error) {
+func DeserializeEofCommitRingMessage(data []interface{}) (*eofmessagetypes.EofMessageCommit, error) {
 	parsedClientID, err := parseClientID(data[0])
 	if err != nil {
 		return nil, err
@@ -141,10 +141,10 @@ func DeserializeEofCommitRingMessage(data []interface{}) (*eofringmessage.EofMes
 		return nil, errors.New("hops is not a valid number")
 	}
 
-	return &eofringmessage.EofMessageCommit{ClientID: parsedClientID, Hops: int(hopsAsFloat)}, nil
+	return &eofmessagetypes.EofMessageCommit{ClientID: parsedClientID, Hops: int(hopsAsFloat)}, nil
 }
 
-func DeserializeRingMessage(message *middleware.Message) (*eofringmessage.EofRingMessage, *eofringmessage.EofMessageCommit, error) {
+func DeserializeRingMessage(message *middleware.Message) (*eofmessagetypes.EofRingMessage, *eofmessagetypes.EofMessageCommit, error) {
 	data, err := deserializeJson([]byte(message.Body))
 	if err != nil {
 		return nil, nil, err
@@ -164,7 +164,7 @@ func DeserializeRingMessage(message *middleware.Message) (*eofringmessage.EofRin
 
 }
 
-func SerializeEofFromQueueMsg(msg eofringmessage.EofRingMessage) (*middleware.Message, error) {
+func SerializeEofFromQueueMsg(msg eofmessagetypes.EofRingMessage) (*middleware.Message, error) {
 	data, err := serializeJson([]interface{}{msg.Leader, msg.ActualAmount, msg.RealAmount, msg.ClientId})
 	if err != nil {
 		return nil, err
@@ -184,7 +184,7 @@ func SerializeEofMessage(msg eofmessage.EofMessage) (*middleware.Message, error)
 	}, nil
 }
 
-func SerializeEofMessageCommit(msg eofringmessage.EofMessageCommit) (*middleware.Message, error) {
+func SerializeEofMessageCommit(msg eofmessagetypes.EofMessageCommit) (*middleware.Message, error) {
 	data, err := serializeJson([]interface{}{msg.ClientID, msg.Hops})
 	if err != nil {
 		return nil, err

@@ -3,7 +3,7 @@ package filter
 import (
 	"slices"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
 func isValidCurrency(t transfer.Transfer, config FilterConfig) bool {

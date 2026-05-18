@@ -6,7 +6,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/join"
+	"tp-grupal-distribuidos/internal/join"
 )
 
 func loadConfig() (join.JoinConfig, error) {
