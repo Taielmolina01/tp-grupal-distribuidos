@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
@@ -16,6 +17,8 @@ type TwoInputAdapter[L, R, O any] struct {
 	join       *Join[L, R, O]
 	leftInput  middleware.Middleware
 	rightInput middleware.Middleware
+	eofCount   map[int]int
+	lock      sync.Mutex
 }
 
 func newTwoInputJoin[L, R, O any](
@@ -54,6 +57,7 @@ func newTwoInputJoin[L, R, O any](
 		join:       newJoin[L, R, O](output, leftKey, rightKey, combine, config.QueryID),
 		leftInput:  leftInput,
 		rightInput: rightInput,
+		eofCount:   map[int]int{},
 	}, nil
 }
 
@@ -69,6 +73,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 				return
 			}
 			if env.IsEOF() {
+				a.handleEOF(env.ClientID)
 				return
 			}
 			var record L
@@ -91,6 +96,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 			return
 		}
 		if env.IsEOF() {
+			a.handleEOF(env.ClientID)
 			return
 		}
 		var record R
@@ -104,6 +110,16 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 	}
 
 	<-done
+}
+
+func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+	a.eofCount[clientID]++
+	if a.eofCount[clientID] == 2 {
+		delete(a.eofCount, clientID)
+		a.join.HandleQueryEOF(clientID)
+	}
 }
 
 func (a *TwoInputAdapter[L, R, O]) HandleSignals() {
