@@ -4,12 +4,13 @@ import (
 	"log/slog"
 
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 // Inicializadores
 
-func newFilter[T comparable](config FilterConfig, callback func(T) bool) (worker.Worker, error) {
+func newFilterAndSplitter(config FilterConfig, filterFunc func(transfer.Transfer) bool, splitFunc func(transfer.Transfer) (transfer.SplittedTransfer, transfer.SplittedTransfer)) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, []string{}, connSettings)
@@ -26,34 +27,33 @@ func newFilter[T comparable](config FilterConfig, callback func(T) bool) (worker
 		return nil, err
 	}
 
-	return &Filter[T]{
+	return &FilterAndSplitter{
 		id:             uint32(config.Id),
 		inputExchange:  inputExchange,
 		outputExchange: outputExchange,
-		callback:       callback,
+		filterFunction: filterFunc,
+		splitFunction:  splitFunc,
 	}, nil
 }
 
-func (filter *Filter[T]) Run() {
-	slog.Info("Starting filter consumers", "filter_id", filter.id)
-	if err := filter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		filter.handleMessage(msg, ack, nack)
+func (filterAndSplitter *FilterAndSplitter) Run() {
+	slog.Info("Starting filter and splitter consumers", "filter_splitter_id", filterAndSplitter.id)
+	if err := filterAndSplitter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+		filterAndSplitter.handleMessage(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
 	}
 }
 
-func (filter *Filter[T]) handleMessage(msg middleware.Message, ack, nack func()) {
+func (filterAndSplitter *FilterAndSplitter) handleMessage(msg middleware.Message, ack, nack func()) {
 	// if filter.callback(msg.toTransferDTO()) {
-	// 	filter.outputExchange.Send(msg)
+	//	t1, t2 := filterAndSplitter.splitFunction(transfer)
+	//  filterAndSplitter.outputExchange.Send(t1)
+	//  filterAndSplitter.outputExchange.Send(t2)
 	// }
 }
 
-func (filter *Filter[T]) HandleSignals() {
-
-}
-
-func (filter *Filter[T]) Close() {
+func (filterAndSplitter *FilterAndSplitter) HandleSignals() {
 
 }
 

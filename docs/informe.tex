@@ -1,0 +1,311 @@
+\documentclass{article}
+%\usepackage{blindtext} % Paquete lorem ipsum
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{indentfirst}
+\usepackage{graphicx}
+\usepackage{subfigure}
+\usepackage{listings}
+\usepackage{amssymb}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{float}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.8,0,0.2}
+\definecolor{backcolour}{rgb}{.95,.95,1}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{backcolour},
+    keywordstyle=\color{blue},
+    numberstyle=\tiny\color{black},
+    stringstyle=\color{orange},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+
+\lstset{style=mystyle}
+
+\usepackage{qrcode,hyperref}
+
+
+%\usepackage[margin=1cm]{geometry} % Centra el texto
+\usepackage[margin=2.5cm]{geometry}
+\begin{document}
+
+\begin{titlepage}
+  \vspace*{1cm}
+
+  \begin{center}
+    {\Huge{TP Grupal: Money Laundering Analysis}} \\
+    {\vspace{0.3cm}}
+    {\huge{Diseño}}
+  \end{center}
+
+  \vspace{0.1cm}
+
+  \begin{center}
+    {\LARGE{Facultad de Ingeniería de la Universidad de Buenos Aires}}\\
+    \vspace{0.6cm}
+    {\Large{Sistemas Distribuidos}}\\
+    \vspace{0.6cm}
+    {\large{Cátedra Roca}}\\
+  \end{center}
+
+  \vspace{0.5cm}
+  \begin{center}
+    \includegraphics[scale=1]{imagenes/logoFiuba.png}
+  \end{center}
+
+   \vspace{0.5cm}
+  \begin{center}
+    {\Large{Integrantes:}}
+  \end{center}
+  \vspace{0.5cm}
+  \begin{center}
+    \begin{tabular}{| c | c |}
+    \hline
+    Alumno & Padrón \\ \hline
+    Fernandez, Ignacio Agustín & 111019 \\
+    Molina, Taiel Alexis & 109458 \\
+    Serra, Luciano & 110694  \\ \hline
+    \end{tabular}
+  \end{center}
+\end{titlepage}
+
+   
+\renewcommand*\contentsname{Indice}
+
+\section*{Propuesta}
+\addcontentsline{toc}{section}{\protect\numberline{}Propuesta}%
+
+\subsection*{Vista lógica}
+
+\subsubsection*{DAG}
+
+Representación de las transformaciones que presentan los datos en los saltos entre instancias del sistema, así como las dependencias de secuencialidad entre las mismas.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/dag/DAG-completo.png}
+    \caption{DAG de todo el sistema.}
+\end{figure}
+
+Sumamos detalle "haciendo zoom” en cada una de las queries entendiendo el funcionamiento aislado de cada una.
+
+Para estos añadimos un detalle que muestra la dependencia entre cada instancia. Las relaciones "stream” implican que el nodo origen puede transmitir datos al nodo destino sin necesidad de haber procesado su correspondiente EOF.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/dag/DAG-1.png}
+    \caption{DAG ejercicio 1.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/dag/DAG-2.png}
+    \caption{DAG ejercicio 2.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/dag/DAG-3.png}
+    \caption{DAG ejercicio 3.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/dag/DAG-4.png}
+    \caption{DAG ejercicio 4.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/dag/DAG-5.png}
+    \caption{DAG ejercicio 5.}
+\end{figure}
+
+\subsection*{Vista física}
+
+\subsubsection*{Diagrama de robustez}
+
+En las primeras cuatro querys dejamos remarcado punteado en verde la parte del procesamiento que es compartido, el cual es el envio de los clientes al gateway de las transferencias y las cuentas, y un nodo Filter del tipo Currency va a pasarle a otro worker solo las transferencias en USD.
+
+\vspace{0.1cm}
+
+\textbf{Query I}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/robustez/robustez-query-1.png}
+    \caption{Query I.}
+\end{figure}
+
+\textbf{Query II}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/robustez/robustez-query-2.png}
+    \caption{Query II.}
+\end{figure}
+
+\textbf{Query III}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/robustez/robustez-query-3.png}
+    \caption{Query III.}
+\end{figure}
+
+
+\textbf{Query IV}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/robustez/robustez-query-4.png}
+    \caption{Query IV.}
+\end{figure}
+
+
+\textbf{Query V}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/robustez/robustez-query-5.png}
+    \caption{Query V.}
+\end{figure}
+
+\subsubsection*{Diagrama de despliegue}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/despliegue/diagrama-desplieguee.png}
+    \caption{Diagrama de despliegue del sistema.}
+\end{figure}
+
+En este diagrama se puede visualizar cómo se distribuyen los componentes físicos del sistema. Se puede observar que los nodos de procesamiento, como el Filter, Reducer, Joiner, Aggregator y Counter, se representan con múltiples instancias, indicando que pueden escalar horizontalmente agregando más réplicas según la carga. Todos estos nodos se comunican a través de RabbitMQ, que centraliza el flujo de mensajes del sistema. El Client y el Gateway se despliegan como instancias únicas, siendo este último el encargado de recibir los datos del cliente y distribuirlos hacia las colas correspondientes.
+
+
+\subsection*{Vista de desarrollo}
+
+\subsubsection*{Diagrama de paquetes}
+Se presenta un paquete \texttt{common} compartido por todos los componentes del sistema, el cual contiene los módulos de \texttt{Middleware} (wrapper de RabbitMQ), \texttt{Protocol} (serialización de mensajes) y \texttt{Models} (estructuras de datos compartidas). 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/paquetes/diagrama_paquetes_1.png}
+    \caption{Vista general de dependencias entre paquetes del sistema.}
+\end{figure}
+A continuación se detalla la estructura interna de cada paquete. Todos comparten una estructura similar: un módulo \texttt{main} como punto de entrada, un módulo \texttt{config} para las variables de entorno, y un paquete \texttt{internal} con la lógica específica de cada componente. El \texttt{Client} contiene los módulos de envío del CSV y recepción del reporte final. El \texttt{Gateway} es el punto de entrada del sistema, y se encarga de recibir los datos del cliente y distribuirlos a las colas correspondientes. El \texttt{Fetcher} consulta la API externa de cotizaciones y publica los resultados. Finalmente, el \texttt{Worker} es un componente genérico que encapsula la lógica de procesamiento, siendo instanciado con distintos comportamientos según el rol que cumpla en el pipeline (filtrado, reducción, join o agregación).
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/paquetes/diagrama_paquetes_3.png}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/paquetes/diagrama_paquetes_4.png}
+\end{figure}
+\subsection*{Vista de procesos}
+
+\subsubsection*{Diagrama de actividades}
+
+\textbf{Query I}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/actividades/query-1.jpeg}
+    \caption{Query I.}
+\end{figure}
+
+\textbf{Query II}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/actividades/query-2.jpeg}
+    \caption{Query II.}
+\end{figure}
+
+\textbf{Query III}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/actividades/query-3.jpeg}
+    \caption{Query III.}
+\end{figure}
+
+\textbf{Query IV}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/actividades/query-4.jpeg}
+    \caption{Query IV.}
+\end{figure}
+
+\textbf{Query V}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{imagenes/actividades/query-5.jpeg}
+    \caption{Query V.}
+\end{figure}
+
+\subsubsection*{Diagrama de secuencia}
+
+Con el diagrama de secuencia se busca representar el desacople entre el cliente y el procesamiento del sistema "puertas adentro".
+El cliente establece conexión con el gateway e inmediatamente inicia la transferencia de los archivos. Priorizamos la carga de las transferencias en primer lugar antes que las cuentas dada la cantidad de operaciones a realizar con estas, además de considerar también el volúmen (y de esta forma mantener menos ocioso al sistema).
+El cliente envía batches de información al gateway el cual los descompone en mensajes a encolar en el exchange/queue correspondiente según la naturaleza del dato.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{imagenes/secuencia/secuencia.png}
+    \caption{Diagrama de secuencia.}
+\end{figure}
+
+
+\subsection*{Tareas por hacer}
+
+Tras realizar los diagramas, concluimos que la mejor forma de repartir la carga de trabajo consiste en tomar cada nodo como una tarea independiente. A estas se suman la adaptación del middleware implementado en TPs previos para que se ajuste a nuestro sistema, junto con el armado del cliente y del gateway. Para validar el funcionamiento, también es necesario desarrollar una serie de tests que cubren el happy path, así como un script generador de docker-compose que agilice las tareas. Por último, es requerido mantener actualizado el informe. 
+
+\begin{center}
+    \begin{tabular}{| c | c |}
+    \hline
+    Tarea & Responsable \\ \hline \hline
+    Client + Protocol & Fernandez \\  \hline
+    Gateway & Serra \\ \hline
+    Middleware(s) & Serra  \\ \hline
+    Algoritmo sync de EOF & Molina \\ \hline
+    Currency filter & Molina \\ \hline
+    Q1 - Filter amount & Molina \\ \hline
+    Q2 - Reduce & Molina \\ \hline
+    Q2 - Join & Serra \\ \hline
+    Q2 - Filter & Molina \\ \hline
+    Q3 - Range filter & Molina \\ \hline
+    Q3 - Sum & Serra \\ \hline
+    Q3 - Aggregate & Fernandez \\ \hline
+    Q3 - Avg filter & Molina \\ \hline
+    Q4 - Filter and splitter & Fernandez \\ \hline
+    Q4 - Join & Serra \\ \hline
+    Q4 - Acum & Serra \\ \hline
+    Q4 - Distinct filter & Molina \\ \hline
+    Q5 - Filter & Molina \\ \hline
+    Q5 - Fetcher & Fernandez \\ \hline
+    Q5 - Filter Amount & Molina \\ \hline
+    Q5 - Join & Serra \\ \hline
+    Tests Happy Path & Fernandez \\ \hline
+    Docker compose & Fernandez \\  \hline
+    \end{tabular}
+\end{center}
+
+
+
+\end{document}

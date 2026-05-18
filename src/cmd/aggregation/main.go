@@ -6,7 +6,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/aggregation"
+	"tp-grupal-distribuidos/internal/aggregation"
 )
 
 func loadConfig() (aggregation.AggregationConfig, error) {

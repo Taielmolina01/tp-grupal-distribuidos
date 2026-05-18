@@ -1,11 +1,11 @@
 package messagehandler
 
 import (
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/eofmessage"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/eofringmessage"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/fruititem"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/messageprotocol/inner"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/eofmessage"
+	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
+	"tp-grupal-distribuidos/internal/common/fruititem"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/middleware"
 )
 
 var clientId = 0
@@ -50,10 +50,10 @@ func (messageHandler *MessageHandler) DeserializeResultMessage(message *middlewa
 	return fruitRecords.FruitItems, nil
 }
 
-func (messageHandler *MessageHandler) DeserializeRingMessage(message *middleware.Message) (*eofringmessage.EofRingMessage, *eofringmessage.EofMessageCommit, error) {
+func (messageHandler *MessageHandler) DeserializeRingMessage(message *middleware.Message) (*eofmessagetypes.EofRingMessage, *eofmessagetypes.EofMessageCommit, error) {
 	return inner.DeserializeRingMessage(message)
 }
 
-func (messageHandler *MessageHandler) SerializeEofFromQueueMsg(msg eofringmessage.EofRingMessage) (*middleware.Message, error) {
+func (messageHandler *MessageHandler) SerializeEofFromQueueMsg(msg eofmessagetypes.EofRingMessage) (*middleware.Message, error) {
 	return inner.SerializeEofFromQueueMsg(msg)
 }
