@@ -14,14 +14,14 @@ const (
 	Query5ID uint8 = 5
 )
 
-type ResultEnvelope struct {
+type ResultMsg struct {
 	ClientID   int             `json:"client_id"`
 	QueryID    uint8           `json:"query_id"`
 	Payload    json.RawMessage `json:"payload,omitempty"`
 	IsQueryEOF bool            `json:"eof_query,omitempty"`
 }
 
-func SerializeResult(env ResultEnvelope) (*middleware.Message, error) {
+func SerializeResult(env ResultMsg) (*middleware.Message, error) {
 	body, err := json.Marshal(env)
 	if err != nil {
 		return nil, err
@@ -29,8 +29,8 @@ func SerializeResult(env ResultEnvelope) (*middleware.Message, error) {
 	return &middleware.Message{Body: string(body)}, nil
 }
 
-func DeserializeResult(msg *middleware.Message) (*ResultEnvelope, error) {
-	env := &ResultEnvelope{}
+func DeserializeResult(msg *middleware.Message) (*ResultMsg, error) {
+	env := &ResultMsg{}
 	if err := json.Unmarshal([]byte(msg.Body), env); err != nil {
 		return nil, err
 	}

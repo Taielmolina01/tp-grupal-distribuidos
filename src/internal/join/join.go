@@ -1,204 +1,170 @@
 package join
 
 import (
+	"encoding/json"
 	"log/slog"
-	"os"
-	"os/signal"
-	"sort"
-	"syscall"
 
-	"tp-grupal-distribuidos/internal/common/eofmessage"
-	"tp-grupal-distribuidos/internal/common/fruititem"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-type JoinConfig struct {
-	MomHost           string
-	MomPort           int
-	InputQueue        string
-	OutputQueue       string
-	SumAmount         int
-	SumPrefix         string
-	AggregationAmount int
-	AggregationPrefix string
-	TopSize           int
-}
-
-type Join struct {
-	inputQueue        middleware.Middleware
-	outputQueue       middleware.Middleware
-	topByClients      map[int][]fruititem.FruitItemFromClient
-	eofByClient       map[int]map[int]bool
-	completedClients  map[int]bool
-	topSize           int
-	aggregationAmount int
-}
-
-func NewJoin(config JoinConfig) (*Join, error) {
+func newJoin[L, R, O any](
+	config JoinConfig,
+	leftKey func(L) string,
+	rightKey func(R) string,
+	combine func(L, R) O,
+) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputQueue, err := middleware.CreateQueueMiddleware(config.InputQueue, connSettings)
+	leftInput, err := middleware.CreateExchangeMiddleware(config.LeftInputExchange, []string{}, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	outputQueue, err := middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
+	rightInput, err := middleware.CreateExchangeMiddleware(config.RightInputExchange, []string{}, connSettings)
 	if err != nil {
-		if err := inputQueue.Close(); err != nil {
-			slog.Error("While closing input queue", "err", err)
+		if err := leftInput.Close(); err != nil {
+			slog.Error("while closing left input", "err", err)
 		}
 		return nil, err
 	}
 
-	return &Join{
-			inputQueue:        inputQueue,
-			outputQueue:       outputQueue,
-			topByClients:      map[int][]fruititem.FruitItemFromClient{},
-			eofByClient:       map[int]map[int]bool{},
-			completedClients:  map[int]bool{},
-			topSize:           config.TopSize,
-			aggregationAmount: config.AggregationAmount,
-		},
-		nil
-}
-
-func (join *Join) Run() {
-	if err := join.inputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		join.handleMessage(msg, ack, nack)
-	}); err != nil {
-		slog.Error("While consuming from input queue", "err", err)
+	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, []string{}, connSettings)
+	if err != nil {
+		if err := leftInput.Close(); err != nil {
+			slog.Error("while closing left input", "err", err)
+		}
+		if err := rightInput.Close(); err != nil {
+			slog.Error("while closing right input", "err", err)
+		}
+		return nil, err
 	}
+
+	return &Join[L, R, O]{
+		leftInput:   leftInput,
+		rightInput:  rightInput,
+		output:      output,
+		leftBuffer:  map[int]map[string]L{},
+		rightBuffer: map[int]map[string]R{},
+		leftKey:     leftKey,
+		rightKey:    rightKey,
+		combine:     combine,
+		queryID:     config.QueryID,
+	}, nil
 }
 
-func (join *Join) handleMessage(msg middleware.Message, ack func(), nack func()) {
+func (j *Join[L, R, O]) Run() {
+	done := make(chan struct{})
+
+	go func() {
+		if err := j.leftInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+			j.handleLeft(msg, ack, nack)
+		}); err != nil {
+			slog.Error("while consuming left input", "err", err)
+		}
+		close(done)
+	}()
+
+	if err := j.rightInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+		j.handleRight(msg, ack, nack)
+	}); err != nil {
+		slog.Error("while consuming right input", "err", err)
+	}
+
+	<-done
+}
+
+func (j *Join[L, R, O]) HandleSignals() {}
+
+func (j *Join[L, R, O]) handleLeft(msg middleware.Message, ack, nack func()) {
 	defer ack()
 
-	if eofMsg, isAggregationEof, err := inner.DeserializeAggregationEofMessage(&msg); err != nil {
-		slog.Error("While deserializing aggregation EOF", "err", err)
-		return
-	} else if isAggregationEof {
-		join.handleAggregationEof(*eofMsg)
-		return
-	}
-
-	fruitTop, _, isEof, err := inner.DeserializeMessage(&msg)
-
+	env, err := inner.DeserializeData(&msg)
 	if err != nil {
-		slog.Error("While deserializing msg", "err", err)
+		slog.Error("while deserializing left message", "err", err)
 		return
 	}
 
-	if isEof {
-		slog.Info("Ignoring legacy EOF without aggregation ID", "client_id", fruitTop.ClientId)
+	if env.IsEOF() {
 		return
 	}
 
-	if _, done := join.completedClients[fruitTop.ClientId]; done {
-		// Si el cliente ya había terminado de ser procesado esto es un duplicado simplemente asique lo ignoro.
+	var record L
+	if err := json.Unmarshal(env.Payload, &record); err != nil {
+		slog.Error("while unmarshaling left record", "err", err)
 		return
 	}
 
-	if _, ok := join.topByClients[fruitTop.ClientId]; !ok {
-		join.topByClients[fruitTop.ClientId] = []fruititem.FruitItemFromClient{*fruitTop}
-		return
-	}
+	clientID := env.ClientID
+	key := j.leftKey(record)
 
-	join.topByClients[fruitTop.ClientId] = append(join.topByClients[fruitTop.ClientId], *fruitTop)
-}
-
-func (join *Join) handleAggregationEof(eofMsg eofmessage.AggregationEofMessage) {
-	if _, done := join.completedClients[eofMsg.ClientID]; done {
-		// Si el cliente ya había terminado de procesar sus EOF esto es un duplicado simplemente asique lo ignoro.
-		return
-	}
-
-	if _, ok := join.eofByClient[eofMsg.ClientID]; !ok {
-		join.eofByClient[eofMsg.ClientID] = map[int]bool{}
-	}
-
-	if _, exists := join.eofByClient[eofMsg.ClientID][eofMsg.AggregationID]; exists {
-		// Si el cliente ya había enviado el EOF para este aggregation, esto es un duplicado simplemente asique lo ignoro.
-		return
-	}
-
-	join.eofByClient[eofMsg.ClientID][eofMsg.AggregationID] = true
-	currentCount := len(join.eofByClient[eofMsg.ClientID])
-
-	if currentCount < join.aggregationAmount {
-		// Si no llegaron los EOF de todos los aggregations, sigo para no calcular el top.
-		return
-	}
-
-	top := join.CalculateTop(eofMsg.ClientID)
-	message, err := inner.SerializeMessage(top)
-	if err != nil {
-		slog.Error("While serializing top", "client_id", eofMsg.ClientID, "err", err)
-		return
-	}
-	if err := join.outputQueue.Send(*message); err != nil {
-		slog.Error("While sending top", "client_id", eofMsg.ClientID, "err", err)
-		return
-	}
-
-	join.completedClients[eofMsg.ClientID] = true
-	delete(join.eofByClient, eofMsg.ClientID)
-	delete(join.topByClients, eofMsg.ClientID)
-}
-
-func (join *Join) CalculateTop(clientID int) fruititem.FruitItemFromClient {
-	amountByFruit := map[string]fruititem.FruitItem{}
-	for i := range join.topByClients[clientID] {
-		for _, fruitRecord := range join.topByClients[clientID][i].FruitItems {
-			if current, ok := amountByFruit[fruitRecord.Fruit]; ok {
-				amountByFruit[fruitRecord.Fruit] = current.Sum(fruitRecord)
-			} else {
-				amountByFruit[fruitRecord.Fruit] = fruitRecord
-			}
+	if rightMap, ok := j.rightBuffer[clientID]; ok {
+		if rightRecord, ok := rightMap[key]; ok {
+			j.emit(clientID, j.combine(record, rightRecord))
+			return
 		}
 	}
-	fruitItemsFromClient := fruititem.FruitItemFromClient{
-		ClientId:   clientID,
-		FruitItems: make([]fruititem.FruitItem, 0, len(amountByFruit)),
+
+	if j.leftBuffer[clientID] == nil {
+		j.leftBuffer[clientID] = map[string]L{}
+	}
+	j.leftBuffer[clientID][key] = record
+}
+
+func (j *Join[L, R, O]) handleRight(msg middleware.Message, ack, nack func()) {
+	defer ack()
+
+	env, err := inner.DeserializeData(&msg)
+	if err != nil {
+		slog.Error("while deserializing right message", "err", err)
+		return
 	}
 
-	for _, item := range amountByFruit {
-		fruitItemsFromClient.FruitItems = append(fruitItemsFromClient.FruitItems, item)
+	if env.IsEOF() {
+		return
 	}
 
-	sort.SliceStable(fruitItemsFromClient.FruitItems, func(i, j int) bool {
-		return fruitItemsFromClient.FruitItems[j].Less(fruitItemsFromClient.FruitItems[i])
+	var record R
+	if err := json.Unmarshal(env.Payload, &record); err != nil {
+		slog.Error("while unmarshaling right record", "err", err)
+		return
+	}
+
+	clientID := env.ClientID
+	key := j.rightKey(record)
+
+	if leftMap, ok := j.leftBuffer[clientID]; ok {
+		if leftRecord, ok := leftMap[key]; ok {
+			j.emit(clientID, j.combine(leftRecord, record))
+			return
+		}
+	}
+
+	if j.rightBuffer[clientID] == nil {
+		j.rightBuffer[clientID] = map[string]R{}
+	}
+	j.rightBuffer[clientID][key] = record
+}
+
+func (j *Join[L, R, O]) emit(clientID int, result O) {
+	payload, err := json.Marshal(result)
+	if err != nil {
+		slog.Error("while marshaling result", "err", err)
+		return
+	}
+
+	msg, err := inner.SerializeResult(inner.ResultMsg{
+		ClientID: clientID,
+		QueryID:  j.queryID,
+		Payload:  payload,
 	})
-	finalTopSize := min(join.topSize, len(fruitItemsFromClient.FruitItems))
-	fruitItemsFromClient.FruitItems = fruitItemsFromClient.FruitItems[:finalTopSize]
-	return fruitItemsFromClient
-}
+	if err != nil {
+		slog.Error("while serializing result", "err", err)
+		return
+	}
 
-func (join *Join) HandleSignals() {
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	<-signals
-	slog.Info("SIGTERM signal received")
-	if err := join.Close(); err != nil {
-		slog.Error("While closing join node", "err", err)
+	if err := j.output.Send(*msg); err != nil {
+		slog.Error("while sending result", "err", err)
 	}
-}
-
-func (join *Join) Close() error {
-	if err := join.inputQueue.StopConsuming(); err != nil {
-		return err
-	}
-	if err := join.inputQueue.Close(); err != nil {
-		return err
-	}
-	if err := join.outputQueue.StopConsuming(); err != nil {
-		return err
-	}
-	if err := join.outputQueue.Close(); err != nil {
-		return err
-	}
-	clear(join.completedClients)
-	clear(join.eofByClient)
-	clear(join.topByClients)
-	return nil
 }
