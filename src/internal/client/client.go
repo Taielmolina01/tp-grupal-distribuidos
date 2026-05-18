@@ -23,7 +23,7 @@ import (
 
 const (
 	numQueries           = 5
-	transTimestampLayout = "2006/01/02"
+	transTimestampLayout = "2006/01/02 15:04"
 )
 
 type ClientConfig struct {
@@ -128,6 +128,8 @@ func (client *Client) sendAccountRecords() error {
 
 	builder := external.NewAccountBatchBuilder(client.config.MaxBatchSize)
 	scanner := bufio.NewScanner(file)
+
+	scanner.Scan() // Skip header line
 	for scanner.Scan() {
 		columns := strings.Split(scanner.Text(), ",")
 		if len(columns) < 5 {
@@ -173,6 +175,8 @@ func (client *Client) sendTransRecords() error {
 
 	builder := external.NewTransBatchBuilder(client.config.MaxBatchSize)
 	scanner := bufio.NewScanner(file)
+
+	scanner.Scan() // Skip header line
 	for scanner.Scan() {
 		columns := strings.Split(scanner.Text(), ",")
 		if len(columns) < 11 {

@@ -1,43 +1,92 @@
 services:
+  rabbitmq:
+    build:
+      context: ./src/cmd/rabbitmq
+      dockerfile: Dockerfile
+    container_name: rabbitmq
+    environment:
+    - RABBITMQ_LOG_LEVELS=error
+    healthcheck:
+      interval: 5s
+      retries: 10
+      start_period: 50s
+      test: rabbitmq-diagnostics check_port_connectivity
+      timeout: 3s
+    ports:
+    - 5672:5672
+    - 15672:15672
+
+  gateway:
+    build:
+      context: ./src/
+      dockerfile: cmd/gateway/Dockerfile
+    container_name: gateway
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+    - ACCOUNTS_EXCHANGE=accounts_exchange
+    - TRANSFERS_EXCHANGE=transfers_exchange
+    - RESULTS_QUEUE=results_queue
+    - MOM_HOST=rabbitmq
+    - MOM_PORT=5672
+    - SERVER_HOST=gateway
+    - SERVER_PORT=5678
+
+
+
   client_0:
     build:
       context: ./src/
       dockerfile: cmd/client/Dockerfile
     container_name: client_0
+    depends_on:
+    - gateway
     environment:
     - SERVER_HOST=gateway
     - SERVER_PORT=5678
     - INPUT_FILE_ACCOUNTS=/datasets/accounts_0.csv
     - INPUT_FILE_TRANS=/datasets/transactions_0.csv
     - OUTPUT_FILE_PREFIX=/output/output_0
+    - MAX_BATCH_SIZE=1
+    - LOG_LEVEL=DEBUG
     volumes:
     - ./datasets:/datasets
     - ./output:/output
-  # client_1:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_1
-  #   environment:
-  #   - SERVER_HOST=gateway
-  #   - SERVER_PORT=5678
-  #   - INPUT_FILE_ACCOUNTS=/datasets/accounts_1.csv
-  #   - INPUT_FILE_TRANS=/datasets/transactions_1.csv
-  #   - OUTPUT_FILE_PREFIX=/output/output_1
-  #   volumes:
-  #   - ./datasets:/datasets
-  #   - ./output:/output
-  # client_2:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_2
-  #   environment:
-  #   - SERVER_HOST=gateway
-  #   - SERVER_PORT=5678
-  #   - INPUT_FILE_ACCOUNTS=/datasets/accounts_2.csv
-  #   - INPUT_FILE_TRANS=/datasets/transactions_2.csv
-  #   - OUTPUT_FILE_PREFIX=/output/output_2
-  #   volumes:
-  #   - ./datasets:/datasets
-  #   - ./output:/output
+  client_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/client/Dockerfile
+    container_name: client_1
+    depends_on:
+    - gateway
+    environment:
+    - SERVER_HOST=gateway
+    - SERVER_PORT=5678
+    - INPUT_FILE_ACCOUNTS=/datasets/accounts_1.csv
+    - INPUT_FILE_TRANS=/datasets/transactions_1.csv
+    - OUTPUT_FILE_PREFIX=/output/output_1
+    - MAX_BATCH_SIZE=1
+    - LOG_LEVEL=DEBUG
+    volumes:
+    - ./datasets:/datasets
+    - ./output:/output
+  client_2:
+    build:
+      context: ./src/
+      dockerfile: cmd/client/Dockerfile
+    container_name: client_2
+    depends_on:
+    - gateway
+    environment:
+    - SERVER_HOST=gateway
+    - SERVER_PORT=5678
+    - INPUT_FILE_ACCOUNTS=/datasets/accounts_2.csv
+    - INPUT_FILE_TRANS=/datasets/transactions_2.csv
+    - OUTPUT_FILE_PREFIX=/output/output_2
+    - MAX_BATCH_SIZE=1
+    - LOG_LEVEL=DEBUG
+    volumes:
+    - ./datasets:/datasets
+    - ./output:/output
+ 
