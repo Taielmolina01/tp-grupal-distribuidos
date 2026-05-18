@@ -1,64 +1,103 @@
 package gateway
 
 import (
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/clientregistry"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/external"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/messagehandler"
+	"tp-grupal-distribuidos/internal/common/queryresult"
 )
 
 type GatewayConfig struct {
-	InputQueueName  string
-	OutputQueueName string
-	ServerHost      string
-	ServerPort      string
-	MomHost         string
-	MomPort         int
+	AccountsExchange  string
+	TransfersExchange string
+	ResultsQueue      string
+	ServerHost        string
+	ServerPort        string
+	MomHost           string
+	MomPort           int
+	MaxBatchSize      int
 }
 
 type Gateway struct {
-	registry    clientregistry.ClientRegistry
-	inputQueue  middleware.Middleware
-	outputQueue middleware.Middleware
-	listener    net.Listener
-	running     atomic.Bool
+	registry          clientregistry.ClientRegistry
+	accountsExchange  middleware.Middleware
+	transfersExchange middleware.Middleware
+	resultsQueue      middleware.Middleware
+	listener          net.Listener
+	running           atomic.Bool
+	nextClientID      atomic.Int32
+	countsMu          sync.Mutex
+	accountsCount     map[int]uint32
+	transfersCount    map[int]uint32
+	queryEOFsByClient map[int]int
+	resultBuilders    map[int]*external.ResultBatchBuilder
+	maxBatchSize      int
+	maxBatchBytes     int
 }
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputQueue, err := middleware.CreateQueueMiddleware(config.OutputQueueName, connSettings)
+	accountsExchange, err := middleware.CreateExchangeMiddleware(config.AccountsExchange, []string{}, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	outputQueue, err := middleware.CreateQueueMiddleware(config.InputQueueName, connSettings)
+	transfersExchange, err := middleware.CreateExchangeMiddleware(config.TransfersExchange, []string{}, connSettings)
 	if err != nil {
-		if err := inputQueue.Close(); err != nil {
-			slog.Error("While closing input queue", "err", err)
+		if err := accountsExchange.Close(); err != nil {
+			slog.Error("While closing accounts exchange", "err", err)
+		}
+		return nil, err
+	}
+
+	resultsQueue, err := middleware.CreateQueueMiddleware(config.ResultsQueue, connSettings)
+	if err != nil {
+		if err := accountsExchange.Close(); err != nil {
+			slog.Error("While closing accounts exchange", "err", err)
+		}
+		if err := transfersExchange.Close(); err != nil {
+			slog.Error("While closing transfers exchange", "err", err)
 		}
 		return nil, err
 	}
 
 	listener, err := net.Listen("tcp", config.ServerHost+":"+config.ServerPort)
 	if err != nil {
-		if err := inputQueue.Close(); err != nil {
-			slog.Error("While closing input queue", "err", err)
+		if err := accountsExchange.Close(); err != nil {
+			slog.Error("While closing accounts exchange", "err", err)
 		}
-		if err := outputQueue.Close(); err != nil {
-			slog.Error("While closing input queue", "err", err)
+		if err := transfersExchange.Close(); err != nil {
+			slog.Error("While closing transfers exchange", "err", err)
+		}
+		if err := resultsQueue.Close(); err != nil {
+			slog.Error("While closing results queue", "err", err)
 		}
 		return nil, err
 	}
 
-	gateway := &Gateway{outputQueue: outputQueue, inputQueue: inputQueue, listener: listener}
+	gateway := &Gateway{
+		accountsExchange:  accountsExchange,
+		transfersExchange: transfersExchange,
+		resultsQueue:      resultsQueue,
+		listener:          listener,
+		accountsCount:     map[int]uint32{},
+		transfersCount:    map[int]uint32{},
+		queryEOFsByClient: map[int]int{},
+		resultBuilders:    map[int]*external.ResultBatchBuilder{},
+		maxBatchSize:      config.MaxBatchSize,
+	}
 	gateway.running.Store(true)
 	return gateway, nil
 }
@@ -71,10 +110,10 @@ func (gateway *Gateway) Run() error {
 	}()
 
 	go func() {
-		if err := gateway.outputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+		if err := gateway.resultsQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 			gateway.handleClientResponse(msg, ack, nack)
 		}); err != nil {
-			slog.Error("While consuming output queue", "err", err)
+			slog.Error("While consuming results queue", "err", err)
 		}
 	}()
 	go gateway.handleSignals()
@@ -90,18 +129,18 @@ func (gateway *Gateway) Run() error {
 			return err
 		}
 
-		slog.Info("Client connected...")
+		clientID := int(gateway.nextClientID.Add(1))
+		slog.Info("Client connected", "client_id", clientID)
 
-		handler := messagehandler.NewMessageHandler()
-		client := clientregistry.ClientState{Conn: conn, Handler: &handler}
+		client := clientregistry.ClientState{ID: clientID, Conn: conn}
 
 		gateway.registry.Add(client)
 
 		go gateway.handleClientRequest(client)
 	}
 
-	if err := gateway.outputQueue.StopConsuming(); err != nil {
-		slog.Error("While stopping output queue", "err", err)
+	if err := gateway.resultsQueue.StopConsuming(); err != nil {
+		slog.Error("While stopping results queue consumer", "err", err)
 	}
 	gateway.registry.WithLock(func(clients []clientregistry.ClientState) {
 		for _, client := range clients {
@@ -125,121 +164,305 @@ func (gateway *Gateway) handleSignals() {
 }
 
 func (gateway *Gateway) handleClientRequest(client clientregistry.ClientState) {
-loop:
+accountsLoop:
 	for {
 		msgType, err := external.ReadMsgType(client.Conn)
 		if err != nil {
-			slog.Debug("While reading message type", "err", err)
+			slog.Debug("While reading message type (accounts phase)", "err", err)
 			return
 		}
 
 		switch msgType {
-		case external.FruitRecord:
-			if err := gateway.handleFruitRecordMessage(client); err != nil {
-				slog.Debug("While handling record message", "err", err)
+		case external.AccountBatch:
+			if err := gateway.handleAccountBatch(client); err != nil {
+				slog.Debug("While handling account batch", "err", err)
 				return
 			}
 
 		case external.EndOfRecords:
-			if err := gateway.handleEndOfRecordsMessage(client); err != nil {
-				slog.Debug("While handling end of records message", "err", err)
+			if err := gateway.handleEndOfAccounts(client); err != nil {
+				slog.Debug("While handling EOF accounts", "err", err)
 				return
 			}
-			break loop
+			break accountsLoop
 
 		default:
-			slog.Debug("Read unexpected message type")
+			slog.Debug("Unexpected message type in accounts phase", "got", msgType)
 			return
 		}
 	}
+
+transfersLoop:
+	for {
+		msgType, err := external.ReadMsgType(client.Conn)
+		if err != nil {
+			slog.Debug("While reading message type (transfers phase)", "err", err)
+			return
+		}
+
+		switch msgType {
+		case external.TransBatch:
+			if err := gateway.handleTransBatch(client); err != nil {
+				slog.Debug("While handling trans batch", "err", err)
+				return
+			}
+
+		case external.EndOfRecords:
+			if err := gateway.handleEndOfTransfers(client); err != nil {
+				slog.Debug("While handling EOF transfers", "err", err)
+				return
+			}
+			break transfersLoop
+
+		default:
+			slog.Debug("Unexpected message type in transfers phase", "got", msgType)
+			return
+		}
+	}
+}
+
+func (gateway *Gateway) getOrCreateBuilder(clientID int) *external.ResultBatchBuilder {
+	if b, ok := gateway.resultBuilders[clientID]; ok {
+		return b
+	}
+	b := external.NewResultBatchBuilder(gateway.maxBatchSize, gateway.maxBatchBytes)
+	gateway.resultBuilders[clientID] = b
+	return b
 }
 
 func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
-
-	clientIndex := -1
-
-	gateway.registry.WithLock(func(clients []clientregistry.ClientState) {
-		for i, client := range clients {
-			fruitTop, err := client.Handler.DeserializeResultMessage(&msg)
-
-			if err != nil {
-				slog.Debug("While reading from output queue", "err", err)
-				nack()
-				if err := gateway.outputQueue.StopConsuming(); err != nil {
-					slog.Error("While stopping output queue", "err", err)
-				}
-				return
-			}
-
-			// The message handler can't process this message
-			if fruitTop == nil {
-				continue
-			}
-
-			if err := external.WriteFruitTop(client.Conn, fruitTop); err != nil {
-				slog.Debug("While writing FRUIT_TOP message", "err", err)
-				return
-			}
-			msgType, err := external.ReadMsgType(client.Conn)
-			if err != nil {
-				slog.Debug("While reading message type", "err", err)
-				return
-			}
-			if msgType != external.Ack {
-				slog.Debug("Expected ACK message")
-				return
-			}
-
-			clientIndex = i
-			return
-		}
-		slog.Warn("No client handler could process this message")
+	env, err := inner.DeserializeResult(&msg)
+	if err != nil {
+		slog.Error("While deserializing result envelope", "err", err)
 		nack()
-	})
+		return
+	}
 
-	if clientIndex >= 0 {
-		gateway.registry.Remove(clientIndex)
+	client, ok := gateway.findClient(env.ClientID)
+	if !ok {
+		slog.Warn("Result for unknown client", "client_id", env.ClientID)
 		ack()
 		return
 	}
+
+	builder := gateway.getOrCreateBuilder(env.ClientID)
+
+	if env.IsQueryEOF {
+		if !builder.IsEmpty() {
+			if err := builder.Flush(client.Conn); err != nil {
+				slog.Error("While flushing batch before QueryEOF", "client_id", env.ClientID, "err", err)
+				nack()
+				return
+			}
+		}
+		if err := external.WriteQueryEOF(client.Conn, env.QueryID); err != nil {
+			slog.Error("While writing QueryEOF", "client_id", env.ClientID, "query_id", env.QueryID, "err", err)
+			nack()
+			return
+		}
+		if gateway.markQueryEOF(env.ClientID) {
+			gateway.closeClient(env.ClientID)
+		}
+		ack()
+		return
+	}
+
+	added, err := addResultToBuilder(builder, env)
+	if err != nil {
+		slog.Error("While adding result to batch", "client_id", env.ClientID, "query_id", env.QueryID, "err", err)
+		nack()
+		return
+	}
+	if !added {
+		if err := builder.Flush(client.Conn); err != nil {
+			slog.Error("While flushing full batch", "client_id", env.ClientID, "err", err)
+			nack()
+			return
+		}
+		if _, err := addResultToBuilder(builder, env); err != nil {
+			slog.Error("While adding result to batch after flush", "client_id", env.ClientID, "err", err)
+			nack()
+			return
+		}
+	}
+	ack()
 }
 
-func (gateway *Gateway) handleFruitRecordMessage(client clientregistry.ClientState) error {
-	fruitRecord, err := external.ReadFruitRecord(client.Conn)
+func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.ResultEnvelope) (bool, error) {
+	switch env.QueryID {
+	case inner.Query1ID:
+		var r queryresult.Query1Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return false, err
+		}
+		return builder.TryAddQuery1(r), nil
+	case inner.Query2ID:
+		var r queryresult.Query2Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return false, err
+		}
+		return builder.TryAddQuery2(r), nil
+	case inner.Query3ID:
+		var r queryresult.Query3Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return false, err
+		}
+		return builder.TryAddQuery3(r), nil
+	case inner.Query4ID:
+		var r queryresult.Query4Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return false, err
+		}
+		return builder.TryAddQuery4(r), nil
+	case inner.Query5ID:
+		var r queryresult.Query5Result
+		if err := json.Unmarshal(env.Payload, &r); err != nil {
+			return false, err
+		}
+		return builder.TryAddQuery5(r), nil
+	default:
+		return false, fmt.Errorf("unknown query id: %d", env.QueryID)
+	}
+}
+
+const totalQueries = 5
+
+func (gateway *Gateway) markQueryEOF(clientID int) bool {
+	gateway.countsMu.Lock()
+	defer gateway.countsMu.Unlock()
+	gateway.queryEOFsByClient[clientID]++
+	return gateway.queryEOFsByClient[clientID] >= totalQueries
+}
+
+func (gateway *Gateway) closeClient(clientID int) {
+	client, ok := gateway.findClient(clientID)
+	if !ok {
+		return
+	}
+	if err := client.Conn.Close(); err != nil {
+		slog.Error("While closing client connection", "client_id", clientID, "err", err)
+	}
+	gateway.registry.RemoveByID(clientID)
+	gateway.countsMu.Lock()
+	delete(gateway.queryEOFsByClient, clientID)
+	gateway.countsMu.Unlock()
+	delete(gateway.resultBuilders, clientID)
+	slog.Info("Client finished, connection closed", "client_id", clientID)
+}
+
+func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bool) {
+	var found clientregistry.ClientState
+	var ok bool
+	gateway.registry.WithLock(func(clients []clientregistry.ClientState) {
+		for _, c := range clients {
+			if c.ID == clientID {
+				found = c
+				ok = true
+				return
+			}
+		}
+	})
+	return found, ok
+}
+
+type innerEnvelope struct {
+	ClientID int             `json:"client_id"`
+	Payload  json.RawMessage `json:"payload,omitempty"`
+	EOF      *eofPayload     `json:"eof,omitempty"`
+}
+
+type eofPayload struct {
+	Kind          string `json:"kind"`
+	TotalMessages uint32 `json:"total_messages"`
+}
+
+func wrapForClient(clientID int, record any) ([]byte, error) {
+	payload, err := json.Marshal(record)
 	if err != nil {
-		slog.Debug("While reading FRUIT_RECORD", "err", err)
-		return err
+		return nil, err
 	}
-	message, err := client.Handler.SerializeDataMessage(*fruitRecord)
+	return json.Marshal(innerEnvelope{ClientID: clientID, Payload: payload})
+}
+
+func (gateway *Gateway) addCount(counts map[int]uint32, clientID int, n uint32) {
+	gateway.countsMu.Lock()
+	defer gateway.countsMu.Unlock()
+	counts[clientID] += n
+}
+
+func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
+	gateway.countsMu.Lock()
+	defer gateway.countsMu.Unlock()
+	total := counts[clientID]
+	delete(counts, clientID)
+	return total
+}
+
+func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind string, total uint32, exchange middleware.Middleware) error {
+	slog.Info("Received EOF message", "kind", kind, "client_id", client.ID, "total", total)
+	body, err := json.Marshal(innerEnvelope{
+		ClientID: client.ID,
+		EOF:      &eofPayload{Kind: kind, TotalMessages: total},
+	})
 	if err != nil {
-		slog.Debug("While serializing data message", "err", err)
+		slog.Debug("While serializing EOF", "kind", kind, "err", err)
 		return err
 	}
-	if err := gateway.inputQueue.Send(*message); err != nil {
-		slog.Debug("While sending data message", "err", err)
-		return err
-	}
-	if err := external.WriteAck(client.Conn); err != nil {
-		slog.Debug("While writing ACK message", "err", err)
+	if err := exchange.Send(middleware.Message{Body: string(body)}); err != nil {
+		slog.Debug("While sending EOF", "kind", kind, "err", err)
 		return err
 	}
 	return nil
 }
 
-func (gateway *Gateway) handleEndOfRecordsMessage(client clientregistry.ClientState) error {
-	slog.Info("Received END_OF_RECORDS message")
-	message, err := client.Handler.SerializeEOFMessage()
+func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) error {
+	accounts, err := external.ReadAccountBatch(client.Conn)
 	if err != nil {
-		slog.Debug("While serializing END_OF_RECORDS  message", "err", err)
+		slog.Debug("While reading ACCOUNT_BATCH", "err", err)
 		return err
 	}
-	if err := gateway.inputQueue.Send(*message); err != nil {
-		slog.Debug("While sending eof message", "err", err)
-		return err
+	for _, acc := range accounts {
+		body, err := wrapForClient(client.ID, acc)
+		if err != nil {
+			slog.Debug("While serializing account", "err", err)
+			return err
+		}
+		if err := gateway.accountsExchange.Send(middleware.Message{Body: string(body)}); err != nil {
+			slog.Debug("While sending account to accounts exchange", "err", err)
+			return err
+		}
 	}
-	if err := external.WriteAck(client.Conn); err != nil {
-		slog.Debug("While writing ACK message", "err", err)
-		return err
-	}
+	gateway.addCount(gateway.accountsCount, client.ID, uint32(len(accounts)))
 	return nil
+}
+
+func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState) error {
+	trans, err := external.ReadTransBatch(client.Conn)
+	if err != nil {
+		slog.Debug("While reading TRANS_BATCH", "err", err)
+		return err
+	}
+	for _, t := range trans {
+		body, err := wrapForClient(client.ID, t)
+		if err != nil {
+			slog.Debug("While serializing transfer", "err", err)
+			return err
+		}
+		if err := gateway.transfersExchange.Send(middleware.Message{Body: string(body)}); err != nil {
+			slog.Debug("While sending transfer to transfers exchange", "err", err)
+			return err
+		}
+	}
+	gateway.addCount(gateway.transfersCount, client.ID, uint32(len(trans)))
+	return nil
+}
+
+func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState) error {
+	total := gateway.takeCount(gateway.accountsCount, client.ID)
+	return gateway.forwardEOF(client, "accounts", total, gateway.accountsExchange)
+}
+
+func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState) error {
+	total := gateway.takeCount(gateway.transfersCount, client.ID)
+	return gateway.forwardEOF(client, "transfers", total, gateway.transfersExchange)
 }
