@@ -17,6 +17,11 @@ type EOFInfo struct {
 	TotalMessages uint32 `json:"total_messages"`
 }
 
+// a chequear esto
+type Serializable interface {
+	Serialize() ([]byte, error)
+}
+
 func SerializeData(d DataMsg) (*middleware.Message, error) {
 	body, err := json.Marshal(d)
 	if err != nil {

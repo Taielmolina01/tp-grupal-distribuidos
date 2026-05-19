@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -291,32 +290,32 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.ResultMsg) (bool, error) {
 	switch env.QueryID {
 	case inner.Query1ID:
-		var r queryresult.Query1Result
-		if err := json.Unmarshal(env.Payload, &r); err != nil {
+		r, err := queryresult.DeserializeQuery1(env.Payload)
+		if err != nil {
 			return false, err
 		}
 		return builder.TryAddQuery1(r), nil
 	case inner.Query2ID:
-		var r queryresult.Query2Result
-		if err := json.Unmarshal(env.Payload, &r); err != nil {
+		r, err := queryresult.DeserializeQuery2(env.Payload)
+		if err != nil {
 			return false, err
 		}
 		return builder.TryAddQuery2(r), nil
 	case inner.Query3ID:
-		var r queryresult.Query3Result
-		if err := json.Unmarshal(env.Payload, &r); err != nil {
+		r, err := queryresult.DeserializeQuery3(env.Payload)
+		if err != nil {
 			return false, err
 		}
 		return builder.TryAddQuery3(r), nil
 	case inner.Query4ID:
-		var r queryresult.Query4Result
-		if err := json.Unmarshal(env.Payload, &r); err != nil {
+		r, err := queryresult.DeserializeQuery4(env.Payload)
+		if err != nil {
 			return false, err
 		}
 		return builder.TryAddQuery4(r), nil
 	case inner.Query5ID:
-		var r queryresult.Query5Result
-		if err := json.Unmarshal(env.Payload, &r); err != nil {
+		r, err := queryresult.DeserializeQuery5(env.Payload)
+		if err != nil {
 			return false, err
 		}
 		return builder.TryAddQuery5(r), nil
@@ -365,23 +364,12 @@ func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bo
 	return found, ok
 }
 
-type innerEnvelope struct {
-	ClientID int             `json:"client_id"`
-	Payload  json.RawMessage `json:"payload,omitempty"`
-	EOF      *eofPayload     `json:"eof,omitempty"`
-}
-
-type eofPayload struct {
-	Kind          string `json:"kind"`
-	TotalMessages uint32 `json:"total_messages"`
-}
-
-func wrapForClient(clientID int, record any) ([]byte, error) {
-	payload, err := json.Marshal(record)
+func wrapForClient(clientID int, record inner.Serializable) (*middleware.Message, error) {
+	payload, err := record.Serialize()
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(innerEnvelope{ClientID: clientID, Payload: payload})
+	return inner.SerializeData(inner.DataMsg{ClientID: clientID, Payload: payload})
 }
 
 func (gateway *Gateway) addCount(counts map[int]uint32, clientID int, n uint32) {
@@ -400,15 +388,15 @@ func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
 
 func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind string, total uint32, exchange middleware.Middleware) error {
 	slog.Info("Received EOF message", "kind", kind, "client_id", client.ID, "total", total)
-	body, err := json.Marshal(innerEnvelope{
+	msg, err := inner.SerializeData(inner.DataMsg{
 		ClientID: client.ID,
-		EOF:      &eofPayload{Kind: kind, TotalMessages: total},
+		EOF:      &inner.EOFInfo{Kind: kind, TotalMessages: total},
 	})
 	if err != nil {
 		slog.Debug("While serializing EOF", "kind", kind, "err", err)
 		return err
 	}
-	if err := exchange.Send(middleware.Message{Body: string(body)}); err != nil {
+	if err := exchange.Send(*msg); err != nil {
 		slog.Debug("While sending EOF", "kind", kind, "err", err)
 		return err
 	}
@@ -422,12 +410,12 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) er
 		return err
 	}
 	for _, acc := range accounts {
-		body, err := wrapForClient(client.ID, acc)
+		msg, err := wrapForClient(client.ID, acc)
 		if err != nil {
 			slog.Debug("While serializing account", "err", err)
 			return err
 		}
-		if err := gateway.accountsExchange.Send(middleware.Message{Body: string(body)}); err != nil {
+		if err := gateway.accountsExchange.Send(*msg); err != nil {
 			slog.Debug("While sending account to accounts exchange", "err", err)
 			return err
 		}
@@ -443,12 +431,12 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState) erro
 		return err
 	}
 	for _, t := range trans {
-		body, err := wrapForClient(client.ID, t)
+		msg, err := wrapForClient(client.ID, t)
 		if err != nil {
 			slog.Debug("While serializing transfer", "err", err)
 			return err
 		}
-		if err := gateway.transfersExchange.Send(middleware.Message{Body: string(body)}); err != nil {
+		if err := gateway.transfersExchange.Send(*msg); err != nil {
 			slog.Debug("While sending transfer to transfers exchange", "err", err)
 			return err
 		}
