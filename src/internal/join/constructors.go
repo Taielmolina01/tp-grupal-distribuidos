@@ -8,6 +8,22 @@ import (
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
+func CreateSplittedTransferJoin(config JoinConfig) (worker.Worker, error) {
+	config.QueryID = inner.Query4ID
+	return newSingleInputJoin(
+		config,
+		func(t transfer.SplittedTransfer) bool { return t.IsLeftPart },
+		func(t transfer.SplittedTransfer) string { return t.ToBankAccount },
+		func(t transfer.SplittedTransfer) string { return t.FromBankAccount },
+		func(left, right transfer.SplittedTransfer) queryresult.Query4Result {
+			return queryresult.Query4Result{
+				BankId:    left.FromBank,
+				AccountId: left.FromBankAccount,
+			}
+		},
+	)
+}
+
 func CreateTransferAccountByBankJoin(config JoinConfig) (worker.Worker, error) {
 	config.QueryID = inner.Query2ID
 	return newTwoInputJoin(

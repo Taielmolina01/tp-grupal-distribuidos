@@ -122,6 +122,84 @@ func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
 	}
 }
 
+type SingleInputAdapter[T, O any] struct {
+	join   *Join[T, T, O]
+	input  middleware.Middleware
+	isLeft func(T) bool
+}
+
+func newSingleInputJoin[T, O any](
+	config JoinConfig,
+	isLeft func(T) bool,
+	leftKey func(T) string,
+	rightKey func(T) string,
+	combine func(T, T) O,
+) (worker.Worker, error) {
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+
+	input, err := middleware.CreateExchangeMiddleware(config.InputExchange, []string{}, connSettings)
+	if err != nil {
+		return nil, err
+	}
+
+	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, []string{}, connSettings)
+	if err != nil {
+		if err := input.Close(); err != nil {
+			slog.Error("while closing input", "err", err)
+		}
+		return nil, err
+	}
+
+	return &SingleInputAdapter[T, O]{
+		join:   newJoin[T, T, O](output, leftKey, rightKey, combine, config.QueryID),
+		input:  input,
+		isLeft: isLeft,
+	}, nil
+}
+
+func (a *SingleInputAdapter[T, O]) Run() {
+	if err := a.input.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+		defer ack()
+		env, err := inner.DeserializeData(&msg)
+		if err != nil {
+			slog.Error("while deserializing message", "err", err)
+			return
+		}
+		if env.IsEOF() {
+			a.join.HandleQueryEOF(env.ClientID)
+			return
+		}
+		var record T
+		if err := json.Unmarshal(env.Payload, &record); err != nil {
+			slog.Error("while unmarshaling record", "err", err)
+			return
+		}
+		if a.isLeft(record) {
+			a.join.HandleLeft(env.ClientID, record)
+		} else {
+			a.join.HandleRight(env.ClientID, record)
+		}
+	}); err != nil {
+		slog.Error("while consuming input", "err", err)
+	}
+}
+
+func (a *SingleInputAdapter[T, O]) HandleSignals() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	<-signals
+	slog.Info("SIGTERM signal received")
+	if err := a.input.StopConsuming(); err != nil {
+		slog.Error("while stopping input", "err", err)
+	}
+	if err := a.input.Close(); err != nil {
+		slog.Error("while closing input", "err", err)
+	}
+	if err := a.join.output.Close(); err != nil {
+		slog.Error("while closing output", "err", err)
+	}
+}
+
 func (a *TwoInputAdapter[L, R, O]) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)

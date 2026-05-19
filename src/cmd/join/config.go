@@ -19,16 +19,6 @@ func loadConfig() (join.JoinConfig, error) {
 		return join.JoinConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	leftInputExchange := os.Getenv("LEFT_INPUT_EXCHANGE")
-	if leftInputExchange == "" {
-		return join.JoinConfig{}, errors.New("LEFT_INPUT_EXCHANGE environment variable is required")
-	}
-
-	rightInputExchange := os.Getenv("RIGHT_INPUT_EXCHANGE")
-	if rightInputExchange == "" {
-		return join.JoinConfig{}, errors.New("RIGHT_INPUT_EXCHANGE environment variable is required")
-	}
-
 	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
 	if outputExchange == "" {
 		return join.JoinConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
@@ -37,8 +27,9 @@ func loadConfig() (join.JoinConfig, error) {
 	return join.JoinConfig{
 		MomHost:            momHost,
 		MomPort:            momPort,
-		LeftInputExchange:  leftInputExchange,
-		RightInputExchange: rightInputExchange,
+		InputExchange:      os.Getenv("INPUT_EXCHANGE"),
+		LeftInputExchange:  os.Getenv("LEFT_INPUT_EXCHANGE"),
+		RightInputExchange: os.Getenv("RIGHT_INPUT_EXCHANGE"),
 		OutputExchange:     outputExchange,
 	}, nil
 }

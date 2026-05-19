@@ -6,11 +6,13 @@ type JoinType string
 
 const (
 	TransferAccountByBank JoinType = "transfer_account_by_bank" // Q2
+	SplittedTransfer      JoinType = "splitted_transfer"        // Q4
 )
 
 type JoinConfig struct {
 	MomHost            string
 	MomPort            int
+	InputExchange      string
 	LeftInputExchange  string
 	RightInputExchange string
 	OutputExchange     string

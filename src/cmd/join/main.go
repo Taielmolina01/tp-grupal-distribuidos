@@ -26,6 +26,8 @@ func run() int {
 	switch join.JoinType(joinTypeStr) {
 	case join.TransferAccountByBank:
 		server, err = join.CreateTransferAccountByBankJoin(config)
+	case join.SplittedTransfer:
+		server, err = join.CreateSplittedTransferJoin(config)
 	default:
 		slog.Error("While loading join type", "err", errors.New("invalid join type"))
 		return 1
