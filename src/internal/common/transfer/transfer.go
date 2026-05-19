@@ -1,6 +1,9 @@
 package transfer
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Transfer struct {
 	Timestamp         time.Time
@@ -29,6 +32,26 @@ type SplittedTransfer struct {
 	PaymentFormat     string
 	IsLaundering      bool
 	IsLeftPart        bool
+}
+
+func (t Transfer) Serialize() ([]byte, error) {
+	return json.Marshal(t)
+}
+
+func Deserialize(b []byte) (Transfer, error) {
+	var t Transfer
+	err := json.Unmarshal(b, &t)
+	return t, err
+}
+
+func (t SplittedTransfer) SerializeSplitted() ([]byte, error) {
+	return json.Marshal(t)
+}
+
+func DeserializeSplitted(b []byte) (SplittedTransfer, error) {
+	var t SplittedTransfer
+	err := json.Unmarshal(b, &t)
+	return t, err
 }
 
 // Capaz sobren comparaciones idk

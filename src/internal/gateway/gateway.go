@@ -288,7 +288,7 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 	ack()
 }
 
-func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.ResultEnvelope) (bool, error) {
+func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.ResultMsg) (bool, error) {
 	switch env.QueryID {
 	case inner.Query1ID:
 		var r queryresult.Query1Result
