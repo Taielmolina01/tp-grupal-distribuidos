@@ -1,0 +1,22 @@
+src/internal/reducer/reducer.go
+  h_3c9b41718876fe 9-10
+src/internal/reducer/constructors.go
+  h_3c9b41718876fe 4-5
+docker-compose.yaml
+  h_3c9b41718876fe 111-128
+replicate.sh
+  h_3c9b41718876fe 11,40
+src/cmd/reducer/main.go
+  h_3c9b41718876fe 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "d9d783682ad12249298b2830cb6d03d15920ed3e",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
