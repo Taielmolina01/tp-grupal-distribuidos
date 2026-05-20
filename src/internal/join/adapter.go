@@ -1,7 +1,6 @@
 package join
 
 import (
-	"encoding/json"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -18,7 +17,7 @@ type TwoInputAdapter[L, R, O any] struct {
 	leftInput  middleware.Middleware
 	rightInput middleware.Middleware
 	eofCount   map[int]int
-	lock      sync.Mutex
+	lock       sync.Mutex
 }
 
 func newTwoInputJoin[L, R, O any](
@@ -29,12 +28,12 @@ func newTwoInputJoin[L, R, O any](
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	leftInput, err := middleware.CreateExchangeMiddleware(config.LeftInputExchange, []string{}, connSettings)
+	leftInput, err := middleware.CreateExchangeMiddleware(config.LeftInputExchange, "", []string{}, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	rightInput, err := middleware.CreateExchangeMiddleware(config.RightInputExchange, []string{}, connSettings)
+	rightInput, err := middleware.CreateExchangeMiddleware(config.RightInputExchange, "", []string{}, connSettings)
 	if err != nil {
 		if err := leftInput.Close(); err != nil {
 			slog.Error("while closing left input", "err", err)
@@ -42,7 +41,7 @@ func newTwoInputJoin[L, R, O any](
 		return nil, err
 	}
 
-	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, []string{}, connSettings)
+	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, "", []string{}, connSettings)
 	if err != nil {
 		if err := leftInput.Close(); err != nil {
 			slog.Error("while closing left input", "err", err)
@@ -67,7 +66,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 	go func() {
 		if err := a.leftInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 			defer ack()
-			env, err := inner.DeserializeData(&msg)
+			env, err := inner.DeserializeData[L](&msg)
 			if err != nil {
 				slog.Error("while deserializing left message", "err", err)
 				return
@@ -76,12 +75,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 				a.handleEOF(env.ClientID)
 				return
 			}
-			var record L
-			if err := json.Unmarshal(env.Payload, &record); err != nil {
-				slog.Error("while unmarshaling left record", "err", err)
-				return
-			}
-			a.join.HandleLeft(env.ClientID, record)
+			a.join.HandleLeft(env.ClientID, env.Payload)
 		}); err != nil {
 			slog.Error("while consuming left input", "err", err)
 		}
@@ -90,7 +84,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 
 	if err := a.rightInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		defer ack()
-		env, err := inner.DeserializeData(&msg)
+		env, err := inner.DeserializeData[R](&msg)
 		if err != nil {
 			slog.Error("while deserializing right message", "err", err)
 			return
@@ -99,12 +93,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 			a.handleEOF(env.ClientID)
 			return
 		}
-		var record R
-		if err := json.Unmarshal(env.Payload, &record); err != nil {
-			slog.Error("while unmarshaling right record", "err", err)
-			return
-		}
-		a.join.HandleRight(env.ClientID, record)
+		a.join.HandleRight(env.ClientID, env.Payload)
 	}); err != nil {
 		slog.Error("while consuming right input", "err", err)
 	}
@@ -137,12 +126,12 @@ func newSingleInputJoin[T, O any](
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	input, err := middleware.CreateExchangeMiddleware(config.InputExchange, []string{}, connSettings)
+	input, err := middleware.CreateExchangeMiddleware(config.InputExchange, "", []string{}, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, []string{}, connSettings)
+	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, "", []string{}, connSettings)
 	if err != nil {
 		if err := input.Close(); err != nil {
 			slog.Error("while closing input", "err", err)
@@ -160,7 +149,7 @@ func newSingleInputJoin[T, O any](
 func (a *SingleInputAdapter[T, O]) Run() {
 	if err := a.input.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		defer ack()
-		env, err := inner.DeserializeData(&msg)
+		env, err := inner.DeserializeData[T](&msg)
 		if err != nil {
 			slog.Error("while deserializing message", "err", err)
 			return
@@ -169,15 +158,10 @@ func (a *SingleInputAdapter[T, O]) Run() {
 			a.join.HandleQueryEOF(env.ClientID)
 			return
 		}
-		var record T
-		if err := json.Unmarshal(env.Payload, &record); err != nil {
-			slog.Error("while unmarshaling record", "err", err)
-			return
-		}
-		if a.isLeft(record) {
-			a.join.HandleLeft(env.ClientID, record)
+		if a.isLeft(env.Payload) {
+			a.join.HandleLeft(env.ClientID, env.Payload)
 		} else {
-			a.join.HandleRight(env.ClientID, record)
+			a.join.HandleRight(env.ClientID, env.Payload)
 		}
 	}); err != nil {
 		slog.Error("while consuming input", "err", err)

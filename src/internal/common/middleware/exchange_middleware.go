@@ -20,6 +20,7 @@ type exchangeMiddleware struct {
 
 func CreateExchangeMiddlewareHelper(
 	exchange string,
+	queuename string,
 	keys []string,
 	connectionSettings ConnSettings,
 ) (Middleware, error) {
@@ -62,13 +63,14 @@ func CreateExchangeMiddlewareHelper(
 		return nil, ErrMessageMiddlewareDisconnected
 	}
 	q, err := ch.QueueDeclare(
-		"",    // name
-		false, // durability
-		false, // delete when unused
-		true,  // exclusive
-		false, // no-wait
-		nil,   // arguments
+		queuename, // name
+		false,     // durability
+		false,     // delete when unused
+		false,     // exclusive
+		false,     // no-wait
+		nil,       // arguments
 	)
+	slog.Info("queue declared in exchange is", "name", q.Name)
 	middleware.queue = q
 
 	if err != nil {

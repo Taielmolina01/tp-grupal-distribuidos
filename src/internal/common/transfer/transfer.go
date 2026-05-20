@@ -3,32 +3,33 @@ package transfer
 import "time"
 
 type Transfer struct {
-	Timestamp         time.Time
-	FromBank          string
-	FromBankAccount   string
-	ToBank            string
-	ToBankAccount     string
-	AmountReceived    float32
-	ReceivingCurrency string
-	AmountPaid        float32
-	PaymentCurrency   string
-	PaymentFormat     string
-	IsLaundering      bool
+	Timestamp         time.Time `json:"timestamp"`
+	FromBank          string    `json:"from_bank"`
+	FromBankAccount   string    `json:"from_bank_account"`
+	ToBank            string    `json:"to_bank"`
+	ToBankAccount     string    `json:"to_bank_account"`
+	AmountReceived    float32   `json:"amount_received"`
+	ReceivingCurrency string    `json:"receiving_currency"`
+	AmountPaid        float32   `json:"amount_paid"`
+	PaymentCurrency   string    `json:"payment_currency"`
+	PaymentFormat     string    `json:"payment_format"`
+	IsLaundering      bool      `json:"is_laundering"`
 }
 
 type SplittedTransfer struct {
-	Timestamp         time.Time
-	FromBank          string
-	FromBankAccount   string
-	ToBank            string
-	ToBankAccount     string
-	AmountReceived    float32
-	ReceivingCurrency string
-	AmountPaid        float32
-	PaymentCurrency   string
-	PaymentFormat     string
-	IsLaundering      bool
-	IsLeftPart        bool
+	Transfer   Transfer `json:"transfer"`
+	IsLeftPart bool     `json:"is_left_part"`
+}
+
+type SumByMethod struct {
+	Sum    float32 `json:"sum"`
+	Amount int     `json:"amount"`
+	Method string  `json:"method"`
+}
+
+type AvgByMethod struct {
+	Avg    float32 `json:"average"`
+	Method string  `json:"method"`
 }
 
 // Capaz sobren comparaciones idk

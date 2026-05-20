@@ -1,7 +1,6 @@
 package join
 
 import (
-	"encoding/json"
 	"log/slog"
 
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
@@ -62,7 +61,7 @@ func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
 	delete(j.leftBuffer, clientID)
 	delete(j.rightBuffer, clientID)
 
-	msg, err := inner.SerializeResult(inner.ResultMsg{
+	msg, err := inner.SerializeResult(inner.ResultMsg[O]{
 		ClientID:   clientID,
 		QueryID:    j.queryID,
 		IsQueryEOF: true,
@@ -77,16 +76,10 @@ func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
 }
 
 func (j *Join[L, R, O]) emit(clientID int, result O) {
-	payload, err := json.Marshal(result)
-	if err != nil {
-		slog.Error("while marshaling result", "err", err)
-		return
-	}
-
-	msg, err := inner.SerializeResult(inner.ResultMsg{
+	msg, err := inner.SerializeResult(inner.ResultMsg[O]{
 		ClientID: clientID,
 		QueryID:  j.queryID,
-		Payload:  payload,
+		Payload:  result,
 	})
 	if err != nil {
 		slog.Error("while serializing result", "err", err)

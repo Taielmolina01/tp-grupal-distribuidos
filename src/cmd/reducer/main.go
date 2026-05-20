@@ -6,7 +6,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/reducer"
+	"tp-grupal-distribuidos/internal/reducer"
 )
 
 func loadConfig() (reducer.ReducerConfig, error) {

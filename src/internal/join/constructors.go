@@ -13,12 +13,12 @@ func CreateSplittedTransferJoin(config JoinConfig) (worker.Worker, error) {
 	return newSingleInputJoin(
 		config,
 		func(t transfer.SplittedTransfer) bool { return t.IsLeftPart },
-		func(t transfer.SplittedTransfer) string { return t.ToBankAccount },
-		func(t transfer.SplittedTransfer) string { return t.FromBankAccount },
+		func(t transfer.SplittedTransfer) string { return t.Transfer.ToBankAccount },
+		func(t transfer.SplittedTransfer) string { return t.Transfer.FromBankAccount },
 		func(left, right transfer.SplittedTransfer) queryresult.Query4Result {
 			return queryresult.Query4Result{
-				BankId:    left.FromBank,
-				AccountId: left.FromBankAccount,
+				BankId:    left.Transfer.FromBank,
+				AccountId: left.Transfer.FromBankAccount,
 			}
 		},
 	)
