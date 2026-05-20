@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/middleware"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/worker"
+	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 type ReducerConfig struct {
@@ -27,12 +27,12 @@ type Reducer[T comparable] struct {
 func newReducer[T comparable](config ReducerConfig, callback func(T, T) T) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, []string{}, connSettings)
+	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, "", []string{}, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	outputExchange, err := middleware.CreateExchangeMiddleware(config.OutputExchange, []string{}, connSettings)
+	outputExchange, err := middleware.CreateExchangeMiddleware(config.OutputExchange, "", []string{}, connSettings)
 	if err != nil {
 		if err := inputExchange.Close(); err != nil {
 			slog.Error("While closing input queue", "err", err)

@@ -45,13 +45,13 @@ services:
     environment:
     - SERVER_HOST=gateway
     - SERVER_PORT=5678
-    - INPUT_FILE_ACCOUNTS=/datasets/accounts_0.csv
-    - INPUT_FILE_TRANS=/datasets/transactions_0.csv
+    - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
+    - INPUT_FILE_TRANS=/input/transactions_0.csv
     - OUTPUT_FILE_PREFIX=/output/output_0
     - MAX_BATCH_SIZE=1
     - LOG_LEVEL=DEBUG
     volumes:
-    - ./datasets:/datasets
+    - ./input:/input
     - ./output:/output
   # client_1:
   #   build:
@@ -101,6 +101,24 @@ services:
         condition: service_healthy
     environment:
     - ID=0
+    - MOM_PORT=5672
+    - MOM_HOST=rabbitmq
+    - INPUT_EXCHANGE=transfers_exchange
+    # - OUTPUT_EXCHANGE=filtered_currency_transfers_exchange
+    - OUTPUT_EXCHANGE=results_queue
+    - CURRENCIES=US Dollar
+    - FILTER_TYPE=CURRENCY
+
+  filter_currency_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/filter/Dockerfile
+    container_name: filter_currency_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+    - ID=1
     - MOM_PORT=5672
     - MOM_HOST=rabbitmq
     - INPUT_EXCHANGE=transfers_exchange

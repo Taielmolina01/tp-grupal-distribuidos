@@ -8,7 +8,7 @@ usage() {
     echo "  M:             cantidad de copias a generar"
     echo "  N:             (opcional) cantidad de líneas a copiar por archivo"
     exit 1
-    # Ej: ./replicate.sh datasets/accounts-FULL.csv datasets/accounts_test_ 4 3
+    # Ej: ./replicate.sh datasets/accounts-FULL.csv datasets/accounts 4 3
 }
 
 [ $# -lt 3 ] && usage
@@ -37,7 +37,7 @@ if [ -n "$N" ]; then
     SOURCE="$TMPFILE"
 fi
 
-for i in $(seq 1 "$M"); do
+for i in $(seq 0 "$M"); do
     cp "$SOURCE" "${PREFIX}_${i}.csv"
     echo "generado: ${PREFIX}_${i}.csv"
 done

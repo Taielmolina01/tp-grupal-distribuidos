@@ -19,21 +19,6 @@ type Transfer struct {
 	IsLaundering      bool
 }
 
-type SplittedTransfer struct {
-	Timestamp         time.Time
-	FromBank          string
-	FromBankAccount   string
-	ToBank            string
-	ToBankAccount     string
-	AmountReceived    float32
-	ReceivingCurrency string
-	AmountPaid        float32
-	PaymentCurrency   string
-	PaymentFormat     string
-	IsLaundering      bool
-	IsLeftPart        bool
-}
-
 func (t Transfer) Serialize() ([]byte, error) {
 	return json.Marshal(t)
 }
@@ -67,4 +52,20 @@ func (t Transfer) Equals(other Transfer) bool {
 		t.PaymentCurrency == other.PaymentCurrency &&
 		t.PaymentFormat == other.PaymentFormat &&
 		t.IsLaundering == other.IsLaundering
+}
+
+type SplittedTransfer struct {
+	Transfer   Transfer
+	IsLeftPart bool
+}
+
+type SumByMethod struct {
+	Sum    float32
+	Amount int
+	Method string
+}
+
+type AvgByMethod struct {
+	Avg    float32
+	Method string
 }

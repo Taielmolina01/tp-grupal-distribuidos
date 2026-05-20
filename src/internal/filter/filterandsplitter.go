@@ -13,13 +13,13 @@ import (
 func newFilterAndSplitter(config FilterConfig, filterFunc func(transfer.Transfer) bool, splitFunc func(transfer.Transfer) (transfer.SplittedTransfer, transfer.SplittedTransfer)) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, []string{}, connSettings)
+	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, "", []string{}, connSettings)
 
 	if err != nil {
 		return nil, err
 	}
 
-	outputExchange, err := middleware.CreateExchangeMiddleware(config.OutputExchange, []string{}, connSettings)
+	outputExchange, err := middleware.CreateExchangeMiddleware(config.OutputExchange, "", []string{}, connSettings)
 	if err != nil {
 		if err := inputExchange.Close(); err != nil {
 			slog.Error("while closing input exchange", "err", err)
