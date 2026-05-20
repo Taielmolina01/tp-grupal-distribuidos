@@ -17,18 +17,8 @@ type Transfer struct {
 }
 
 type SplittedTransfer struct {
-	Timestamp         time.Time
-	FromBank          string
-	FromBankAccount   string
-	ToBank            string
-	ToBankAccount     string
-	AmountReceived    float32
-	ReceivingCurrency string
-	AmountPaid        float32
-	PaymentCurrency   string
-	PaymentFormat     string
-	IsLaundering      bool
-	IsLeftPart        bool
+	Transfer   Transfer
+	IsLeftPart bool
 }
 
 // Capaz sobren comparaciones idk
