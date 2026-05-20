@@ -1,26 +1,24 @@
 package filter
 
 import (
-	"fmt"
 	"log/slog"
 
+	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
-
-const TRANSFERS_Q1234_KEY = "TRANSFERS_Q1234_KEY"
 
 func newFilter[T comparable](config FilterConfig, callback func(T) bool) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	// Named shared queue bound to the transfers exchange with the Q1234 routing key.
 	// Multiple filter instances using this same queue compete for messages (BBB buffer).
-	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, "", []string{TRANSFERS_Q1234_KEY}, connSettings)
+	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, config.InputQueue, config.InputRoutingKeys, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	outputExchange, err := middleware.CreateExchangeMiddleware(config.OutputExchange, "TRANSFER_QUEUE", []string{}, connSettings)
+	outputExchange, err := middleware.CreateExchangeMiddleware(config.OutputExchange, config.OutputQueue, config.OutputRoutingKeys, connSettings)
 	if err != nil {
 		if err := inputExchange.Close(); err != nil {
 			slog.Error("while closing input exchange", "err", err)
@@ -48,12 +46,18 @@ func (filter *Filter[T]) Run() {
 var cont int
 
 func (filter *Filter[T]) handleMessage(msg middleware.Message, ack, nack func()) {
-	cont++
-	slog.Info(fmt.Sprintf("count: %d", cont))
 	ack()
-	// if filter.callback(msg.toTransferDTO()) {
-	// 	filter.outputExchange.Send(msg)
-	// }
+
+	result, err := inner.DeserializeData[T](&msg)
+	if err != nil {
+		slog.Error("While deserializing message", "err", err)
+		return
+	}
+
+	if filter.callback(result.Payload) {
+		slog.Info("Msg passed filter", "payload", result.Payload)
+		filter.outputExchange.Send(msg)
+	}
 }
 
 func (filter *Filter[T]) HandleSignals() {

@@ -36,17 +36,37 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("INPUT_EXCHANGE environment variable is required")
 	}
 
+	inputQueue := os.Getenv("INPUT_QUEUE")
+
+	inputRoutingKeysStr := os.Getenv("INPUT_ROUTING_KEYS")
+	inputRoutingKeys := []string{}
+	if inputRoutingKeysStr != "" {
+		inputRoutingKeys = strings.Split(inputRoutingKeysStr, ",")
+	}
+
 	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
 	if outputExchange == "" {
 		return filter.FilterConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
 	}
 
+	outputQueue := os.Getenv("OUTPUT_QUEUE")
+
+	outputRoutingKeysStr := os.Getenv("OUTPUT_ROUTING_KEYS")
+	outputRoutingKeys := []string{}
+	if outputRoutingKeysStr != "" {
+		outputRoutingKeys = strings.Split(outputRoutingKeysStr, ",")
+	}
+
 	config := filter.FilterConfig{
-		Id:             id,
-		MomHost:        momHost,
-		MomPort:        momPort,
-		InputExchange:  inputExchange,
-		OutputExchange: outputExchange,
+		Id:                id,
+		MomHost:           momHost,
+		MomPort:           momPort,
+		InputExchange:     inputExchange,
+		InputQueue:        inputQueue,
+		InputRoutingKeys:  inputRoutingKeys,
+		OutputExchange:    outputExchange,
+		OutputQueue:       outputQueue,
+		OutputRoutingKeys: outputRoutingKeys,
 	}
 
 	if err := loadFilterTypeConfig(&config); err != nil {

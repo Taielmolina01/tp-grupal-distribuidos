@@ -33,8 +33,6 @@ services:
     - SERVER_HOST=gateway
     - SERVER_PORT=5678
 
-
-
   client_0:
     build:
       context: ./src/
@@ -52,44 +50,7 @@ services:
     - LOG_LEVEL=DEBUG
     volumes:
     - ./input:/input
-    - ./output:/output
-  # client_1:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_1
-  #   depends_on:
-  #   - gateway
-  #   environment:
-  #   - SERVER_HOST=gateway
-  #   - SERVER_PORT=5678
-  #   - INPUT_FILE_ACCOUNTS=/datasets/accounts_1.csv
-  #   - INPUT_FILE_TRANS=/datasets/transactions_1.csv
-  #   - OUTPUT_FILE_PREFIX=/output/output_1
-  #   - MAX_BATCH_SIZE=1
-  #   - LOG_LEVEL=DEBUG
-  #   volumes:
-  #   - ./datasets:/datasets
-  #   - ./output:/output
-  # client_2:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_2
-  #   depends_on:
-  #   - gateway
-  #   environment:
-  #   - SERVER_HOST=gateway
-  #   - SERVER_PORT=5678
-  #   - INPUT_FILE_ACCOUNTS=/datasets/accounts_2.csv
-  #   - INPUT_FILE_TRANS=/datasets/transactions_2.csv
-  #   - OUTPUT_FILE_PREFIX=/output/output_2
-  #   - MAX_BATCH_SIZE=1
-  #   - LOG_LEVEL=DEBUG
-  #   volumes:
-  #   - ./datasets:/datasets
-  #   - ./output:/output
- 
+    - ./output:/output 
 
   filter_currency_0:
     build:
@@ -104,8 +65,11 @@ services:
     - MOM_PORT=5672
     - MOM_HOST=rabbitmq
     - INPUT_EXCHANGE=transfers_exchange
-    # - OUTPUT_EXCHANGE=filtered_currency_transfers_exchange
-    - OUTPUT_EXCHANGE=results_queue
+    - INPUT_QUEUE=transfers_queue
+    - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
+    - OUTPUT_EXCHANGE=filtered_transfers_exchange
+    - OUTPUT_QUEUE=filtered_transfers_q
+    - OUTPUT_ROUTING_KEYS=falopa
     - CURRENCIES=US Dollar
     - FILTER_TYPE=CURRENCY
 
@@ -122,8 +86,52 @@ services:
     - MOM_PORT=5672
     - MOM_HOST=rabbitmq
     - INPUT_EXCHANGE=transfers_exchange
-    # - OUTPUT_EXCHANGE=filtered_currency_transfers_exchange
-    - OUTPUT_EXCHANGE=results_queue
+    - INPUT_QUEUE=transfers_queue
+    - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
+    - OUTPUT_EXCHANGE=filtered_transfers_exchange
+    - OUTPUT_QUEUE=filtered_transfers_q
+    - OUTPUT_ROUTING_KEYS=falopa
     - CURRENCIES=US Dollar
     - FILTER_TYPE=CURRENCY
  
+  filter_amount_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/filter/Dockerfile
+    container_name: filter_amount_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+    - ID=0
+    - MOM_PORT=5672
+    - MOM_HOST=rabbitmq
+    - INPUT_EXCHANGE=filtered_transfers_exchange
+    - INPUT_QUEUE=filtered_transfers_q
+    - INPUT_ROUTING_KEYS=falopa
+    - OUTPUT_EXCHANGE=results_queue
+    - OUTPUT_QUEUE=
+    - OUTPUT_ROUTING_KEYS=
+    - AMOUNT=50.0
+    - FILTER_TYPE=AMOUNT
+  
+  filter_amount_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/filter/Dockerfile
+    container_name: filter_amount_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+    - ID=1
+    - MOM_PORT=5672
+    - MOM_HOST=rabbitmq
+    - INPUT_EXCHANGE=filtered_transfers_exchange
+    - INPUT_QUEUE=filtered_transfers_q
+    - INPUT_ROUTING_KEYS=falopa
+    - OUTPUT_EXCHANGE=results_queue
+    - OUTPUT_QUEUE=
+    - INPUT_ROUTING_KEYS=
+    - AMOUNT=50.0
+    - FILTER_TYPE=AMOUNT

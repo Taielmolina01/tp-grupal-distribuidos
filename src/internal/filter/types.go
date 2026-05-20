@@ -22,17 +22,21 @@ const (
 )
 
 type FilterConfig struct {
-	Type           FilterType
-	Id             int
-	MomHost        string
-	MomPort        int
-	InputExchange  string
-	OutputExchange string
-	Amount         float32
-	StartDateRange time.Time
-	EndDateRange   time.Time
-	Currencies     []string
-	AmountTreshold int
+	Type              FilterType
+	Id                int
+	MomHost           string
+	MomPort           int
+	InputExchange     string
+	InputQueue        string
+	InputRoutingKeys  []string
+	OutputExchange    string
+	OutputQueue       string
+	OutputRoutingKeys []string
+	Amount            float32
+	StartDateRange    time.Time
+	EndDateRange      time.Time
+	Currencies        []string
+	AmountTreshold    int
 }
 
 type Filter[T comparable] struct {
