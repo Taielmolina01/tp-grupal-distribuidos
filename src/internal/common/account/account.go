@@ -16,3 +16,14 @@ func (account Account) Equals(other Account) bool {
 		account.EntityId == other.EntityId &&
 		account.EntityName == other.EntityName
 }
+
+type AccountChain struct {
+	// a -> b -> c
+}
+
+type AccountIdentifier struct{}
+
+type Bank struct {
+	Name string
+	Id   string
+}

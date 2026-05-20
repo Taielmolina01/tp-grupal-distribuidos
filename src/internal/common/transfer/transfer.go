@@ -16,11 +16,6 @@ type Transfer struct {
 	IsLaundering      bool
 }
 
-type SplittedTransfer struct {
-	Transfer   Transfer
-	IsLeftPart bool
-}
-
 // Capaz sobren comparaciones idk
 func (t Transfer) Equals(other Transfer) bool {
 	return t.Timestamp.Equal(other.Timestamp) &&
@@ -34,4 +29,20 @@ func (t Transfer) Equals(other Transfer) bool {
 		t.PaymentCurrency == other.PaymentCurrency &&
 		t.PaymentFormat == other.PaymentFormat &&
 		t.IsLaundering == other.IsLaundering
+}
+
+type SplittedTransfer struct {
+	Transfer   Transfer
+	IsLeftPart bool
+}
+
+type SumByMethod struct {
+	Sum    float32
+	Amount int
+	Method string
+}
+
+type AvgByMethod struct {
+	Avg    float32
+	Method string
 }
