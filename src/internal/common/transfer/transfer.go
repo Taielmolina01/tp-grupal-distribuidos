@@ -22,14 +22,14 @@ type SplittedTransfer struct {
 }
 
 type SumByMethod struct {
-	Sum    float32
-	Amount int
-	Method string
+	Sum    float32 `json:"sum"`
+	Amount int     `json:"amount"`
+	Method string  `json:"method"`
 }
 
 type AvgByMethod struct {
-	Avg    float32
-	Method string
+	Avg    float32 `json:"average"`
+	Method string  `json:"method"`
 }
 
 // Capaz sobren comparaciones idk

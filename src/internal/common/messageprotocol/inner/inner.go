@@ -7,7 +7,6 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/eofmessage"
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
-	"tp-grupal-distribuidos/internal/common/fruititem"
 	"tp-grupal-distribuidos/internal/common/middleware"
 )
 
@@ -34,74 +33,6 @@ func parseClientID(raw interface{}) (int, error) {
 		return 0, errors.New("client ID must be a non-negative integer")
 	}
 	return int(clientIDAsFloat), nil
-}
-
-func SerializeMessage(fruitRecords fruititem.FruitItemFromClient) (*middleware.Message, error) {
-	data := []interface{}{}
-	data = append(data, fruitRecords.ClientId)
-	for _, fruitRecord := range fruitRecords.FruitItems {
-		datum := []interface{}{
-			fruitRecord.Fruit,
-			fruitRecord.Amount,
-		}
-		data = append(data, datum)
-	}
-
-	body, err := serializeJson(data)
-	if err != nil {
-		return nil, err
-	}
-	message := middleware.Message{Body: string(body)}
-
-	return &message, nil
-}
-
-func DeserializeMessage(message *middleware.Message) (*fruititem.FruitItemFromClient, *eofmessage.EofMessage, bool, error) {
-	data, err := deserializeJson([]byte((*message).Body))
-	if err != nil {
-		return nil, nil, false, err
-	}
-	result := fruititem.FruitItemFromClient{}
-	var clientId int
-	for i, datum := range data {
-		if i == 0 {
-			_clientId, err := parseClientID(datum)
-			if err != nil {
-				return nil, nil, false, err
-			}
-			clientId = _clientId
-			continue
-		}
-
-		fruitPair, ok := datum.([]interface{})
-		if !ok {
-			if amountOfMessages, ok := datum.(float64); ok {
-				return nil, &eofmessage.EofMessage{
-						TotalMessages: uint32(amountOfMessages),
-						ClientID:      clientId,
-					},
-					true,
-					nil
-			}
-			return nil, nil, false, errors.New("datum is not an array")
-		}
-
-		fruit, ok := fruitPair[0].(string)
-		if !ok {
-			return nil, nil, false, errors.New("datum is not a (fruit, amount) pair")
-		}
-
-		fruitAmount, ok := fruitPair[1].(float64)
-		if !ok {
-			return nil, nil, false, errors.New("datum is not a (fruit, amount) pair")
-		}
-
-		fruitRecord := fruititem.FruitItem{Fruit: fruit, Amount: uint32(fruitAmount)}
-		result.FruitItems = append(result.FruitItems, fruitRecord)
-	}
-
-	result.ClientId = clientId
-	return &result, nil, len(result.FruitItems) == 0, nil
 }
 
 func DeserializeEofRingMessage(data []interface{}) (*eofmessagetypes.EofRingMessage, error) {

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -240,7 +241,7 @@ func (gateway *Gateway) getOrCreateBuilder(clientID int) *external.ResultBatchBu
 }
 
 func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
-	env, err := inner.DeserializeResult(&msg)
+	env, err := inner.DeserializeResult[json.RawMessage](&msg)
 	if err != nil {
 		slog.Error("While deserializing result envelope", "err", err)
 		nack()
@@ -297,7 +298,7 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 	ack()
 }
 
-func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.ResultMsg) (bool, error) {
+func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.ResultMsg[json.RawMessage]) (bool, error) {
 	switch env.QueryID {
 	case inner.Query1ID:
 		r, err := inner.Deserialize[queryresult.Query1Result](env.Payload)
@@ -375,11 +376,7 @@ func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bo
 }
 
 func wrapForClient[T any](clientID int, record T) (*middleware.Message, error) {
-	payload, err := inner.Serialize(record)
-	if err != nil {
-		return nil, err
-	}
-	return inner.SerializeData(inner.DataMsg{ClientID: clientID, Payload: payload})
+	return inner.SerializeData(inner.DataMsg[T]{ClientID: clientID, Payload: record})
 }
 
 func (gateway *Gateway) addCount(counts map[int]uint32, clientID int, n uint32) {
@@ -398,7 +395,7 @@ func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
 
 func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind string, total uint32, exchange middleware.Middleware) error {
 	slog.Info("Received EOF message", "kind", kind, "client_id", client.ID, "total", total)
-	msg, err := inner.SerializeData(inner.DataMsg{
+	msg, err := inner.SerializeData(inner.DataMsg[any]{
 		ClientID: client.ID,
 		EOF:      &inner.EOFInfo{Kind: kind, TotalMessages: total},
 	})
