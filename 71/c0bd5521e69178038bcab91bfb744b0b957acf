@@ -1,0 +1,43 @@
+src/internal/common/currencyconversion/currencyconversion.go
+  h_3c9b41718876fe 4-6
+src/internal/common/messageprotocol/inner/data.go
+  s_a36d0eaef57a03::t_9c438162289f06 28-29,36
+  s_a36d0eaef57a03::t_31a703977f161a 9-12
+  s_a36d0eaef57a03::t_1b570d80e198fc 20
+  s_a36d0eaef57a03::t_ed81ed56731e79 39,41-42,44,46
+  s_a36d0eaef57a03::t_cfa41ec586b5aa 40,43,45
+src/internal/common/account/account.go
+  h_3c9b41718876fe 21-24,28-29,33-34
+src/internal/common/transfer/transfer.go
+  h_3c9b41718876fe 25-27,31-32
+src/internal/common/messageprotocol/inner/result.go
+  s_a36d0eaef57a03::t_4604dc9514c958 17-19,21,24,32-33
+  s_a36d0eaef57a03::t_b8fde7e93eb1d1 20
+src/internal/gateway/gateway.go
+  s_a36d0eaef57a03::t_fa138ea2b01028 398
+  s_a36d0eaef57a03::t_3b9e8e89497dc5 244
+  s_a36d0eaef57a03::t_31ac85702799fb 4
+  s_a36d0eaef57a03::t_55c64f5fe1511b 301
+  s_a36d0eaef57a03::t_71e90955ea1162 379
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "71c0bd5521e69178038bcab91bfb744b0b957acf",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_a36d0eaef57a03": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8435bb99-517e-41be-ad00-3918e0cfb224",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
