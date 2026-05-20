@@ -1,33 +1,33 @@
 package queryresult
 
 type Query1Result struct {
-	FromBank    string
-	FromAccount string
-	ToBank      string
-	ToAccount   string
-	Amount      float32
+	FromBank    string  `json:"from_bank"`
+	FromAccount string  `json:"from_account"`
+	ToBank      string  `json:"to_bank"`
+	ToAccount   string  `json:"to_account"`
+	Amount      float32 `json:"amount"`
 }
 
 type Query2Result struct {
-	BankName    string
-	FromBank    string
-	FromAccount string
-	Amount      float32
+	BankName    string  `json:"bank_name"`
+	FromBank    string  `json:"from_bank"`
+	FromAccount string  `json:"from_account"`
+	Amount      float32 `json:"amount"`
 }
 
 type Query3Result struct {
-	FromBank    string
-	FromAccount string
-	Amount      float32
+	FromBank    string  `json:"from_bank"`
+	FromAccount string  `json:"from_account"`
+	Amount      float32 `json:"amount"`
 }
 
 type Query4Result struct {
-	BankId    string
-	AccountId string
+	BankId    string `json:"bank_id"`
+	AccountId string `json:"account_id"`
 }
 
 type Query5Result struct {
-	Qty uint32
+	Qty uint32 `json:"qty"`
 }
 
 type BatchResults struct {
