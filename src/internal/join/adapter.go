@@ -66,16 +66,16 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 	go func() {
 		if err := a.leftInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 			defer ack()
-			env, err := inner.DeserializeData[L](&msg)
+			data, err := inner.DeserializeData[L](&msg)
 			if err != nil {
 				slog.Error("while deserializing left message", "err", err)
 				return
 			}
-			if env.IsEOF() {
-				a.handleEOF(env.ClientID)
+			if data.IsEOF() {
+				a.handleEOF(data.ClientID)
 				return
 			}
-			a.join.HandleLeft(env.ClientID, env.Payload)
+			a.join.HandleLeft(data.ClientID, data.Payload)
 		}); err != nil {
 			slog.Error("while consuming left input", "err", err)
 		}
@@ -84,16 +84,16 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 
 	if err := a.rightInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		defer ack()
-		env, err := inner.DeserializeData[R](&msg)
+		data, err := inner.DeserializeData[R](&msg)
 		if err != nil {
 			slog.Error("while deserializing right message", "err", err)
 			return
 		}
-		if env.IsEOF() {
-			a.handleEOF(env.ClientID)
+		if data.IsEOF() {
+			a.handleEOF(data.ClientID)
 			return
 		}
-		a.join.HandleRight(env.ClientID, env.Payload)
+		a.join.HandleRight(data.ClientID, data.Payload)
 	}); err != nil {
 		slog.Error("while consuming right input", "err", err)
 	}
@@ -149,19 +149,19 @@ func newSingleInputJoin[T, O any](
 func (a *SingleInputAdapter[T, O]) Run() {
 	if err := a.input.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		defer ack()
-		env, err := inner.DeserializeData[T](&msg)
+		data, err := inner.DeserializeData[T](&msg)
 		if err != nil {
 			slog.Error("while deserializing message", "err", err)
 			return
 		}
-		if env.IsEOF() {
-			a.join.HandleQueryEOF(env.ClientID)
+		if data.IsEOF() {
+			a.join.HandleQueryEOF(data.ClientID)
 			return
 		}
-		if a.isLeft(env.Payload) {
-			a.join.HandleLeft(env.ClientID, env.Payload)
+		if a.isLeft(data.Payload) {
+			a.join.HandleLeft(data.ClientID, data.Payload)
 		} else {
-			a.join.HandleRight(env.ClientID, env.Payload)
+			a.join.HandleRight(data.ClientID, data.Payload)
 		}
 	}); err != nil {
 		slog.Error("while consuming input", "err", err)
