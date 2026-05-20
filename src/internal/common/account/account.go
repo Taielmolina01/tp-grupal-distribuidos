@@ -1,23 +1,11 @@
 package account
 
-import "encoding/json"
-
 type Account struct {
-	BankName      string
-	BankId        string
-	AccountNumber string
-	EntityId      string
-	EntityName    string
-}
-
-func (account Account) Serialize() ([]byte, error) {
-	return json.Marshal(account)
-}
-
-func Deserialize(b []byte) (Account, error) {
-	var a Account
-	err := json.Unmarshal(b, &a)
-	return a, err
+	BankName      string `json:"bank_name"`
+	BankId        string `json:"bank_id"`
+	AccountNumber string `json:"account_number"`
+	EntityId      string `json:"entity_id"`
+	EntityName    string `json:"entity_name"`
 }
 
 // Capaz sobren comparaciones idk

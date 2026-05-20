@@ -17,9 +17,14 @@ type EOFInfo struct {
 	TotalMessages uint32 `json:"total_messages"`
 }
 
-// a chequear esto
-type Serializable interface {
-	Serialize() ([]byte, error)
+func Serialize[T any](v T) ([]byte, error) {
+	return json.Marshal(v)
+}
+
+func Deserialize[T any](b []byte) (T, error) {
+	var v T
+	err := json.Unmarshal(b, &v)
+	return v, err
 }
 
 func SerializeData(d DataMsg) (*middleware.Message, error) {

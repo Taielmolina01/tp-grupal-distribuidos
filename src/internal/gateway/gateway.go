@@ -300,31 +300,31 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.ResultMsg) (bool, error) {
 	switch env.QueryID {
 	case inner.Query1ID:
-		r, err := queryresult.DeserializeQuery1(env.Payload)
+		r, err := inner.Deserialize[queryresult.Query1Result](env.Payload)
 		if err != nil {
 			return false, err
 		}
 		return builder.TryAddQuery1(r), nil
 	case inner.Query2ID:
-		r, err := queryresult.DeserializeQuery2(env.Payload)
+		r, err := inner.Deserialize[queryresult.Query2Result](env.Payload)
 		if err != nil {
 			return false, err
 		}
 		return builder.TryAddQuery2(r), nil
 	case inner.Query3ID:
-		r, err := queryresult.DeserializeQuery3(env.Payload)
+		r, err := inner.Deserialize[queryresult.Query3Result](env.Payload)
 		if err != nil {
 			return false, err
 		}
 		return builder.TryAddQuery3(r), nil
 	case inner.Query4ID:
-		r, err := queryresult.DeserializeQuery4(env.Payload)
+		r, err := inner.Deserialize[queryresult.Query4Result](env.Payload)
 		if err != nil {
 			return false, err
 		}
 		return builder.TryAddQuery4(r), nil
 	case inner.Query5ID:
-		r, err := queryresult.DeserializeQuery5(env.Payload)
+		r, err := inner.Deserialize[queryresult.Query5Result](env.Payload)
 		if err != nil {
 			return false, err
 		}
@@ -374,8 +374,8 @@ func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bo
 	return found, ok
 }
 
-func wrapForClient(clientID int, record inner.Serializable) (*middleware.Message, error) {
-	payload, err := record.Serialize()
+func wrapForClient[T any](clientID int, record T) (*middleware.Message, error) {
+	payload, err := inner.Serialize(record)
 	if err != nil {
 		return nil, err
 	}
