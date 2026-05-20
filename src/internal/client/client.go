@@ -237,7 +237,9 @@ func (client *Client) recvResults() error {
 		for i, f := range files {
 			if f != nil {
 				writers[i].Flush()
-				f.Close()
+				if err := f.Close(); err != nil {
+					slog.Error("While closing output file", "query", i+1, "err", err)
+				}
 			}
 		}
 	}()
@@ -294,18 +296,28 @@ func (client *Client) recvResults() error {
 
 func (client *Client) flushBatchToWriters(results *queryresult.BatchResults, writers []*csv.Writer) {
 	for _, r := range results.Query1 {
-		writers[0].Write([]string{r.FromBank, r.FromAccount, r.ToBank, r.ToAccount, fmt.Sprintf("%.2f", r.Amount)})
+		if err := writers[0].Write([]string{r.FromBank, r.FromAccount, r.ToBank, r.ToAccount, fmt.Sprintf("%.2f", r.Amount)}); err != nil {
+			slog.Error("While writing to output file", "query", 1, "err", err)
+		}
 	}
 	for _, r := range results.Query2 {
-		writers[1].Write([]string{r.BankName, r.FromBank, r.FromAccount, fmt.Sprintf("%.2f", r.Amount)})
+		if err := writers[1].Write([]string{r.BankName, r.FromBank, r.FromAccount, fmt.Sprintf("%.2f", r.Amount)}); err != nil {
+			slog.Error("While writing to output file", "query", 2, "err", err)
+		}
 	}
 	for _, r := range results.Query3 {
-		writers[2].Write([]string{r.FromBank, r.FromAccount, fmt.Sprintf("%.2f", r.Amount)})
+		if err := writers[2].Write([]string{r.FromBank, r.FromAccount, fmt.Sprintf("%.2f", r.Amount)}); err != nil {
+			slog.Error("While writing to output file", "query", 3, "err", err)
+		}
 	}
 	for _, r := range results.Query4 {
-		writers[3].Write([]string{r.BankId, r.AccountId})
+		if err := writers[3].Write([]string{r.BankId, r.AccountId}); err != nil {
+			slog.Error("While writing to output file", "query", 4, "err", err)
+		}
 	}
 	for _, r := range results.Query5 {
-		writers[4].Write([]string{strconv.FormatUint(uint64(r.Qty), 10)})
+		if err := writers[4].Write([]string{strconv.FormatUint(uint64(r.Qty), 10)}); err != nil {
+			slog.Error("While writing to output file", "query", 5, "err", err)
+		}
 	}
 }

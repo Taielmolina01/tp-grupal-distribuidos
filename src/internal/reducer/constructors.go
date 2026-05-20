@@ -1,8 +1,8 @@
 package reducer
 
 import (
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/transfer"
-	"github.com/7574-sistemas-distribuidos/tp-coordinacion/internal/common/worker"
+	"tp-grupal-distribuidos/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 func CreateReducerMaxAmountFromBank(config ReducerConfig) (worker.Worker, error) {

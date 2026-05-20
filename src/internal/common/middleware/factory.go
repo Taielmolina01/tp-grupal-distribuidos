@@ -7,9 +7,10 @@ func CreateQueueMiddleware(queueName string, connectionSettings ConnSettings) (M
 	)
 }
 
-func CreateExchangeMiddleware(exchange string, keys []string, connectionSettings ConnSettings) (Middleware, error) {
+func CreateExchangeMiddleware(exchange string, queue string, keys []string, connectionSettings ConnSettings) (Middleware, error) {
 	return CreateExchangeMiddlewareHelper(
 		exchange,
+		queue,
 		keys,
 		connectionSettings,
 	)

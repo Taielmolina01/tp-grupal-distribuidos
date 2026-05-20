@@ -46,15 +46,25 @@ type Gateway struct {
 	maxBatchBytes     int
 }
 
+const (
+	TRANSFERS_Q5_KEY    = "TRANSFERS_Q5_KEY"
+	TRANSFERS_Q1234_KEY = "TRANSFERS_Q1234_KEY"
+	ACCOUNTS_QUEUE      = ""
+	TRANSFER_QUEUE      = "TRANSFER_QUEUE"
+)
+
 func NewGateway(config GatewayConfig) (*Gateway, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	accountsExchange, err := middleware.CreateExchangeMiddleware(config.AccountsExchange, []string{}, connSettings)
+	//Quiza las keys deberían ser config, quizá no. Quien sabe
+	accountsExchange, err := middleware.CreateExchangeMiddleware(config.AccountsExchange, ACCOUNTS_QUEUE, []string{}, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	transfersExchange, err := middleware.CreateExchangeMiddleware(config.TransfersExchange, []string{}, connSettings)
+	// Las keys acá vienen x config xq son dinámicas
+	// Se requiere sharding
+	transfersExchange, err := middleware.CreateExchangeMiddleware(config.TransfersExchange, TRANSFER_QUEUE, []string{TRANSFERS_Q1234_KEY, TRANSFERS_Q5_KEY}, connSettings)
 	if err != nil {
 		if err := accountsExchange.Close(); err != nil {
 			slog.Error("While closing accounts exchange", "err", err)
