@@ -6,8 +6,17 @@ import (
 	"tp-grupal-distribuidos/internal/common/middleware"
 )
 
+const (
+	Query1ID uint8 = 1
+	Query2ID uint8 = 2
+	Query3ID uint8 = 3
+	Query4ID uint8 = 4
+	Query5ID uint8 = 5
+)
+
 type DataMsg[T any] struct {
 	ClientID int      `json:"client_id"`
+	QueryID  uint8    `json:"query_id"`
 	Payload  T        `json:"payload,omitempty"`
 	EOF      *EOFInfo `json:"eof,omitempty"`
 }

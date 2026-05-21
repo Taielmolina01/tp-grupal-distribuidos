@@ -9,16 +9,25 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
-	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-func newFilter[T comparable, O queryresult.QueryResult](config FilterConfig, callback func(T) bool) (worker.Worker, error) {
+func newFilter[T comparable, O comparable](
+	config FilterConfig,
+	callback func(T) bool,
+	inputToOutput func(T) O,
+	queryId int,
+) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	// Named shared queue bound to the transfers exchange with the Q1234 routing key.
 	// Multiple filter instances using this same queue compete for messages (BBB buffer).
-	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, config.InputQueue, config.InputRoutingKeys, connSettings)
+	inputExchange, err := middleware.CreateExchangeMiddleware(
+		config.InputExchange,
+		config.InputQueue,
+		config.InputRoutingKeys,
+		connSettings,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -70,6 +79,8 @@ func newFilter[T comparable, O queryresult.QueryResult](config FilterConfig, cal
 		handlerMessages: handlerMessages,
 		outputQueueEof:  eofOutput,
 		filterType:      config.Type,
+		outputTransform: inputToOutput,
+		queryId:         queryId,
 	}, nil
 }
 
@@ -116,19 +127,20 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func
 		filter.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
 
 		slog.Info("Message processed by filter", "filter_id", filter.id, "client_id", result.ClientID, "processed_messages", filter.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID))
-		var zeroValue O
 		if filter.callback(result.Payload) {
 			filter.handlerMessages.AddFilteredMessagesAmountByClientId(result.ClientID, 1)
-			msgOutput, err := inner.SerializeResult[O](inner.ResultMsg[O]{
-				ClientID: result.ClientID,
-				QueryID:  zeroValue.GetQueryId(),
-				Payload:  filter.transform(result.Payload),
-			})
+			payload := filter.outputTransform(result.Payload)
+			msgOutput, err := inner.SerializeData(
+				inner.DataMsg[O]{
+					Payload:  payload,
+					ClientID: result.ClientID,
+					QueryID:  uint8(filter.queryId)},
+			)
 			if err != nil {
 				slog.Error("While serializing output message", "err", err)
 				return
 			}
-			filter.outputExchange.Send(msgOutput)
+			filter.outputExchange.Send(*msgOutput)
 		}
 	}
 }

@@ -42,7 +42,6 @@ type BatchResults struct {
 
 type QueryResult interface {
 	GetQueryId() uint8
-	GetPayload() any
 }
 
 func (q Query1Result) GetQueryId() uint8 {

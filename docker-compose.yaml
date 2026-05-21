@@ -96,7 +96,6 @@ services:
     - FILTER_TYPE=CURRENCY
     - FILTER_AMOUNT=2
 
- 
   filter_amount_0:
     build:
       context: ./src/
@@ -113,8 +112,8 @@ services:
     - INPUT_QUEUE=filtered_transfers_q
     - INPUT_ROUTING_KEYS=falopa
     - OUTPUT_EXCHANGE=results_queue
-    - OUTPUT_QUEUE=
-    - OUTPUT_ROUTING_KEYS=
+    - OUTPUT_QUEUE=results_queue
+    - OUTPUT_ROUTING_KEYS=falopa2
     - AMOUNT=50.0
     - FILTER_TYPE=AMOUNT
     - FILTER_AMOUNT=2
@@ -135,8 +134,8 @@ services:
     - INPUT_QUEUE=filtered_transfers_q
     - INPUT_ROUTING_KEYS=falopa
     - OUTPUT_EXCHANGE=results_queue
-    - OUTPUT_QUEUE=
-    - INPUT_ROUTING_KEYS=
+    - OUTPUT_QUEUE=results_queue
+    - INPUT_ROUTING_KEYS=falopa2
     - AMOUNT=50.0
     - FILTER_TYPE=AMOUNT
     - FILTER_AMOUNT=2

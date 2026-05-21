@@ -42,13 +42,11 @@ func CreateQueueMiddlewareHelper(
 
 	q, err := ch.QueueDeclare(
 		queueName, // name
-		true,      // durability
+		false,     // durability
 		false,     // delete when unused
 		false,     // exclusive
 		false,     // no-wait
-		amqp.Table{
-			amqp.QueueTypeArg: amqp.QueueTypeQuorum,
-		},
+		nil,       // arguments
 	)
 	if err != nil {
 		if err := middleware.Close(); err != nil {

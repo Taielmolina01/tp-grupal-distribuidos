@@ -6,7 +6,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
-	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
@@ -43,7 +42,7 @@ type FilterConfig struct {
 	FilterAmount      int
 }
 
-type Filter[T comparable, O queryresult.QueryResult] struct {
+type Filter[T comparable, O comparable] struct {
 	id              uint32
 	inputExchange   middleware.Middleware
 	outputExchange  middleware.Middleware
@@ -52,7 +51,8 @@ type Filter[T comparable, O queryresult.QueryResult] struct {
 	handlerMessages msgmonitor.MessageMonitor
 	outputQueueEof  middleware.Middleware
 	filterType      FilterType
-	outputType      O
+	outputTransform func(T) O
+	queryId         int
 }
 
 type FilterAndSplitter struct {

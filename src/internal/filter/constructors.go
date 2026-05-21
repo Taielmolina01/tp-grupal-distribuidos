@@ -2,32 +2,67 @@ package filter
 
 import (
 	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 func CreateCurrencyFilter(config FilterConfig) (worker.Worker, error) {
-	return newFilter(config, func(t transfer.Transfer) bool {
-		return isValidCurrency(t, config)
-	})
+	return newFilter(
+		config,
+		func(t transfer.Transfer) bool {
+			return isValidCurrency(t, config)
+		},
+		func(t transfer.Transfer) transfer.Transfer {
+			return t
+		},
+		1,
+	)
 }
 
 func CreateAmountFilter(config FilterConfig) (worker.Worker, error) {
-	return newFilter(config, func(t transfer.Transfer) bool {
-		return t.AmountPaid > config.Amount
-	})
+	return newFilter(
+		config,
+		func(t transfer.Transfer) bool {
+			return t.AmountPaid > config.Amount
+		},
+		func(t transfer.Transfer) queryresult.Query1Result {
+			return queryresult.Query1Result{
+				FromBank:    t.FromBank,
+				FromAccount: t.FromBankAccount,
+				ToBank:      t.ToBank,
+				ToAccount:   t.ToBankAccount,
+				Amount:      t.AmountPaid,
+			}
+		},
+		1,
+	)
 }
 
 func CreateDateRangeFilter(config FilterConfig) (worker.Worker, error) {
-	return newFilter(config, func(t transfer.Transfer) bool {
-		return t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
-	})
+	return newFilter(
+		config,
+		func(t transfer.Transfer) bool {
+			return t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
+		},
+		func(t transfer.Transfer) transfer.Transfer {
+			return t
+		},
+		1,
+	)
 }
 
 func CreateDateRangeAndPaymentMethod(config FilterConfig) (worker.Worker, error) {
-	return newFilter(config, func(t transfer.Transfer) bool {
-		return isValidCurrency(t, config) && t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
-	})
+	return newFilter(
+		config,
+		func(t transfer.Transfer) bool {
+			return isValidCurrency(t, config) && t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
+		},
+		func(t transfer.Transfer) transfer.Transfer {
+			return t
+		},
+		1,
+	)
 }
 
 func CreateCountAndFilter(config CountAndFilterConfig) (worker.Worker, error) {

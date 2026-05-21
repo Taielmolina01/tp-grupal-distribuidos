@@ -241,7 +241,7 @@ func (gateway *Gateway) getOrCreateBuilder(clientID int) *external.ResultBatchBu
 }
 
 func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
-	env, err := inner.DeserializeResult[json.RawMessage](&msg)
+	env, err := inner.DeserializeData[json.RawMessage](&msg)
 	if err != nil {
 		slog.Error("While deserializing result envelope", "err", err)
 		nack()
@@ -257,7 +257,7 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 
 	builder := gateway.getOrCreateBuilder(env.ClientID)
 
-	if env.IsQueryEOF {
+	if env.IsEOF() {
 		if !builder.IsEmpty() {
 			if err := builder.Flush(client.Conn); err != nil {
 				slog.Error("While flushing batch before QueryEOF", "client_id", env.ClientID, "err", err)
@@ -276,7 +276,6 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 		ack()
 		return
 	}
-
 	added, err := addResultToBuilder(builder, env)
 	if err != nil {
 		slog.Error("While adding result to batch", "client_id", env.ClientID, "query_id", env.QueryID, "err", err)
@@ -298,7 +297,7 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 	ack()
 }
 
-func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.ResultMsg[json.RawMessage]) (bool, error) {
+func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.DataMsg[json.RawMessage]) (bool, error) {
 	switch env.QueryID {
 	case inner.Query1ID:
 		r, err := inner.Deserialize[queryresult.Query1Result](env.Payload)
