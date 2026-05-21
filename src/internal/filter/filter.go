@@ -9,10 +9,11 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-func newFilter[T comparable](config FilterConfig, callback func(T) bool) (worker.Worker, error) {
+func newFilter[T comparable, O queryresult.QueryResult](config FilterConfig, callback func(T) bool) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	// Named shared queue bound to the transfers exchange with the Q1234 routing key.
@@ -53,7 +54,7 @@ func newFilter[T comparable](config FilterConfig, callback func(T) bool) (worker
 
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
-	return &Filter[T]{
+	return &Filter[T, O]{
 		id:             uint32(config.Id),
 		inputExchange:  inputExchange,
 		outputExchange: outputExchange,
@@ -72,7 +73,7 @@ func newFilter[T comparable](config FilterConfig, callback func(T) bool) (worker
 	}, nil
 }
 
-func (filter *Filter[T]) Run() {
+func (filter *Filter[T, O]) Run() {
 	slog.Info("Starting filter consumers", "filter_id", filter.id)
 	go filter.eofHandler.Run()
 	if err := filter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
@@ -82,7 +83,7 @@ func (filter *Filter[T]) Run() {
 	}
 }
 
-func (filter *Filter[T]) handleMessage(msg middleware.Message, ack, nack func()) {
+func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func()) {
 	ack()
 
 	result, err := inner.DeserializeData[T](&msg)
@@ -111,23 +112,32 @@ func (filter *Filter[T]) handleMessage(msg middleware.Message, ack, nack func())
 		}
 		slog.Info("EOF message sent to EOF ring", "filter_id", filter.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
 		slog.Info("Total messages processed by filter", "filter_id", filter.id, "client_id", filter.id, "processed_messages", filter.handlerMessages.GetProcessedMessagesAmountByClientId(int(filter.id)))
-	}
+	} else {
+		filter.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
 
-	filter.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
-
-	slog.Info("Message processed by filter", "filter_id", filter.id, "client_id", result.ClientID, "processed_messages", filter.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID))
-
-	if filter.callback(result.Payload) {
-		filter.handlerMessages.AddFilteredMessagesAmountByClientId(result.ClientID, 1)
-		filter.outputExchange.Send(msg)
+		slog.Info("Message processed by filter", "filter_id", filter.id, "client_id", result.ClientID, "processed_messages", filter.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID))
+		var zeroValue O
+		if filter.callback(result.Payload) {
+			filter.handlerMessages.AddFilteredMessagesAmountByClientId(result.ClientID, 1)
+			msgOutput, err := inner.SerializeResult[O](inner.ResultMsg[O]{
+				ClientID: result.ClientID,
+				QueryID:  zeroValue.GetQueryId(),
+				Payload:  filter.transform(result.Payload),
+			})
+			if err != nil {
+				slog.Error("While serializing output message", "err", err)
+				return
+			}
+			filter.outputExchange.Send(msgOutput)
+		}
 	}
 }
 
-func (filter *Filter[T]) HandleSignals() {
+func (filter *Filter[T, O]) HandleSignals() {
 
 }
 
-func (filter *Filter[T]) Close() {
+func (filter *Filter[T, O]) Close() {
 
 }
 
