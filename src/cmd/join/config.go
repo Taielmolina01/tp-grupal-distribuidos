@@ -4,9 +4,25 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 
 	"tp-grupal-distribuidos/internal/join"
 )
+
+func splitKeys(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 func loadConfig() (join.JoinConfig, error) {
 	momPort, err := strconv.Atoi(os.Getenv("MOM_PORT"))
@@ -28,8 +44,16 @@ func loadConfig() (join.JoinConfig, error) {
 		MomHost:            momHost,
 		MomPort:            momPort,
 		InputExchange:      os.Getenv("INPUT_EXCHANGE"),
+		InputQueue:         os.Getenv("INPUT_QUEUE"),
+		InputRoutingKeys:   splitKeys(os.Getenv("INPUT_ROUTING_KEYS")),
 		LeftInputExchange:  os.Getenv("LEFT_INPUT_EXCHANGE"),
+		LeftInputQueue:     os.Getenv("LEFT_INPUT_QUEUE"),
+		LeftRoutingKeys:    splitKeys(os.Getenv("LEFT_INPUT_ROUTING_KEYS")),
 		RightInputExchange: os.Getenv("RIGHT_INPUT_EXCHANGE"),
+		RightInputQueue:    os.Getenv("RIGHT_INPUT_QUEUE"),
+		RightRoutingKeys:   splitKeys(os.Getenv("RIGHT_INPUT_ROUTING_KEYS")),
 		OutputExchange:     outputExchange,
+		OutputQueue:        os.Getenv("OUTPUT_QUEUE"),
+		OutputRoutingKeys:  splitKeys(os.Getenv("OUTPUT_ROUTING_KEYS")),
 	}, nil
 }

@@ -28,12 +28,12 @@ func newTwoInputJoin[L, R, O any](
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	leftInput, err := middleware.CreateExchangeMiddleware(config.LeftInputExchange, "", []string{}, connSettings)
+	leftInput, err := middleware.CreateExchangeMiddleware(config.LeftInputExchange, config.LeftInputQueue, config.LeftRoutingKeys, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	rightInput, err := middleware.CreateExchangeMiddleware(config.RightInputExchange, "", []string{}, connSettings)
+	rightInput, err := middleware.CreateExchangeMiddleware(config.RightInputExchange, config.RightInputQueue, config.RightRoutingKeys, connSettings)
 	if err != nil {
 		if err := leftInput.Close(); err != nil {
 			slog.Error("while closing left input", "err", err)
@@ -41,7 +41,7 @@ func newTwoInputJoin[L, R, O any](
 		return nil, err
 	}
 
-	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, "", []string{}, connSettings)
+	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, config.OutputQueue, config.OutputRoutingKeys, connSettings)
 	if err != nil {
 		if err := leftInput.Close(); err != nil {
 			slog.Error("while closing left input", "err", err)
@@ -51,6 +51,12 @@ func newTwoInputJoin[L, R, O any](
 		}
 		return nil, err
 	}
+
+	slog.Info("join started",
+		"left_exchange", config.LeftInputExchange, "left_queue", config.LeftInputQueue, "left_keys", config.LeftRoutingKeys,
+		"right_exchange", config.RightInputExchange, "right_queue", config.RightInputQueue, "right_keys", config.RightRoutingKeys,
+		"output_exchange", config.OutputExchange, "output_keys", config.OutputRoutingKeys,
+	)
 
 	return &TwoInputAdapter[L, R, O]{
 		join:       newJoin[L, R, O](output, leftKey, rightKey, combine, config.QueryID),
@@ -72,6 +78,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 				return
 			}
 			if data.IsEOF() {
+				slog.Info("join got left EOF", "client_id", data.ClientID)
 				a.handleEOF(data.ClientID)
 				return
 			}
@@ -90,6 +97,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 			return
 		}
 		if data.IsEOF() {
+			slog.Info("join got right EOF", "client_id", data.ClientID)
 			a.handleEOF(data.ClientID)
 			return
 		}
@@ -126,12 +134,12 @@ func newSingleInputJoin[T, O any](
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	input, err := middleware.CreateExchangeMiddleware(config.InputExchange, "", []string{}, connSettings)
+	input, err := middleware.CreateExchangeMiddleware(config.InputExchange, config.InputQueue, config.InputRoutingKeys, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, "", []string{}, connSettings)
+	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, config.OutputQueue, config.OutputRoutingKeys, connSettings)
 	if err != nil {
 		if err := input.Close(); err != nil {
 			slog.Error("while closing input", "err", err)

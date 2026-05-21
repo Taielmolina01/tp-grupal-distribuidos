@@ -49,6 +49,7 @@ type Gateway struct {
 const (
 	TRANSFERS_Q5_KEY    = "TRANSFERS_Q5_KEY"
 	TRANSFERS_Q1234_KEY = "TRANSFERS_Q1234_KEY"
+	ACCOUNTS_KEY        = "ACCOUNTS_KEY"
 	ACCOUNTS_QUEUE      = ""
 	TRANSFER_QUEUE      = "transfers_queue"
 )
@@ -57,7 +58,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	//Quiza las keys deberían ser config, quizá no. Quien sabe
-	accountsExchange, err := middleware.CreateExchangeMiddleware(config.AccountsExchange, ACCOUNTS_QUEUE, []string{}, connSettings)
+	accountsExchange, err := middleware.CreateExchangeMiddleware(config.AccountsExchange, ACCOUNTS_QUEUE, []string{ACCOUNTS_KEY}, connSettings)
 	if err != nil {
 		return nil, err
 	}

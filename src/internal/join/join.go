@@ -28,8 +28,10 @@ func newJoin[L, R, O any](
 func (j *Join[L, R, O]) HandleLeft(clientID int, record L) {
 	key := j.leftKey(record)
 
+	j.mu.Lock()
 	if rightMap, ok := j.rightBuffer[clientID]; ok {
 		if rightRecord, ok := rightMap[key]; ok {
+			j.mu.Unlock()
 			j.emit(clientID, j.combine(record, rightRecord))
 			return
 		}
@@ -39,13 +41,16 @@ func (j *Join[L, R, O]) HandleLeft(clientID int, record L) {
 		j.leftBuffer[clientID] = map[string]L{}
 	}
 	j.leftBuffer[clientID][key] = record
+	j.mu.Unlock()
 }
 
 func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
 	key := j.rightKey(record)
 
+	j.mu.Lock()
 	if leftMap, ok := j.leftBuffer[clientID]; ok {
 		if leftRecord, ok := leftMap[key]; ok {
+			j.mu.Unlock()
 			j.emit(clientID, j.combine(leftRecord, record))
 			return
 		}
@@ -55,16 +60,20 @@ func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
 		j.rightBuffer[clientID] = map[string]R{}
 	}
 	j.rightBuffer[clientID][key] = record
+	j.mu.Unlock()
 }
 
 func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
+	slog.Info("join sending QueryEOF", "client_id", clientID, "query_id", j.queryID)
+	j.mu.Lock()
 	delete(j.leftBuffer, clientID)
 	delete(j.rightBuffer, clientID)
+	j.mu.Unlock()
 
-	msg, err := inner.SerializeResult(inner.ResultMsg[O]{
-		ClientID:   clientID,
-		QueryID:    j.queryID,
-		IsQueryEOF: true,
+	msg, err := inner.SerializeData(inner.DataMsg[O]{
+		ClientID: clientID,
+		QueryID:  j.queryID,
+		EOF:      &inner.EOFInfo{Kind: "query_eof"},
 	})
 	if err != nil {
 		slog.Error("while serializing query EOF", "err", err)
@@ -76,7 +85,7 @@ func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
 }
 
 func (j *Join[L, R, O]) emit(clientID int, result O) {
-	msg, err := inner.SerializeResult(inner.ResultMsg[O]{
+	msg, err := inner.SerializeData(inner.DataMsg[O]{
 		ClientID: clientID,
 		QueryID:  j.queryID,
 		Payload:  result,
