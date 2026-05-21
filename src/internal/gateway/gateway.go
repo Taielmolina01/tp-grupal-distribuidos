@@ -50,7 +50,7 @@ const (
 	TRANSFERS_Q5_KEY    = "TRANSFERS_Q5_KEY"
 	TRANSFERS_Q1234_KEY = "TRANSFERS_Q1234_KEY"
 	ACCOUNTS_QUEUE      = ""
-	TRANSFER_QUEUE      = "TRANSFER_QUEUE"
+	TRANSFER_QUEUE      = "transfers_queue"
 )
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
@@ -64,7 +64,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 
 	// Las keys acá vienen x config xq son dinámicas
 	// Se requiere sharding
-	transfersExchange, err := middleware.CreateExchangeMiddleware(config.TransfersExchange, TRANSFER_QUEUE, []string{TRANSFERS_Q1234_KEY, TRANSFERS_Q5_KEY}, connSettings)
+	transfersExchange, err := middleware.CreateExchangeMiddleware(config.TransfersExchange, TRANSFER_QUEUE, []string{TRANSFERS_Q1234_KEY}, connSettings)
 	if err != nil {
 		if err := accountsExchange.Close(); err != nil {
 			slog.Error("While closing accounts exchange", "err", err)

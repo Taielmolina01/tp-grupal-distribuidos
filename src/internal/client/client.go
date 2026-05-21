@@ -79,6 +79,11 @@ func (client *Client) Run() error {
 	}()
 	go client.handleSignals()
 
+	recvErrCh := make(chan error, 1)
+	go func() {
+		recvErrCh <- client.recvResults()
+	}()
+
 	if err := client.sendAccountRecords(); err != nil {
 		if client.running.Load() {
 			return err
@@ -93,7 +98,7 @@ func (client *Client) Run() error {
 		return nil
 	}
 
-	if err := client.recvResults(); err != nil {
+	if err := <-recvErrCh; err != nil {
 		if client.running.Load() {
 			return err
 		}
