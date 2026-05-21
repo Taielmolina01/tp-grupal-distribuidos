@@ -46,7 +46,7 @@ services:
     - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
     - INPUT_FILE_TRANS=/input/transactions_0.csv
     - OUTPUT_FILE_PREFIX=/output/output_0
-    - MAX_BATCH_SIZE=1
+    - MAX_BATCH_SIZE=10
     - LOG_LEVEL=DEBUG
     volumes:
     - ./input:/input
