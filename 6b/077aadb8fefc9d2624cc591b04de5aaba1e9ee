@@ -1,0 +1,14 @@
+docker-compose.yaml
+  h_3c9b41718876fe 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "6b077aadb8fefc9d2624cc591b04de5aaba1e9ee",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
