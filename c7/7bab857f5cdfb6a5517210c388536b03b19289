@@ -1,0 +1,20 @@
+src/internal/common/eofring/eofring.go
+  h_3c9b41718876fe 27-28,37,47,102,147,151
+src/internal/filter/filter.go
+  h_3c9b41718876fe 19,78
+docker-compose.yaml
+  h_3c9b41718876fe 138
+src/internal/filter/types.go
+  h_3c9b41718876fe 55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.11",
+  "base_commit_sha": "c77bab857f5cdfb6a5517210c388536b03b19289",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
