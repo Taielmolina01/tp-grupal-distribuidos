@@ -16,7 +16,7 @@ func newFilter[T comparable, O comparable](
 	config FilterConfig,
 	callback func(T) bool,
 	inputToOutput func(T) O,
-	queryId int,
+	queryId uint8,
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
@@ -75,6 +75,7 @@ func newFilter[T comparable, O comparable](
 			uint32(config.Id),
 			outputExchange,
 			handlerMessages,
+			queryId,
 		),
 		handlerMessages: handlerMessages,
 		outputQueueEof:  eofOutput,

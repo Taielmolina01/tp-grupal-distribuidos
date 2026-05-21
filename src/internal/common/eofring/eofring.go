@@ -24,8 +24,8 @@ type eofRingAlgorithmImpl struct {
 	// typeOfNode should be an enum defined somewhere in common, but for simplicity I just left it as a string
 	typeOfNode    string
 	totalMessages *uint32
-	hola          bool
-	hola2         bool
+
+	queryId uint8
 }
 
 func CreateEofRingAlgorithm(
@@ -34,6 +34,7 @@ func CreateEofRingAlgorithm(
 	id uint32,
 	outputExchange middleware.Middleware,
 	messageMonitor msgmonitor.MessageMonitor,
+	queryId uint8,
 ) EofRingAlgorithm {
 	return &eofRingAlgorithmImpl{
 		inputQueue:      inputQueue,
@@ -43,6 +44,7 @@ func CreateEofRingAlgorithm(
 		messagesMonitor: messageMonitor,
 		outputExchange:  outputExchange,
 		totalMessages:   nil,
+		queryId:         queryId,
 	}
 }
 
@@ -97,18 +99,11 @@ func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Me
 			// al primer caso.
 			eofRingMessage.ActualAmount = value
 			eofRingMessage.FilteredAmount = eofring.messagesMonitor.GetFilteredMessagesAmountByClientId(eofRingMessage.ClientId)
-			if !eofring.hola {
-				slog.Info("Restarting EOF ring because actual amount is different than real amount", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", value)
-				eofring.hola = true
-			}
+
 		} else {
 			// Si no soy el líder simplemente sumo los mensajes que yo leí del cliente X y lo sumo al mensaje del ring y lo forwardeo.
 			eofRingMessage.ActualAmount += value
 			eofRingMessage.FilteredAmount += eofring.messagesMonitor.GetFilteredMessagesAmountByClientId(eofRingMessage.ClientId)
-			if !eofring.hola2 {
-				slog.Info("Forwarding EOF ring message for the first time", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
-				eofring.hola2 = true
-			}
 		}
 
 		eofring.sendEofMessageToQueue(eofRingMessage, ack)
@@ -149,10 +144,11 @@ func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *eofmessagetypes
 	msgToOutput, err := inner.SerializeData(inner.DataMsg[any]{
 		ClientID: msg.ClientID,
 		EOF: &inner.EOFInfo{
-			Kind:          "commit",           // hola?
+			Kind:          "commit",           // ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 			TotalMessages: msg.FilteredAmount, // aca si pasan de la primera instancia de filter deberia solamente decir q los mensajes totales son los que pasaron mi filtro justamente
 		},
 		Payload: nil,
+		QueryID: eofring.queryId,
 	})
 
 	eofring.outputExchange.Send(*msgToOutput)

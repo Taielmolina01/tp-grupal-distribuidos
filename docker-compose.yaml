@@ -135,7 +135,7 @@ services:
     - INPUT_ROUTING_KEYS=falopa
     - OUTPUT_EXCHANGE=results_queue
     - OUTPUT_QUEUE=results_queue
-    - INPUT_ROUTING_KEYS=falopa2
+    - OUTPUT_ROUTING_KEYS=falopa2
     - AMOUNT=50.0
     - FILTER_TYPE=AMOUNT
     - FILTER_AMOUNT=2

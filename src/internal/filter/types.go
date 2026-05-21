@@ -52,7 +52,7 @@ type Filter[T comparable, O comparable] struct {
 	outputQueueEof  middleware.Middleware
 	filterType      FilterType
 	outputTransform func(T) O
-	queryId         int
+	queryId         uint8
 }
 
 type FilterAndSplitter struct {
