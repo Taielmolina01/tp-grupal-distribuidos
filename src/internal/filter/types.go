@@ -3,7 +3,9 @@ package filter
 import (
 	"time"
 
+	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
@@ -37,13 +39,18 @@ type FilterConfig struct {
 	EndDateRange      time.Time
 	Currencies        []string
 	AmountTreshold    int
+	FilterAmount      int
 }
 
 type Filter[T comparable] struct {
-	id             uint32
-	inputExchange  middleware.Middleware
-	outputExchange middleware.Middleware
-	callback       func(T) bool
+	id              uint32
+	inputExchange   middleware.Middleware
+	outputExchange  middleware.Middleware
+	callback        func(T) bool
+	eofHandler      eofring.EofRingAlgorithm
+	handlerMessages msgmonitor.MessageMonitor
+	outputQueueEof  middleware.Middleware
+	filterType      FilterType
 }
 
 type FilterAndSplitter struct {

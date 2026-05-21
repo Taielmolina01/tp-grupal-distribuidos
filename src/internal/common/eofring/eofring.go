@@ -11,7 +11,7 @@ import (
 )
 
 type EofRingAlgorithm interface {
-	HandleEofMessageFromQueue(msg middleware.Message, ack, nack func())
+	Run()
 }
 
 type eofRingAlgorithmImpl struct {
@@ -19,24 +19,41 @@ type eofRingAlgorithmImpl struct {
 	outputQueue     middleware.Middleware
 	amountReplicas  int
 	id              uint32
-	forwardFunction func()
 	messagesMonitor msgmonitor.MessageMonitor
+	outputExchange  middleware.Middleware
 	// typeOfNode should be an enum defined somewhere in common, but for simplicity I just left it as a string
-	typeOfNode string
+	typeOfNode    string
+	totalMessages *uint32
+	hola          bool
+	hola2         bool
 }
 
-func CreateEofRingAlgorithm(inputQueue, outputQueue middleware.Middleware, amountReplicas int, id uint32, forwardFunction func(), messageMonitor msgmonitor.MessageMonitor) EofRingAlgorithm {
+func CreateEofRingAlgorithm(
+	inputQueue, outputQueue middleware.Middleware,
+	amountReplicas int,
+	id uint32,
+	outputExchange middleware.Middleware,
+	messageMonitor msgmonitor.MessageMonitor,
+) EofRingAlgorithm {
 	return &eofRingAlgorithmImpl{
 		inputQueue:      inputQueue,
 		outputQueue:     outputQueue,
 		amountReplicas:  amountReplicas,
 		id:              id,
-		forwardFunction: forwardFunction,
 		messagesMonitor: messageMonitor,
+		outputExchange:  outputExchange,
+		totalMessages:   nil,
 	}
 }
 
-func (eofring *eofRingAlgorithmImpl) HandleEofMessageFromQueue(msg middleware.Message, ack, nack func()) {
+func (eofring *eofRingAlgorithmImpl) Run() {
+	slog.Info("Starting EOF ring consumer", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id)
+	if err := eofring.inputQueue.StartConsuming(eofring.handleEofMessageFromQueue); err != nil {
+		slog.Error("While consuming from EOF ring queue", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "err", err)
+	}
+}
+
+func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Message, ack, nack func()) {
 	eofRingMessage, eofRingCommitMessage, err := inner.DeserializeRingMessage(&msg)
 	if err != nil {
 		slog.Error("Error deserializing EOF ring message", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "err", err)
@@ -61,10 +78,15 @@ func (eofring *eofRingAlgorithmImpl) HandleEofMessageFromQueue(msg middleware.Me
 		return
 	}
 
+	if eofring.totalMessages == nil {
+		eofring.totalMessages = &eofRingMessage.ActualAmount
+	}
+
 	if eofRingMessage.Leader == eofring.id && eofRingMessage.ActualAmount == eofRingMessage.RealAmount {
 		// Si soy el líder y la cantidad de todos los mensajes enviados por el cliente (contados por el gateway) y la suma de lo que cada uno
 		// de los nodos me dice que proceso, entonces envio el commit otra vez en forma de anillo para que cada uno le pase al exchange de los
 		// aggregations sus mensajes.
+		slog.Info("EOF commit sent to replicas", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId)
 		eofring.sendEofCommitToReplicas(eofRingMessage, ack, nack)
 	} else {
 		value := eofring.messagesMonitor.GetProcessedMessagesAmountByClientId(eofRingMessage.ClientId)
@@ -74,9 +96,19 @@ func (eofring *eofRingAlgorithmImpl) HandleEofMessageFromQueue(msg middleware.Me
 			// es que un nodo no había terminado de procesar los mensajes de un cliente en particular. Como asumimos que no hay caida, eventualmente va a converger
 			// al primer caso.
 			eofRingMessage.ActualAmount = value
+			eofRingMessage.FilteredAmount = eofring.messagesMonitor.GetFilteredMessagesAmountByClientId(eofRingMessage.ClientId)
+			if !eofring.hola {
+				slog.Info("Restarting EOF ring because actual amount is different than real amount", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", value)
+				eofring.hola = true
+			}
 		} else {
 			// Si no soy el líder simplemente sumo los mensajes que yo leí del cliente X y lo sumo al mensaje del ring y lo forwardeo.
 			eofRingMessage.ActualAmount += value
+			eofRingMessage.FilteredAmount += eofring.messagesMonitor.GetFilteredMessagesAmountByClientId(eofRingMessage.ClientId)
+			if !eofring.hola2 {
+				slog.Info("Forwarding EOF ring message for the first time", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
+				eofring.hola2 = true
+			}
 		}
 
 		eofring.sendEofMessageToQueue(eofRingMessage, ack)
@@ -84,7 +116,7 @@ func (eofring *eofRingAlgorithmImpl) HandleEofMessageFromQueue(msg middleware.Me
 }
 
 func (eofring *eofRingAlgorithmImpl) sendEofCommitToReplicas(eofRingMessage *eofmessagetypes.EofRingMessage, ack, nack func()) {
-	msg, err := inner.SerializeEofMessageCommit(eofmessagetypes.EofMessageCommit{ClientID: eofRingMessage.ClientId, Hops: 0})
+	msg, err := inner.SerializeEofMessageCommit(eofmessagetypes.EofMessageCommit{ClientID: eofRingMessage.ClientId, Hops: 0, FilteredAmount: eofRingMessage.FilteredAmount})
 	if err != nil {
 		slog.Error("Error serializing EOF commit", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "err", err)
 		ack()
@@ -114,7 +146,16 @@ func (eofring *eofRingAlgorithmImpl) sendEofMessageToQueue(eofRingMessage *eofme
 
 func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *eofmessagetypes.EofMessageCommit) error {
 
-	eofring.forwardFunction()
+	msgToOutput, err := inner.SerializeData(inner.DataMsg[any]{
+		ClientID: msg.ClientID,
+		EOF: &inner.EOFInfo{
+			Kind:          "commit",           // hola?
+			TotalMessages: msg.FilteredAmount, // aca si pasan de la primera instancia de filter deberia solamente decir q los mensajes totales son los que pasaron mi filtro justamente
+		},
+		Payload: nil,
+	})
+
+	eofring.outputExchange.Send(*msgToOutput)
 
 	msg.Hops++
 

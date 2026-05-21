@@ -7,36 +7,62 @@ import (
 type MessageMonitor interface {
 	GetProcessedMessagesAmountByClientId(int) uint32
 	AddProcessedMessagesAmountByClientId(int, uint32)
+	GetFilteredMessagesAmountByClientId(int) uint32
+	AddFilteredMessagesAmountByClientId(int, uint32)
 	Close()
 }
 
+type proccesedAndFiltered struct {
+	processedMessages uint32
+	filteredMessages  uint32
+}
+
 type messageMonitorImpl struct {
-	processedMessagesByClient map[int]uint32
-	processedMessagesMutex    sync.Mutex
+	messagesByClient       map[int]proccesedAndFiltered
+	processedMessagesMutex sync.Mutex
+	filteredMessagesMutex  sync.Mutex
 }
 
 func NewMessageMonitor() MessageMonitor {
 	return &messageMonitorImpl{
-		processedMessagesByClient: map[int]uint32{},
-		processedMessagesMutex:    sync.Mutex{},
+		messagesByClient:       map[int]proccesedAndFiltered{},
+		processedMessagesMutex: sync.Mutex{},
+		filteredMessagesMutex:  sync.Mutex{},
 	}
 }
 
 func (monitor *messageMonitorImpl) GetProcessedMessagesAmountByClientId(clientID int) uint32 {
 	monitor.processedMessagesMutex.Lock()
 	defer monitor.processedMessagesMutex.Unlock()
-	amount := monitor.processedMessagesByClient[clientID]
+	amount := monitor.messagesByClient[clientID].processedMessages
 	return amount
 }
 
 func (monitor *messageMonitorImpl) AddProcessedMessagesAmountByClientId(clientID int, amount uint32) {
 	monitor.processedMessagesMutex.Lock()
 	defer monitor.processedMessagesMutex.Unlock()
-	monitor.processedMessagesByClient[clientID] += amount
+	actual := monitor.messagesByClient[clientID]
+	actual.processedMessages += amount
+	monitor.messagesByClient[clientID] = actual
+}
+
+func (monitor *messageMonitorImpl) GetFilteredMessagesAmountByClientId(clientID int) uint32 {
+	monitor.filteredMessagesMutex.Lock()
+	defer monitor.filteredMessagesMutex.Unlock()
+	amount := monitor.messagesByClient[clientID].filteredMessages
+	return amount
+}
+
+func (monitor *messageMonitorImpl) AddFilteredMessagesAmountByClientId(clientID int, amount uint32) {
+	monitor.filteredMessagesMutex.Lock()
+	defer monitor.filteredMessagesMutex.Unlock()
+	actual := monitor.messagesByClient[clientID]
+	actual.filteredMessages += amount
+	monitor.messagesByClient[clientID] = actual
 }
 
 func (monitor *messageMonitorImpl) Close() {
 	monitor.processedMessagesMutex.Lock()
 	defer monitor.processedMessagesMutex.Unlock()
-	clear(monitor.processedMessagesByClient)
+	clear(monitor.messagesByClient)
 }

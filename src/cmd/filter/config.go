@@ -57,6 +57,16 @@ func loadConfig() (filter.FilterConfig, error) {
 		outputRoutingKeys = strings.Split(outputRoutingKeysStr, ",")
 	}
 
+	filterAmount := os.Getenv("FILTER_AMOUNT")
+	if filterAmount == "" {
+		return filter.FilterConfig{}, errors.New("FILTER_AMOUNT environment variable is required")
+	}
+
+	filterAmountInt, err := strconv.Atoi(filterAmount)
+	if err != nil {
+		return filter.FilterConfig{}, errors.New("FILTER_AMOUNT environment variable must be a number")
+	}
+
 	config := filter.FilterConfig{
 		Id:                id,
 		MomHost:           momHost,
@@ -67,6 +77,7 @@ func loadConfig() (filter.FilterConfig, error) {
 		OutputExchange:    outputExchange,
 		OutputQueue:       outputQueue,
 		OutputRoutingKeys: outputRoutingKeys,
+		FilterAmount:      filterAmountInt,
 	}
 
 	if err := loadFilterTypeConfig(&config); err != nil {

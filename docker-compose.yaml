@@ -72,6 +72,7 @@ services:
     - OUTPUT_ROUTING_KEYS=falopa
     - CURRENCIES=US Dollar
     - FILTER_TYPE=CURRENCY
+    - FILTER_AMOUNT=2
 
   filter_currency_1:
     build:
@@ -93,6 +94,8 @@ services:
     - OUTPUT_ROUTING_KEYS=falopa
     - CURRENCIES=US Dollar
     - FILTER_TYPE=CURRENCY
+    - FILTER_AMOUNT=2
+
  
   filter_amount_0:
     build:
@@ -114,6 +117,7 @@ services:
     - OUTPUT_ROUTING_KEYS=
     - AMOUNT=50.0
     - FILTER_TYPE=AMOUNT
+    - FILTER_AMOUNT=2
   
   filter_amount_1:
     build:
@@ -135,3 +139,4 @@ services:
     - INPUT_ROUTING_KEYS=
     - AMOUNT=50.0
     - FILTER_TYPE=AMOUNT
+    - FILTER_AMOUNT=2

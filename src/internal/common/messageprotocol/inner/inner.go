@@ -52,12 +52,17 @@ func DeserializeEofRingMessage(data []interface{}) (*eofmessagetypes.EofRingMess
 	if err != nil {
 		return nil, err
 	}
+	filteredAmount, ok := data[4].(float64)
+	if !ok {
+		return nil, errors.New("filtered amount of messages handled is not a non negative number")
+	}
 
 	return &eofmessagetypes.EofRingMessage{
-		Leader:       uint32(leaderAsFloat),
-		ActualAmount: uint32(actualAmountAsFloat),
-		RealAmount:   uint32(realAmountAsFloat),
-		ClientId:     parsedClientID,
+		Leader:         uint32(leaderAsFloat),
+		ActualAmount:   uint32(actualAmountAsFloat),
+		RealAmount:     uint32(realAmountAsFloat),
+		ClientId:       parsedClientID,
+		FilteredAmount: uint32(filteredAmount),
 	}, nil
 }
 
@@ -72,7 +77,12 @@ func DeserializeEofCommitRingMessage(data []interface{}) (*eofmessagetypes.EofMe
 		return nil, errors.New("hops is not a valid number")
 	}
 
-	return &eofmessagetypes.EofMessageCommit{ClientID: parsedClientID, Hops: int(hopsAsFloat)}, nil
+	filteredAmountAsFloat, ok := data[2].(float64)
+	if !ok {
+		return nil, errors.New("filtered amount is not a valid number")
+	}
+
+	return &eofmessagetypes.EofMessageCommit{ClientID: parsedClientID, Hops: int(hopsAsFloat), FilteredAmount: uint32(filteredAmountAsFloat)}, nil
 }
 
 func DeserializeRingMessage(message *middleware.Message) (*eofmessagetypes.EofRingMessage, *eofmessagetypes.EofMessageCommit, error) {
@@ -81,11 +91,11 @@ func DeserializeRingMessage(message *middleware.Message) (*eofmessagetypes.EofRi
 		return nil, nil, err
 	}
 
-	if len(data) != 2 && len(data) != 4 {
+	if len(data) != 3 && len(data) != 5 {
 		return nil, nil, errors.New("EOF message has an invalid shape")
 	}
 
-	if len(data) == 2 {
+	if len(data) == 3 {
 		eofCommitRingMessage, err := DeserializeEofCommitRingMessage(data)
 		return nil, eofCommitRingMessage, err
 	}
@@ -96,7 +106,7 @@ func DeserializeRingMessage(message *middleware.Message) (*eofmessagetypes.EofRi
 }
 
 func SerializeEofFromQueueMsg(msg eofmessagetypes.EofRingMessage) (*middleware.Message, error) {
-	data, err := serializeJson([]interface{}{msg.Leader, msg.ActualAmount, msg.RealAmount, msg.ClientId})
+	data, err := serializeJson([]interface{}{msg.Leader, msg.ActualAmount, msg.RealAmount, msg.ClientId, msg.FilteredAmount})
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +126,7 @@ func SerializeEofMessage(msg eofmessage.EofMessage) (*middleware.Message, error)
 }
 
 func SerializeEofMessageCommit(msg eofmessagetypes.EofMessageCommit) (*middleware.Message, error) {
-	data, err := serializeJson([]interface{}{msg.ClientID, msg.Hops})
+	data, err := serializeJson([]interface{}{msg.ClientID, msg.Hops, msg.FilteredAmount})
 	if err != nil {
 		return nil, err
 	}
