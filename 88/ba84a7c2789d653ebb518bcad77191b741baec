@@ -1,0 +1,28 @@
+docker-compose.yaml
+  h_3c9b41718876fe 9,48,56-151
+src/internal/client/client.go
+  s_519f187d9a66a0::t_1fd591d3dfbcd8 82-86,101
+src/internal/gateway/gateway.go
+  h_3c9b41718876fe 53,67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.12",
+  "base_commit_sha": "88ba84a7c2789d653ebb518bcad77191b741baec",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_519f187d9a66a0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e164a9cd-553c-4faf-b42f-1d6918443eb3",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
