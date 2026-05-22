@@ -1,0 +1,31 @@
+src/internal/common/middleware/exchange_middleware.go
+  h_3c9b41718876fe 49-53
+  s_274187ca52f8ce::t_3e6f82787710a5 54-55
+src/internal/common/middleware/queue_middleware.go
+  h_3c9b41718876fe 43-47
+  s_274187ca52f8ce::t_84659840797db6 48-49
+docker-compose.yaml
+  s_274187ca52f8ce::t_d3b89d423cac3d 173-177,200-204,227-232,253-258
+  h_3c9b41718876fe 50,69,89,108,127,146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "1ca545298227cef93b8d7cb0d0989adadda902bd",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_274187ca52f8ce": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f5ba9598-3ba7-4788-886a-10c6be07b3e7",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
