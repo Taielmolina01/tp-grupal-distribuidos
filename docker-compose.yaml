@@ -272,8 +272,7 @@ services:
       - INPUT_EXCHANGE=filtered_transfers_exchange
       - INPUT_QUEUE=reducer_q2_in_q
       - INPUT_ROUTING_KEYS=falopa
-      - OUTPUT_EXCHANGE=reduced_transfers_q2_exchange
-      - OUTPUT_QUEUE=reduced_transfers_q2_q
+      - OUTPUT_QUEUES=reduced_transfers_q2_0,reduced_transfers_q2_1
       - OUTPUT_ROUTING_KEYS=falopa
       - QUERY_ID=2
       - INPUT_EOFS_EXPECTED=2
@@ -299,8 +298,7 @@ services:
       - INPUT_EXCHANGE=filtered_transfers_exchange
       - INPUT_QUEUE=reducer_q2_in_q
       - INPUT_ROUTING_KEYS=falopa
-      - OUTPUT_EXCHANGE=reduced_transfers_q2_exchange
-      - OUTPUT_QUEUE=reduced_transfers_q2_q
+      - OUTPUT_QUEUES=reduced_transfers_q2_0,reduced_transfers_q2_1
       - OUTPUT_ROUTING_KEYS=falopa
       - QUERY_ID=2
       - INPUT_EOFS_EXPECTED=2
@@ -348,9 +346,7 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - JOIN_TYPE=transfer_account_by_bank
-      - LEFT_INPUT_EXCHANGE=reduced_transfers_q2_exchange
-      - LEFT_INPUT_QUEUE=reduced_transfers_q2_q
-      - LEFT_INPUT_ROUTING_KEYS=falopa
+      - LEFT_INPUT_QUEUE=reduced_transfers_q2_0
       - RIGHT_INPUT_EXCHANGE=accounts_exchange
       - RIGHT_INPUT_QUEUE=join_q2_accounts_q
       - RIGHT_INPUT_ROUTING_KEYS=ACCOUNTS_KEY
@@ -359,8 +355,33 @@ services:
       - OUTPUT_ROUTING_KEYS=falopa2
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=1
-      - JOIN_AMOUNT=1
-      - ID=0
+      - JOIN_AMOUNT=0
+      - ID=1
+
+
+  join_q2_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/join/Dockerfile
+    container_name: join_q2_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - JOIN_TYPE=transfer_account_by_bank
+      - LEFT_INPUT_QUEUE=reduced_transfers_q2_1
+      - RIGHT_INPUT_EXCHANGE=accounts_exchange
+      - RIGHT_INPUT_QUEUE=join_q2_accounts_q
+      - RIGHT_INPUT_ROUTING_KEYS=ACCOUNTS_KEY
+      - OUTPUT_EXCHANGE=results_queue
+      - OUTPUT_QUEUE=results_queue
+      - OUTPUT_ROUTING_KEYS=falopa2
+      - LEFT_EOFS_EXPECTED=2
+      - RIGHT_EOFS_EXPECTED=1
+      - JOIN_AMOUNT=2
+      - ID=1
 
     logging:
       driver: json-file

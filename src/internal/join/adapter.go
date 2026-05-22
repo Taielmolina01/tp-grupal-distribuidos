@@ -82,7 +82,7 @@ func newTwoInputJoin[L, R, O any](
 	if rightEofs <= 0 {
 		rightEofs = 1
 	}
-	
+
 	next := config.Id + 1
 	if config.Id == config.Amount-1 {
 		next = 0
@@ -92,7 +92,7 @@ func newTwoInputJoin[L, R, O any](
 		"JOIN_Q2_"+strconv.Itoa(config.Id),
 		connSettings,
 	)
-	
+
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func newTwoInputJoin[L, R, O any](
 
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
-	adapter:= &TwoInputAdapter[L, R, O]{
+	adapter := &TwoInputAdapter[L, R, O]{
 		id:                config.Id,
 		joinAmount:        config.Amount,
 		handlerMessages:   handlerMessages,
@@ -131,11 +131,11 @@ func newTwoInputJoin[L, R, O any](
 		eofOutput,
 		config.Amount,
 		uint32(config.Id),
-		output,
 		handlerMessages,
-		func(clientID int) error {
+		func(clientID int, msg *middleware.Message) error {
 			adapter.join.HandleQueryEOF(clientID)
-			return nil
+
+			return output.Send(*msg)
 		},
 		config.QueryID,
 	)

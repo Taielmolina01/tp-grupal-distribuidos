@@ -1,6 +1,8 @@
 package reducer
 
 import (
+	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -22,19 +24,18 @@ type ReducerConfig struct {
 	MomHost           string
 	MomPort           int
 	InputExchange     string
-	OutputExchange    string
 	QueryId           uint8
 	InputQueue        string
-	OutputQueue       string
+	OutputQueues      []string
 	InputRoutingKeys  []string
-	OutputRoutingKeys []string
 	InputEofsExpected int
+	JoinsAmount       int
 }
 
 type Reducer[T comparable] struct {
 	id                int
 	inputExchange     middleware.Middleware
-	outputExchange    middleware.Middleware
+	outputQueues      []middleware.Middleware
 	actualValues      map[int]map[string]T
 	callback          func(T, T) T
 	keyFunc           func(T) string
@@ -46,6 +47,7 @@ type Reducer[T comparable] struct {
 	inputEofCount     map[int]int
 	totalRealAmount   map[int]uint32
 	lock              sync.Mutex
+	joinsAmount       int
 }
 
 func newReducer[T comparable](
@@ -61,12 +63,11 @@ func newReducer[T comparable](
 		return nil, err
 	}
 
-	outputExchange, err := middleware.CreateExchangeMiddleware(config.OutputExchange, config.OutputQueue, config.OutputRoutingKeys, connSettings)
-	if err != nil {
-		if err := inputExchange.Close(); err != nil {
-			slog.Error("While closing input queue", "err", err)
+	for _, outputQueue := range config.OutputQueues {
+		_, err := middleware.CreateQueueMiddleware(outputQueue, connSettings)
+		if err != nil {
+			return nil, err
 		}
-		return nil, err
 	}
 
 	next := config.Id + 1
@@ -99,7 +100,7 @@ func newReducer[T comparable](
 	reducer := &Reducer[T]{
 		id:                config.Id,
 		inputExchange:     inputExchange,
-		outputExchange:    outputExchange,
+		outputQueues:      []middleware.Middleware{},
 		actualValues:      map[int]map[string]T{},
 		callback:          callback,
 		keyFunc:           keyFunc,
@@ -113,9 +114,8 @@ func newReducer[T comparable](
 		eofOutput,
 		config.ReducerAmount,
 		uint32(config.Id),
-		outputExchange,
 		handlerMessages,
-		func(clientID int) error {
+		func(clientID int, msg *middleware.Message) error {
 			reducer.lock.Lock()
 			values := reducer.actualValues[clientID]
 			delete(reducer.actualValues, clientID)
@@ -131,7 +131,13 @@ func newReducer[T comparable](
 					return err
 				}
 				slog.Info("Reducer sending message to output exchange", "client_id", clientID, "payload", v)
-				if err := reducer.outputExchange.Send(*msgOutput); err != nil {
+				if err := reducer.outputQueues[reducer.calculateIndexForShard(clientID, keyFunc(v))].Send(*msgOutput); err != nil { // shard by client_id_from_Bank
+					return err
+				}
+			}
+
+			for _, outputQueue := range reducer.outputQueues {
+				if err := outputQueue.Send(*msg); err != nil { // shard by client_id_from_Bank
 					return err
 				}
 			}
@@ -232,11 +238,24 @@ func (reducer *Reducer[T]) Close() error {
 	if err := reducer.inputExchange.Close(); err != nil {
 		return err
 	}
-	if err := reducer.outputExchange.StopConsuming(); err != nil {
-		return err
-	}
-	if err := reducer.outputExchange.Close(); err != nil {
-		return err
+	for _, outputQueue := range reducer.outputQueues {
+		if err := outputQueue.StopConsuming(); err != nil {
+			return err
+		}
+		if err := outputQueue.Close(); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func (reducer *Reducer[T]) convertToBytes(FromBank string, clientID int) []byte {
+	return []byte(fmt.Sprintf("%v%d", FromBank, clientID))
+}
+
+func (reducer *Reducer[T]) calculateIndexForShard(clientID int, FromBank string) int {
+	bytes := reducer.convertToBytes(FromBank, clientID)
+	hash := fnv.New64a()
+	hash.Write(bytes)
+	return int(hash.Sum64() % uint64(reducer.joinsAmount))
 }

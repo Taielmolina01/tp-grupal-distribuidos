@@ -53,27 +53,39 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		inputRoutingKeys = strings.Split(inputRoutingKeysStr, ",")
 	}
 
-	outputRoutingKeysStr := os.Getenv("OUTPUT_ROUTING_KEYS")
-	outputRoutingKeys := []string{}
-	if outputRoutingKeysStr != "" {
-		outputRoutingKeys = strings.Split(outputRoutingKeysStr, ",")
+	inputEofsExpected, err := strconv.Atoi(os.Getenv("INPUT_EOFS_EXPECTED"))
+	if err != nil {
+		return reducer.ReducerConfig{}, errors.New("INPUT_EOFS_EXPECTED environment variable is required and must be a number")
 	}
 
-	inputEofsExpected, _ := strconv.Atoi(os.Getenv("INPUT_EOFS_EXPECTED"))
+	inputQueue := os.Getenv("INPUT_QUEUE")
+	if inputQueue == "" {
+		return reducer.ReducerConfig{}, errors.New("INPUT_QUEUE environment variable is required")
+	}
+
+	outputQueues := os.Getenv("OUTPUT_QUEUES")
+	if outputQueues == "" {
+		return reducer.ReducerConfig{}, errors.New("OUTPUT_QUEUES environment variable is required")
+	}
+	outputQueuesStr := strings.Split(outputQueues, ",")
+
+	joinsAmount, err := strconv.Atoi(os.Getenv("JOINS_AMOUNT"))
+	if err != nil {
+		return reducer.ReducerConfig{}, errors.New("JOINS_AMOUNT environment variable is required and must be a number")
+	}
 
 	return reducer.ReducerConfig{
 		Id:                id,
 		ReducerAmount:     reducerAmount,
 		MomHost:           momHost,
 		MomPort:           momPort,
-		InputExchange:     inputExchange,
-		OutputExchange:    outputExchange,
 		QueryId:           uint8(queryId),
-		InputQueue:        os.Getenv("INPUT_QUEUE"),
-		OutputQueue:       os.Getenv("OUTPUT_QUEUE"),
+		InputExchange:     inputExchange,
+		InputQueue:        inputQueue,
 		InputRoutingKeys:  inputRoutingKeys,
-		OutputRoutingKeys: outputRoutingKeys,
+		OutputQueues:      outputQueuesStr,
 		InputEofsExpected: inputEofsExpected,
+		JoinsAmount:       joinsAmount,
 	}, nil
 }
 

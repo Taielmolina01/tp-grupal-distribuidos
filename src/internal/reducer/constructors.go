@@ -6,7 +6,7 @@ import (
 )
 
 func CreateReducerMaxAmountFromBank(config ReducerConfig) (worker.Worker, error) {
-	return newReducer[transfer.Transfer](
+	return newReducer(
 		config,
 		func(t1, t2 transfer.Transfer) transfer.Transfer {
 			if t1.AmountPaid > t2.AmountPaid {

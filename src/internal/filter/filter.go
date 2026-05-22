@@ -73,10 +73,9 @@ func newFilter[T comparable, O comparable](
 			eofOutput,
 			config.FilterAmount,
 			uint32(config.Id),
-			outputExchange,
 			handlerMessages,
-			func(clientID int) error {
-				return nil
+			func(clientID int, msg *middleware.Message) error {
+				return outputExchange.Send(*msg)
 			},
 			queryId,
 		),
