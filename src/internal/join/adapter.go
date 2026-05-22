@@ -93,9 +93,8 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 				slog.Error("while deserializing left message", "err", err)
 				return
 			}
-			slog.Info("join received left message", "client_id", data.ClientID, "payload", data.Payload)
 			if data.IsEOF() {
-				slog.Info("join got left EOF", "client_id", data.ClientID)
+				slog.Info("join got left EOF", "client_id", data.ClientID, "total_messages", data.EOF.TotalMessages)
 				a.handleEOF(data.ClientID, true)
 				return
 			}
@@ -135,6 +134,10 @@ func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int, isLeft bool) {
 		a.rightEofCount[clientID]++
 	}
 	if a.leftEofCount[clientID] >= a.leftEofsExpected && a.rightEofCount[clientID] >= a.rightEofsExpected {
+		// LUCHO: aca fijate que la cantidad de mensajes procesado entre todos los joins sea igual a la cantidad de mensajes procesados por la
+		// etapa anterior (LOS REDUCERS) lo tenes en el EOF.TotalMessages. Si no es asi seguis dando vueltas.
+		// Tenes que tener un mapa compartido entre todos los joins (tenes una abstracción hecha en handlerMessages) donde vas guardando la cantidad de
+		// mensajes procesados por cada join y tenes que compartirlo con el eofring (omg otra vez un ring hi!)
 		delete(a.leftEofCount, clientID)
 		delete(a.rightEofCount, clientID)
 		a.join.HandleQueryEOF(clientID)

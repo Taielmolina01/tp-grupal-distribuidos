@@ -2,6 +2,7 @@ package join
 
 import (
 	"log/slog"
+	"strconv"
 
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
@@ -31,22 +32,25 @@ func (j *Join[L, R, O]) HandleLeft(clientID int, record L) {
 	key := j.leftKey(record)
 
 	j.mu.Lock()
+	defer j.mu.Unlock()
+
 	if j.leftCombine != nil {
 		if j.leftBuffer[clientID] == nil {
 			j.leftBuffer[clientID] = map[string]L{}
 		}
 		if existing, ok := j.leftBuffer[clientID][key]; ok {
+			slog.Info("client_id", strconv.Itoa(clientID), "before combine", "existing", existing, "new", record)
 			j.leftBuffer[clientID][key] = j.leftCombine(existing, record)
+			slog.Info("client_id", strconv.Itoa(clientID), "after combine", "combined", j.leftBuffer[clientID][key])
 		} else {
 			j.leftBuffer[clientID][key] = record
+			slog.Info("client_id", strconv.Itoa(clientID), "new register", "key", key, "record", j.leftBuffer[clientID][key])
 		}
-		j.mu.Unlock()
 		return
 	}
 
 	if rightMap, ok := j.rightBuffer[clientID]; ok {
 		if rightRecord, ok := rightMap[key]; ok {
-			j.mu.Unlock()
 			j.emit(clientID, j.combine(record, rightRecord))
 			return
 		}
@@ -56,7 +60,6 @@ func (j *Join[L, R, O]) HandleLeft(clientID int, record L) {
 		j.leftBuffer[clientID] = map[string]L{}
 	}
 	j.leftBuffer[clientID][key] = record
-	j.mu.Unlock()
 }
 
 func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
@@ -129,6 +132,7 @@ func (j *Join[L, R, O]) emit(clientID int, result O) {
 		return
 	}
 
+	// esto es un recurso compartido con 119
 	if err := j.output.Send(*msg); err != nil {
 		slog.Error("while sending result", "err", err)
 	}

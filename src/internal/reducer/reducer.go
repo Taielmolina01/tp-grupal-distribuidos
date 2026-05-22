@@ -45,11 +45,15 @@ type Reducer[T comparable] struct {
 	inputEofsExpected int
 	inputEofCount     map[int]int
 	totalRealAmount   map[int]uint32
-	lock                sync.Mutex
+	lock              sync.Mutex
 }
 
-
-func newReducer[T comparable](config ReducerConfig, callback func(T, T) T, keyFunc func(T) string, queryId uint8) (worker.Worker, error) {
+func newReducer[T comparable](
+	config ReducerConfig,
+	callback func(T, T) T,
+	keyFunc func(T) string,
+	queryId uint8,
+) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, config.InputQueue, config.InputRoutingKeys, connSettings)
@@ -64,7 +68,7 @@ func newReducer[T comparable](config ReducerConfig, callback func(T, T) T, keyFu
 		}
 		return nil, err
 	}
-	
+
 	next := config.Id + 1
 	if config.Id == config.ReducerAmount-1 {
 		next = 0
@@ -87,7 +91,6 @@ func newReducer[T comparable](config ReducerConfig, callback func(T, T) T, keyFu
 
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
-	
 	expectedEofs := config.InputEofsExpected
 	if expectedEofs <= 0 {
 		expectedEofs = 1
@@ -202,6 +205,7 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 		existing, ok := reducer.actualValues[result.ClientID][key]
 		if !ok {
 			reducer.actualValues[result.ClientID][key] = result.Payload
+			reducer.handlerMessages.AddFilteredMessagesAmountByClientId(result.ClientID, 1)
 		} else {
 			reducer.actualValues[result.ClientID][key] = reducer.callback(existing, result.Payload)
 		}
