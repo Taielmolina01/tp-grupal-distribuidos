@@ -46,6 +46,13 @@ func CreateExchangeMiddlewareHelper(
 
 	middleware.channel = ch
 
+	if err := ch.Qos(1000, 0, false); err != nil {
+		if err := middleware.Close(); err != nil {
+			slog.Error("While closing middleware", "err", err)
+		}
+		return nil, ErrMessageMiddlewareDisconnected
+	}
+
 	err = ch.ExchangeDeclare(
 		exchange,            // name
 		amqp.ExchangeDirect, // type

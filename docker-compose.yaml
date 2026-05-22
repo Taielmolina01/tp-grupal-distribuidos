@@ -47,7 +47,7 @@ services:
     - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
     - INPUT_FILE_TRANS=/input/transactions-FULL.csv
     - OUTPUT_FILE_PREFIX=/output/output_0
-    - MAX_BATCH_SIZE=10
+    - MAX_BATCH_SIZE=1000
     - LOG_LEVEL=DEBUG
     volumes:
     - ./input:/input
@@ -66,88 +66,88 @@ services:
     - INPUT_FILE_ACCOUNTS=/input/accounts_1.csv
     - INPUT_FILE_TRANS=/input/transactions-FULL.csv
     - OUTPUT_FILE_PREFIX=/output/output_1
-    - MAX_BATCH_SIZE=10
+    - MAX_BATCH_SIZE=1000
     - LOG_LEVEL=DEBUG
     volumes:
     - ./input:/input
     - ./output:/output 
 
 
-  # client_2:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_2
-  #   depends_on:
-  #   - gateway
-  #   environment:
-  #   - SERVER_HOST=gateway
-  #   - SERVER_PORT=5678
-  #   - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
-  #   - INPUT_FILE_TRANS=/input/transactions-FULL.csv
-  #   - OUTPUT_FILE_PREFIX=/output/output_2
-  #   - MAX_BATCH_SIZE=10
-  #   - LOG_LEVEL=DEBUG
-  #   volumes:
-  #   - ./input:/input
-  #   - ./output:/output 
+  client_2:
+    build:
+      context: ./src/
+      dockerfile: cmd/client/Dockerfile
+    container_name: client_2
+    depends_on:
+    - gateway
+    environment:
+    - SERVER_HOST=gateway
+    - SERVER_PORT=5678
+    - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
+    - INPUT_FILE_TRANS=/input/transactions-FULL.csv
+    - OUTPUT_FILE_PREFIX=/output/output_2
+    - MAX_BATCH_SIZE=1000
+    - LOG_LEVEL=DEBUG
+    volumes:
+    - ./input:/input
+    - ./output:/output 
 
-  # client_3:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_3
-  #   depends_on:
-  #   - gateway
-  #   environment:
-  #   - SERVER_HOST=gateway
-  #   - SERVER_PORT=5678
-  #   - INPUT_FILE_ACCOUNTS=/input/accounts_1.csv
-  #   - INPUT_FILE_TRANS=/input/transactions-FULL.csv
-  #   - OUTPUT_FILE_PREFIX=/output/output_3
-  #   - MAX_BATCH_SIZE=10
-  #   - LOG_LEVEL=DEBUG
-  #   volumes:
-  #   - ./input:/input
-  #   - ./output:/output 
+  client_3:
+    build:
+      context: ./src/
+      dockerfile: cmd/client/Dockerfile
+    container_name: client_3
+    depends_on:
+    - gateway
+    environment:
+    - SERVER_HOST=gateway
+    - SERVER_PORT=5678
+    - INPUT_FILE_ACCOUNTS=/input/accounts_1.csv
+    - INPUT_FILE_TRANS=/input/transactions-FULL.csv
+    - OUTPUT_FILE_PREFIX=/output/output_3
+    - MAX_BATCH_SIZE=1000
+    - LOG_LEVEL=DEBUG
+    volumes:
+    - ./input:/input
+    - ./output:/output 
 
-  # client_4:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_4
-  #   depends_on:
-  #   - gateway
-  #   environment:
-  #   - SERVER_HOST=gateway
-  #   - SERVER_PORT=5678
-  #   - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
-  #   - INPUT_FILE_TRANS=/input/transactions-FULL.csv
-  #   - OUTPUT_FILE_PREFIX=/output/output_4
-  #   - MAX_BATCH_SIZE=10
-  #   - LOG_LEVEL=DEBUG
-  #   volumes:
-  #   - ./input:/input
-  #   - ./output:/output 
+  client_4:
+    build:
+      context: ./src/
+      dockerfile: cmd/client/Dockerfile
+    container_name: client_4
+    depends_on:
+    - gateway
+    environment:
+    - SERVER_HOST=gateway
+    - SERVER_PORT=5678
+    - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
+    - INPUT_FILE_TRANS=/input/transactions-FULL.csv
+    - OUTPUT_FILE_PREFIX=/output/output_4
+    - MAX_BATCH_SIZE=1000
+    - LOG_LEVEL=DEBUG
+    volumes:
+    - ./input:/input
+    - ./output:/output 
 
-  # client_5:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_5
-  #   depends_on:
-  #   - gateway
-  #   environment:
-  #   - SERVER_HOST=gateway
-  #   - SERVER_PORT=5678
-  #   - INPUT_FILE_ACCOUNTS=/input/accounts_1.csv
-  #   - INPUT_FILE_TRANS=/input/transactions-FULL.csv
-  #   - OUTPUT_FILE_PREFIX=/output/output_5
-  #   - MAX_BATCH_SIZE=10
-  #   - LOG_LEVEL=DEBUG
-  #   volumes:
-  #   - ./input:/input
-  #   - ./output:/output 
+  client_5:
+    build:
+      context: ./src/
+      dockerfile: cmd/client/Dockerfile
+    container_name: client_5
+    depends_on:
+    - gateway
+    environment:
+    - SERVER_HOST=gateway
+    - SERVER_PORT=5678
+    - INPUT_FILE_ACCOUNTS=/input/accounts_1.csv
+    - INPUT_FILE_TRANS=/input/transactions-FULL.csv
+    - OUTPUT_FILE_PREFIX=/output/output_5
+    - MAX_BATCH_SIZE=1000
+    - LOG_LEVEL=DEBUG
+    volumes:
+    - ./input:/input
+    - ./output:/output 
 
   filter_currency_0:
     build:
@@ -170,6 +170,11 @@ services:
     - CURRENCIES=US Dollar
     - FILTER_TYPE=CURRENCY
     - FILTER_AMOUNT=2
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   filter_currency_1:
     build:
@@ -192,6 +197,11 @@ services:
     - CURRENCIES=US Dollar
     - FILTER_TYPE=CURRENCY
     - FILTER_AMOUNT=2
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   filter_amount_0:
     build:
@@ -214,7 +224,12 @@ services:
     - AMOUNT=50.0
     - FILTER_TYPE=AMOUNT
     - FILTER_AMOUNT=2
-  
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   filter_amount_1:
     build:
       context: ./src/
@@ -236,3 +251,8 @@ services:
     - AMOUNT=50.0
     - FILTER_TYPE=AMOUNT
     - FILTER_AMOUNT=2
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
