@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
@@ -44,6 +45,7 @@ type Reducer[T comparable] struct {
 	inputEofsExpected int
 	inputEofCount     map[int]int
 	totalRealAmount   map[int]uint32
+	lock                sync.Mutex
 }
 
 
@@ -92,6 +94,7 @@ func newReducer[T comparable](config ReducerConfig, callback func(T, T) T, keyFu
 	}
 
 	reducer := &Reducer[T]{
+		id:                config.Id,
 		inputExchange:     inputExchange,
 		outputExchange:    outputExchange,
 		actualValues:      map[int]map[string]T{},
@@ -110,10 +113,12 @@ func newReducer[T comparable](config ReducerConfig, callback func(T, T) T, keyFu
 		outputExchange,
 		handlerMessages,
 		func(clientID int) error {
+			reducer.lock.Lock()
 			values := reducer.actualValues[clientID]
-			// slog.Info("EOF ring finished, sending results to output exchange", "client_id", clientID, "values_amount", len(values))
+			delete(reducer.actualValues, clientID)
+			reducer.lock.Unlock()
+
 			for _, v := range values {
-				// slog.Info("sending value to output exchange", "client_id", clientID, "value", v)
 				msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
 					Payload:  v,
 					ClientID: clientID,
@@ -122,12 +127,11 @@ func newReducer[T comparable](config ReducerConfig, callback func(T, T) T, keyFu
 				if err != nil {
 					return err
 				}
-				// slog.Info("sending message to output exchange", "client_id", clientID, "message", msgOutput)
+				slog.Info("Reducer sending message to output exchange", "client_id", clientID, "payload", v)
 				if err := reducer.outputExchange.Send(*msgOutput); err != nil {
 					return err
 				}
 			}
-			delete(reducer.actualValues, clientID)
 			return nil
 		},
 		queryId,
@@ -164,7 +168,7 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 	if result.IsEOF() {
 		reducer.inputEofCount[result.ClientID]++
 		reducer.totalRealAmount[result.ClientID] = result.EOF.TotalMessages
-		slog.Info("input EOF received", "client_id", result.ClientID, "count", reducer.inputEofCount[result.ClientID], "expected", reducer.inputEofsExpected)
+		// slog.Info("input EOF received", "client_id", result.ClientID, "count", reducer.inputEofCount[result.ClientID], "expected", reducer.inputEofsExpected)
 
 		eofRingMessage := eofmessagetypes.EofRingMessage{
 			RealAmount:     reducer.totalRealAmount[result.ClientID],
@@ -188,10 +192,10 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 		); err != nil {
 			slog.Error("While sending EOF message to EOF ring", "err", err)
 		}
-		slog.Info("EOF message sent to EOF ring", "filter_id", reducer.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
+		// slog.Info("EOF message sent to EOF ring", "reducer_id", reducer.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
 	} else {
-		reducer.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
 		key := reducer.keyFunc(result.Payload)
+		reducer.lock.Lock()
 		if reducer.actualValues[result.ClientID] == nil {
 			reducer.actualValues[result.ClientID] = map[string]T{}
 		}
@@ -201,6 +205,8 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 		} else {
 			reducer.actualValues[result.ClientID][key] = reducer.callback(existing, result.Payload)
 		}
+		reducer.lock.Unlock()
+		reducer.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
 	}
 
 }
