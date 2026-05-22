@@ -349,7 +349,7 @@ services:
       - MOM_PORT=5672
       - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_EXCHANGE=reduced_transfers_q2_exchange
-      - LEFT_INPUT_QUEUE=join_q2_transfers_q
+      - LEFT_INPUT_QUEUE=reduced_transfers_q2_q
       - LEFT_INPUT_ROUTING_KEYS=falopa
       - RIGHT_INPUT_EXCHANGE=accounts_exchange
       - RIGHT_INPUT_QUEUE=join_q2_accounts_q
