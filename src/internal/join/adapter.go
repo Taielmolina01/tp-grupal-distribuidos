@@ -4,15 +4,27 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 
+	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
+	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 type TwoInputAdapter[L, R, O any] struct {
+	id                int
+	joinAmount        int
+	handlerMessages   msgmonitor.MessageMonitor
+	eofHandler        eofring.EofRingAlgorithm
+	outputQueueEof    middleware.Middleware
+	totalRealAmount   map[int]uint32
+	ringFired         map[int]bool
+	queryID           uint8
 	join              *Join[L, R, O]
 	leftInput         middleware.Middleware
 	rightInput        middleware.Middleware
@@ -70,8 +82,41 @@ func newTwoInputJoin[L, R, O any](
 	if rightEofs <= 0 {
 		rightEofs = 1
 	}
+	
+	next := config.Id + 1
+	if config.Id == config.Amount-1 {
+		next = 0
+	}
 
-	return &TwoInputAdapter[L, R, O]{
+	eofInput, err := middleware.CreateQueueMiddleware(
+		"JOIN_Q2_"+strconv.Itoa(config.Id),
+		connSettings,
+	)
+	
+	if err != nil {
+		return nil, err
+	}
+
+	eofOutput, err := middleware.CreateQueueMiddleware(
+		"JOIN_Q2_"+strconv.Itoa(next),
+		connSettings,
+	)
+
+	if err != nil {
+		eofInput.Close()
+		return nil, err
+	}
+
+	handlerMessages := msgmonitor.NewMessageMonitor()
+
+	adapter:= &TwoInputAdapter[L, R, O]{
+		id:                config.Id,
+		joinAmount:        config.Amount,
+		handlerMessages:   handlerMessages,
+		outputQueueEof:    eofOutput,
+		totalRealAmount:   map[int]uint32{},
+		ringFired:         map[int]bool{},
+		queryID:           config.QueryID,
 		join:              newJoin[L, R, O](output, leftKey, rightKey, combine, leftCombine, config.QueryID),
 		leftInput:         leftInput,
 		rightInput:        rightInput,
@@ -79,12 +124,28 @@ func newTwoInputJoin[L, R, O any](
 		rightEofCount:     map[int]int{},
 		leftEofsExpected:  leftEofs,
 		rightEofsExpected: rightEofs,
-	}, nil
+	}
+
+	adapter.eofHandler = eofring.CreateEofRingAlgorithm(
+		eofInput,
+		eofOutput,
+		config.Amount,
+		uint32(config.Id),
+		output,
+		handlerMessages,
+		func(clientID int) error {
+			adapter.join.HandleQueryEOF(clientID)
+			return nil
+		},
+		config.QueryID,
+	)
+
+	return adapter, nil
 }
 
 func (a *TwoInputAdapter[L, R, O]) Run() {
 	done := make(chan struct{})
-
+	go a.eofHandler.Run()
 	go func() {
 		if err := a.leftInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 			defer ack()
@@ -95,10 +156,11 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 			}
 			if data.IsEOF() {
 				slog.Info("join got left EOF", "client_id", data.ClientID, "total_messages", data.EOF.TotalMessages)
-				a.handleEOF(data.ClientID, true)
+				a.handleEOF(data.ClientID, true, data.EOF.TotalMessages)
 				return
 			}
 			a.join.HandleLeft(data.ClientID, data.Payload)
+			a.handlerMessages.AddProcessedMessagesAmountByClientId(data.ClientID, 1)
 		}); err != nil {
 			slog.Error("while consuming left input", "err", err)
 		}
@@ -114,7 +176,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 		}
 		if data.IsEOF() {
 			slog.Info("join got right EOF", "client_id", data.ClientID)
-			a.handleEOF(data.ClientID, false)
+			a.handleEOF(data.ClientID, false, 0)
 			return
 		}
 		a.join.HandleRight(data.ClientID, data.Payload)
@@ -125,23 +187,47 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 	<-done
 }
 
-func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int, isLeft bool) {
+func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int, isLeft bool, totalMessages uint32) {
 	a.lock.Lock()
 	defer a.lock.Unlock()
 	if isLeft {
 		a.leftEofCount[clientID]++
+		if totalMessages > a.totalRealAmount[clientID] {
+			a.totalRealAmount[clientID] = totalMessages
+		}
 	} else {
 		a.rightEofCount[clientID]++
 	}
-	if a.leftEofCount[clientID] >= a.leftEofsExpected && a.rightEofCount[clientID] >= a.rightEofsExpected {
-		// LUCHO: aca fijate que la cantidad de mensajes procesado entre todos los joins sea igual a la cantidad de mensajes procesados por la
-		// etapa anterior (LOS REDUCERS) lo tenes en el EOF.TotalMessages. Si no es asi seguis dando vueltas.
-		// Tenes que tener un mapa compartido entre todos los joins (tenes una abstracción hecha en handlerMessages) donde vas guardando la cantidad de
-		// mensajes procesados por cada join y tenes que compartirlo con el eofring (omg otra vez un ring hi!)
-		delete(a.leftEofCount, clientID)
-		delete(a.rightEofCount, clientID)
-		a.join.HandleQueryEOF(clientID)
+
+	if a.leftEofCount[clientID] < a.leftEofsExpected || a.rightEofCount[clientID] < a.rightEofsExpected {
+		return
 	}
+	if a.ringFired[clientID] {
+		return
+	}
+	a.ringFired[clientID] = true
+
+	ringMsg := eofmessagetypes.EofRingMessage{
+		RealAmount:     a.totalRealAmount[clientID],
+		ActualAmount:   a.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
+		ClientId:       clientID,
+		Leader:         uint32(a.id),
+		FilteredAmount: a.handlerMessages.GetFilteredMessagesAmountByClientId(clientID),
+	}
+
+	delete(a.leftEofCount, clientID)
+	delete(a.rightEofCount, clientID)
+	delete(a.totalRealAmount, clientID)
+
+	serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
+	if err != nil {
+		slog.Error("while serializing ring message", "err", err)
+		return
+	}
+	if err := a.outputQueueEof.Send(*serialized); err != nil {
+		slog.Error("while sending ring message", "err", err)
+	}
+	slog.Info("join sent EOF ring message", "join_id", a.id, "client_id", clientID, "real_amount", ringMsg.RealAmount, "actual_amount", ringMsg.ActualAmount)
 }
 
 type SingleInputAdapter[T, O any] struct {

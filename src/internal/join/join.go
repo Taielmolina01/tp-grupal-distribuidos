@@ -91,7 +91,7 @@ func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
 }
 
 func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
-	slog.Info("join sending QueryEOF", "client_id", clientID, "query_id", j.queryID)
+	slog.Info("join emitting results", "client_id", clientID, "query_id", j.queryID)
 
 	j.mu.Lock()
 	if j.leftCombine != nil {
@@ -106,19 +106,6 @@ func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
 	delete(j.leftBuffer, clientID)
 	delete(j.rightBuffer, clientID)
 	j.mu.Unlock()
-
-	msg, err := inner.SerializeData(inner.DataMsg[O]{
-		ClientID: clientID,
-		QueryID:  j.queryID,
-		EOF:      &inner.EOFInfo{Kind: "query_eof"},
-	})
-	if err != nil {
-		slog.Error("while serializing query EOF", "err", err)
-		return
-	}
-	if err := j.output.Send(*msg); err != nil {
-		slog.Error("while sending query EOF", "err", err)
-	}
 }
 
 func (j *Join[L, R, O]) emit(clientID int, result O) {

@@ -359,6 +359,9 @@ services:
       - OUTPUT_ROUTING_KEYS=falopa2
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=1
+      - JOIN_AMOUNT=1
+      - ID=0
+
     logging:
       driver: json-file
       options:

@@ -14,6 +14,8 @@ const (
 )
 
 type JoinConfig struct {
+	Id 				   int 
+	Amount 			   int
 	MomHost            string
 	MomPort            int
 	InputExchange      string

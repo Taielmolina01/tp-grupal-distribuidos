@@ -43,7 +43,19 @@ func loadConfig() (join.JoinConfig, error) {
 	leftEofs, _ := strconv.Atoi(os.Getenv("LEFT_EOFS_EXPECTED"))
 	rightEofs, _ := strconv.Atoi(os.Getenv("RIGHT_EOFS_EXPECTED"))
 
+	id, err := strconv.Atoi(os.Getenv("ID"))
+	if err != nil {
+		return join.JoinConfig{}, errors.New("ID environment variable is required and must be a number")
+	}
+
+	joinAmount, err := strconv.Atoi(os.Getenv("JOIN_AMOUNT"))
+	if err != nil {
+		return join.JoinConfig{}, errors.New("JOIN_AMOUNT environment variable is required and must be a number")
+	}
+
 	return join.JoinConfig{
+		Id: 				id,
+		Amount: 			joinAmount,
 		MomHost:            momHost,
 		MomPort:            momPort,
 		InputExchange:      os.Getenv("INPUT_EXCHANGE"),
