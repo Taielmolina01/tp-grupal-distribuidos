@@ -93,6 +93,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 				slog.Error("while deserializing left message", "err", err)
 				return
 			}
+			slog.Info("join received left message", "client_id", data.ClientID, "payload", data.Payload)
 			if data.IsEOF() {
 				slog.Info("join got left EOF", "client_id", data.ClientID)
 				a.handleEOF(data.ClientID, true)

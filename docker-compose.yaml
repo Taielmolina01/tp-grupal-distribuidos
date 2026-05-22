@@ -266,7 +266,7 @@ services:
         condition: service_healthy
     environment:
       - ID=0
-      - REDUCER_AMOUNT=1
+      - REDUCER_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - INPUT_EXCHANGE=filtered_transfers_exchange
@@ -283,32 +283,32 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # reducer_q2_1:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/reducer/Dockerfile
-  #   container_name: reducer_q2_1
-  #   depends_on:
-  #     rabbitmq:
-  #       condition: service_healthy
-  #   environment:
-  #     - ID=1
-  #     - REDUCER_AMOUNT=2
-  #     - MOM_HOST=rabbitmq
-  #     - MOM_PORT=5672
-  #     - INPUT_EXCHANGE=filtered_transfers_exchange
-  #     - INPUT_QUEUE=reducer_q2_in_q
-  #     - INPUT_ROUTING_KEYS=falopa
-  #     - OUTPUT_EXCHANGE=reduced_transfers_q2_exchange
-  #     - OUTPUT_QUEUE=reduced_transfers_q2_q
-  #     - OUTPUT_ROUTING_KEYS=falopa
-  #     - QUERY_ID=2
-  #     - INPUT_EOFS_EXPECTED=2
-  #   logging:
-  #     driver: json-file
-  #     options:
-  #       max-size: "50m"
-  #       max-file: "3"
+  reducer_q2_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/reducer/Dockerfile
+    container_name: reducer_q2_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=1
+      - REDUCER_AMOUNT=2
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_EXCHANGE=filtered_transfers_exchange
+      - INPUT_QUEUE=reducer_q2_in_q
+      - INPUT_ROUTING_KEYS=falopa
+      - OUTPUT_EXCHANGE=reduced_transfers_q2_exchange
+      - OUTPUT_QUEUE=reduced_transfers_q2_q
+      - OUTPUT_ROUTING_KEYS=falopa
+      - QUERY_ID=2
+      - INPUT_EOFS_EXPECTED=2
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   # reducer_q2_2:
   #   build:
@@ -357,7 +357,7 @@ services:
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=falopa2
-      - LEFT_EOFS_EXPECTED=1
+      - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=1
     logging:
       driver: json-file

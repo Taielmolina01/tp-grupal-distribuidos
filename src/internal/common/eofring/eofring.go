@@ -101,11 +101,12 @@ func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Me
 			// al primer caso.
 			eofRingMessage.ActualAmount = value
 			eofRingMessage.FilteredAmount = eofring.messagesMonitor.GetFilteredMessagesAmountByClientId(eofRingMessage.ClientId)
-
+			slog.Info("Restarting EOF ring because not all messages were processed", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
 		} else {
 			// Si no soy el líder simplemente sumo los mensajes que yo leí del cliente X y lo sumo al mensaje del ring y lo forwardeo.
 			eofRingMessage.ActualAmount += value
 			eofRingMessage.FilteredAmount += eofring.messagesMonitor.GetFilteredMessagesAmountByClientId(eofRingMessage.ClientId)
+			slog.Info("Forwarding EOF ring message with updated counts", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
 		}
 
 		eofring.sendEofMessageToQueue(eofRingMessage, ack)
