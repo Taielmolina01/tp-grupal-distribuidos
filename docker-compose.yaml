@@ -5,8 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: rabbitmq
     environment:
-      - RABBITMQ_LOG_LEVELS=error
-      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbit vm_memory_high_watermark 0.4
+    - RABBITMQ_LOG_LEVELS=error
+    - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbit vm_memory_high_watermark 0.4
     healthcheck:
       interval: 5s
       retries: 10
@@ -14,8 +14,8 @@ services:
       test: rabbitmq-diagnostics check_port_connectivity
       timeout: 3s
     ports:
-      - 5672:5672
-      - 15672:15672
+    - 5672:5672
+    - 15672:15672
 
   gateway:
     build:
@@ -26,13 +26,13 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ACCOUNTS_EXCHANGE=accounts_exchange
-      - TRANSFERS_EXCHANGE=transfers_exchange
-      - RESULTS_QUEUE=results_queue
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - SERVER_HOST=gateway
-      - SERVER_PORT=5678
+    - ACCOUNTS_EXCHANGE=accounts_exchange
+    - TRANSFERS_EXCHANGE=transfers_exchange
+    - RESULTS_QUEUE=results_queue
+    - MOM_HOST=rabbitmq
+    - MOM_PORT=5672
+    - SERVER_HOST=gateway
+    - SERVER_PORT=5678
 
   client_0:
     build:
@@ -40,18 +40,18 @@ services:
       dockerfile: cmd/client/Dockerfile
     container_name: client_0
     depends_on:
-      - gateway
+    - gateway
     environment:
-      - SERVER_HOST=gateway
-      - SERVER_PORT=5678
-      - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
-      - INPUT_FILE_TRANS=/input/transactions_0.csv
-      - OUTPUT_FILE_PREFIX=/output/output_0
-      - MAX_BATCH_SIZE=10
-      - LOG_LEVEL=DEBUG
+    - SERVER_HOST=gateway
+    - SERVER_PORT=5678
+    - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
+    - INPUT_FILE_TRANS=/input/transactions_0.csv
+    - OUTPUT_FILE_PREFIX=/output/output_0
+    - MAX_BATCH_SIZE=1000
+    - LOG_LEVEL=DEBUG
     volumes:
-      - ./input:/input
-      - ./output:/output
+    - ./input:/input
+    - ./output:/output 
 
   client_1:
     build:
@@ -59,18 +59,19 @@ services:
       dockerfile: cmd/client/Dockerfile
     container_name: client_1
     depends_on:
-      - gateway
+    - gateway
     environment:
-      - SERVER_HOST=gateway
-      - SERVER_PORT=5678
-      - INPUT_FILE_ACCOUNTS=/input/accounts_1.csv
-      - INPUT_FILE_TRANS=/input/transactions_0.csv
-      - OUTPUT_FILE_PREFIX=/output/output_1
-      - MAX_BATCH_SIZE=10
-      - LOG_LEVEL=DEBUG
+    - SERVER_HOST=gateway
+    - SERVER_PORT=5678
+    - INPUT_FILE_ACCOUNTS=/input/accounts_1.csv
+    - INPUT_FILE_TRANS=/input/transactions_0.csv
+    - OUTPUT_FILE_PREFIX=/output/output_1
+    - MAX_BATCH_SIZE=1000
+    - LOG_LEVEL=DEBUG
     volumes:
-      - ./input:/input
-      - ./output:/output
+    - ./input:/input
+    - ./output:/output 
+
 
   # client_2:
   #   build:
@@ -83,9 +84,9 @@ services:
   #   - SERVER_HOST=gateway
   #   - SERVER_PORT=5678
   #   - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
-  #   - INPUT_FILE_TRANS=/input/transactions-FULL.csv
+  #   - INPUT_FILE_TRANS=/input/transactions_0.csv
   #   - OUTPUT_FILE_PREFIX=/output/output_2
-  #   - MAX_BATCH_SIZE=10
+  #   - MAX_BATCH_SIZE=1000
   #   - LOG_LEVEL=DEBUG
   #   volumes:
   #   - ./input:/input
@@ -102,9 +103,9 @@ services:
   #   - SERVER_HOST=gateway
   #   - SERVER_PORT=5678
   #   - INPUT_FILE_ACCOUNTS=/input/accounts_1.csv
-  #   - INPUT_FILE_TRANS=/input/transactions-FULL.csv
+  #   - INPUT_FILE_TRANS=/input/transactions_0.csv
   #   - OUTPUT_FILE_PREFIX=/output/output_3
-  #   - MAX_BATCH_SIZE=10
+  #   - MAX_BATCH_SIZE=1000
   #   - LOG_LEVEL=DEBUG
   #   volumes:
   #   - ./input:/input
@@ -121,9 +122,9 @@ services:
   #   - SERVER_HOST=gateway
   #   - SERVER_PORT=5678
   #   - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
-  #   - INPUT_FILE_TRANS=/input/transactions-FULL.csv
+  #   - INPUT_FILE_TRANS=/input/transactions_0.csv
   #   - OUTPUT_FILE_PREFIX=/output/output_4
-  #   - MAX_BATCH_SIZE=10
+  #   - MAX_BATCH_SIZE=1000
   #   - LOG_LEVEL=DEBUG
   #   volumes:
   #   - ./input:/input
@@ -140,9 +141,9 @@ services:
   #   - SERVER_HOST=gateway
   #   - SERVER_PORT=5678
   #   - INPUT_FILE_ACCOUNTS=/input/accounts_1.csv
-  #   - INPUT_FILE_TRANS=/input/transactions-FULL.csv
+  #   - INPUT_FILE_TRANS=/input/transactions_0.csv
   #   - OUTPUT_FILE_PREFIX=/output/output_5
-  #   - MAX_BATCH_SIZE=10
+  #   - MAX_BATCH_SIZE=1000
   #   - LOG_LEVEL=DEBUG
   #   volumes:
   #   - ./input:/input
@@ -157,18 +158,23 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ID=0
-      - MOM_PORT=5672
-      - MOM_HOST=rabbitmq
-      - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_QUEUE=transfers_queue
-      - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
-      - OUTPUT_EXCHANGE=filtered_transfers_exchange
-      - OUTPUT_QUEUE=filtered_transfers_q
-      - OUTPUT_ROUTING_KEYS=falopa
-      - CURRENCIES=US Dollar
-      - FILTER_TYPE=CURRENCY
-      - FILTER_AMOUNT=2
+    - ID=0
+    - MOM_PORT=5672
+    - MOM_HOST=rabbitmq
+    - INPUT_EXCHANGE=transfers_exchange
+    - INPUT_QUEUE=transfers_queue
+    - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
+    - OUTPUT_EXCHANGE=filtered_transfers_exchange
+    - OUTPUT_QUEUE=filtered_transfers_q
+    - OUTPUT_ROUTING_KEYS=falopa
+    - CURRENCIES=US Dollar
+    - FILTER_TYPE=CURRENCY
+    - FILTER_AMOUNT=2
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   filter_currency_1:
     build:
@@ -179,18 +185,23 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ID=1
-      - MOM_PORT=5672
-      - MOM_HOST=rabbitmq
-      - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_QUEUE=transfers_queue
-      - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
-      - OUTPUT_EXCHANGE=filtered_transfers_exchange
-      - OUTPUT_QUEUE=filtered_transfers_q
-      - OUTPUT_ROUTING_KEYS=falopa
-      - CURRENCIES=US Dollar
-      - FILTER_TYPE=CURRENCY
-      - FILTER_AMOUNT=2
+    - ID=1
+    - MOM_PORT=5672
+    - MOM_HOST=rabbitmq
+    - INPUT_EXCHANGE=transfers_exchange
+    - INPUT_QUEUE=transfers_queue
+    - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
+    - OUTPUT_EXCHANGE=filtered_transfers_exchange
+    - OUTPUT_QUEUE=filtered_transfers_q
+    - OUTPUT_ROUTING_KEYS=falopa
+    - CURRENCIES=US Dollar
+    - FILTER_TYPE=CURRENCY
+    - FILTER_AMOUNT=2
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   filter_amount_0:
     build:
@@ -201,18 +212,23 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ID=0
-      - MOM_PORT=5672
-      - MOM_HOST=rabbitmq
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=filtered_transfers_q
-      - INPUT_ROUTING_KEYS=falopa
-      - OUTPUT_EXCHANGE=results_queue
-      - OUTPUT_QUEUE=results_queue
-      - OUTPUT_ROUTING_KEYS=falopa2
-      - AMOUNT=50.0
-      - FILTER_TYPE=AMOUNT
-      - FILTER_AMOUNT=2
+    - ID=0
+    - MOM_PORT=5672
+    - MOM_HOST=rabbitmq
+    - INPUT_EXCHANGE=filtered_transfers_exchange
+    - INPUT_QUEUE=filtered_transfers_q
+    - INPUT_ROUTING_KEYS=falopa
+    - OUTPUT_EXCHANGE=results_queue
+    - OUTPUT_QUEUE=results_queue
+    - OUTPUT_ROUTING_KEYS=falopa2
+    - AMOUNT=50.0
+    - FILTER_TYPE=AMOUNT
+    - FILTER_AMOUNT=2
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   filter_amount_1:
     build:
@@ -223,19 +239,23 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ID=1
-      - MOM_PORT=5672
-      - MOM_HOST=rabbitmq
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=filtered_transfers_q
-      - INPUT_ROUTING_KEYS=falopa
-      - OUTPUT_EXCHANGE=results_queue
-      - OUTPUT_QUEUE=results_queue
-      - OUTPUT_ROUTING_KEYS=falopa2
-      - AMOUNT=50.0
-      - FILTER_TYPE=AMOUNT
-      - FILTER_AMOUNT=2
-
+    - ID=1
+    - MOM_PORT=5672
+    - MOM_HOST=rabbitmq
+    - INPUT_EXCHANGE=filtered_transfers_exchange
+    - INPUT_QUEUE=filtered_transfers_q
+    - INPUT_ROUTING_KEYS=falopa
+    - OUTPUT_EXCHANGE=results_queue
+    - OUTPUT_QUEUE=results_queue
+    - OUTPUT_ROUTING_KEYS=falopa2
+    - AMOUNT=50.0
+    - FILTER_TYPE=AMOUNT
+    - FILTER_AMOUNT=2
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
   reducer_q2_0:
     build:
       context: ./src/
@@ -245,17 +265,22 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ID=0
-      - REDUCER_AMOUNT=1
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=reducer_q2_in_q
-      - INPUT_ROUTING_KEYS=falopa
-      - OUTPUT_EXCHANGE=reduced_transfers_q2_exchange
-      - OUTPUT_QUEUE=reduced_transfers_q2_q
-      - OUTPUT_ROUTING_KEYS=falopa
-      - QUERY_ID=2
+    - ID=0
+    - REDUCER_AMOUNT=1
+    - MOM_HOST=rabbitmq
+    - MOM_PORT=5672
+    - INPUT_EXCHANGE=filtered_transfers_exchange
+    - INPUT_QUEUE=reducer_q2_in_q
+    - INPUT_ROUTING_KEYS=falopa
+    - OUTPUT_EXCHANGE=reduced_transfers_q2_exchange
+    - OUTPUT_QUEUE=reduced_transfers_q2_q
+    - OUTPUT_ROUTING_KEYS=falopa
+    - QUERY_ID=2
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   join_q2_0:
     build:
@@ -266,15 +291,20 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - JOIN_TYPE=transfer_account_by_bank
-      - LEFT_INPUT_EXCHANGE=reduced_transfers_q2_exchange
-      - LEFT_INPUT_QUEUE=join_q2_transfers_q
-      - LEFT_INPUT_ROUTING_KEYS=falopa
-      - RIGHT_INPUT_EXCHANGE=accounts_exchange
-      - RIGHT_INPUT_QUEUE=join_q2_accounts_q
-      - RIGHT_INPUT_ROUTING_KEYS=ACCOUNTS_KEY
-      - OUTPUT_EXCHANGE=results_queue
-      - OUTPUT_QUEUE=results_queue
-      - OUTPUT_ROUTING_KEYS=falopa2
+    - MOM_HOST=rabbitmq
+    - MOM_PORT=5672
+    - JOIN_TYPE=transfer_account_by_bank
+    - LEFT_INPUT_EXCHANGE=reduced_transfers_q2_exchange
+    - LEFT_INPUT_QUEUE=join_q2_transfers_q
+    - LEFT_INPUT_ROUTING_KEYS=falopa
+    - RIGHT_INPUT_EXCHANGE=accounts_exchange
+    - RIGHT_INPUT_QUEUE=join_q2_accounts_q
+    - RIGHT_INPUT_ROUTING_KEYS=ACCOUNTS_KEY
+    - OUTPUT_EXCHANGE=results_queue
+    - OUTPUT_QUEUE=results_queue
+    - OUTPUT_ROUTING_KEYS=falopa2
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
