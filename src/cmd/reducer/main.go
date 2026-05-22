@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 
 	"tp-grupal-distribuidos/internal/reducer"
 )
@@ -31,11 +32,43 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		return reducer.ReducerConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
 	}
 
+	queryId, err := strconv.Atoi(os.Getenv("QUERY_ID"))
+	if err != nil {
+		return reducer.ReducerConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
+	}
+
+	id, err := strconv.Atoi(os.Getenv("ID"))
+	if err != nil {
+		return reducer.ReducerConfig{}, errors.New("ID environment variable is required and must be a number")
+	}
+
+	reducerAmount, err := strconv.Atoi(os.Getenv("REDUCER_AMOUNT"))
+	if err != nil {
+		return reducer.ReducerConfig{}, errors.New("REDUCER_AMOUNT environment variable is required and must be a number")
+	}
+
+	inputRoutingKeysStr := os.Getenv("INPUT_ROUTING_KEYS")
+	inputRoutingKeys := []string{}
+	if inputRoutingKeysStr != "" {
+		inputRoutingKeys = strings.Split(inputRoutingKeysStr, ",")
+	}
+
+	outputRoutingKeysStr := os.Getenv("OUTPUT_ROUTING_KEYS")
+	outputRoutingKeys := []string{}
+	if outputRoutingKeysStr != "" {
+		outputRoutingKeys = strings.Split(outputRoutingKeysStr, ",")
+	}
+
 	return reducer.ReducerConfig{
-		MomHost:        momHost,
-		MomPort:        momPort,
-		InputExchange:  inputExchange,
-		OutputExchange: outputExchange,
+		Id:                id,
+		ReducerAmount:     reducerAmount,
+		MomHost:           momHost,
+		MomPort:           momPort,
+		InputExchange:     inputExchange,
+		OutputExchange:    outputExchange,
+		QueryId:           uint8(queryId),
+		InputRoutingKeys:  inputRoutingKeys,
+		OutputRoutingKeys: outputRoutingKeys,
 	}, nil
 }
 

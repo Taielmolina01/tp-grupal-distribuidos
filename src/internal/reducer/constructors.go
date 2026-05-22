@@ -15,5 +15,6 @@ func CreateReducerMaxAmountFromBank(config ReducerConfig) (worker.Worker, error)
 				return t2
 			}
 		},
+		config.QueryId,
 	)
 }

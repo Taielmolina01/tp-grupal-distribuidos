@@ -236,6 +236,27 @@ services:
       - FILTER_TYPE=AMOUNT
       - FILTER_AMOUNT=2
 
+  reducer_q2_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/reducer/Dockerfile
+    container_name: reducer_q2_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=0
+      - REDUCER_AMOUNT=1
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_EXCHANGE=filtered_transfers_exchange
+      - INPUT_QUEUE=reducer_q2_in_q
+      - INPUT_ROUTING_KEYS=falopa
+      - OUTPUT_EXCHANGE=reduced_transfers_q2_exchange
+      - OUTPUT_QUEUE=reduced_transfers_q2_q
+      - OUTPUT_ROUTING_KEYS=falopa
+      - QUERY_ID=2
+
   join_q2_0:
     build:
       context: ./src/
@@ -248,7 +269,7 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - JOIN_TYPE=transfer_account_by_bank
-      - LEFT_INPUT_EXCHANGE=filtered_transfers_exchange
+      - LEFT_INPUT_EXCHANGE=reduced_transfers_q2_exchange
       - LEFT_INPUT_QUEUE=join_q2_transfers_q
       - LEFT_INPUT_ROUTING_KEYS=falopa
       - RIGHT_INPUT_EXCHANGE=accounts_exchange

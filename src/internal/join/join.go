@@ -27,15 +27,19 @@ func newJoin[L, R, O any](
 
 func (j *Join[L, R, O]) HandleLeft(clientID int, record L) {
 	key := j.leftKey(record)
+	slog.Info("join HandleLeft", "client_id", clientID, "key", key)
 
 	j.mu.Lock()
+	rightSize := len(j.rightBuffer[clientID])
 	if rightMap, ok := j.rightBuffer[clientID]; ok {
 		if rightRecord, ok := rightMap[key]; ok {
 			j.mu.Unlock()
+			slog.Info("join HandleLeft MATCH", "client_id", clientID, "key", key)
 			j.emit(clientID, j.combine(record, rightRecord))
 			return
 		}
 	}
+	slog.Info("join HandleLeft NO MATCH, buffering", "client_id", clientID, "key", key, "right_buffer_size", rightSize)
 
 	if j.leftBuffer[clientID] == nil {
 		j.leftBuffer[clientID] = map[string]L{}
