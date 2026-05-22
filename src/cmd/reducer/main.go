@@ -59,6 +59,8 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		outputRoutingKeys = strings.Split(outputRoutingKeysStr, ",")
 	}
 
+	inputEofsExpected, _ := strconv.Atoi(os.Getenv("INPUT_EOFS_EXPECTED"))
+
 	return reducer.ReducerConfig{
 		Id:                id,
 		ReducerAmount:     reducerAmount,
@@ -67,8 +69,11 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		InputExchange:     inputExchange,
 		OutputExchange:    outputExchange,
 		QueryId:           uint8(queryId),
+		InputQueue:        os.Getenv("INPUT_QUEUE"),
+		OutputQueue:       os.Getenv("OUTPUT_QUEUE"),
 		InputRoutingKeys:  inputRoutingKeys,
 		OutputRoutingKeys: outputRoutingKeys,
+		InputEofsExpected: inputEofsExpected,
 	}, nil
 }
 

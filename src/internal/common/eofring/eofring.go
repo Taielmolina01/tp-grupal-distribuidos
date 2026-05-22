@@ -24,7 +24,7 @@ type eofRingAlgorithmImpl struct {
 	// typeOfNode should be an enum defined somewhere in common, but for simplicity I just left it as a string
 	typeOfNode    string
 	totalMessages *uint32
-	finishCallback func() error
+	finishCallback func(clientID int) error
 	queryId uint8
 }
 
@@ -34,7 +34,7 @@ func CreateEofRingAlgorithm(
 	id uint32,
 	outputExchange middleware.Middleware,
 	messageMonitor msgmonitor.MessageMonitor,
-	finishCallback func() error,
+	finishCallback func(clientID int) error,
 	queryId uint8,
 ) EofRingAlgorithm {
 	return &eofRingAlgorithmImpl{
@@ -153,14 +153,14 @@ func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *eofmessagetypes
 		QueryID: eofring.queryId,
 	})
 
-	if err := eofring.finishCallback(); err != nil {
+	if err := eofring.finishCallback(msg.ClientID); err != nil {
 		slog.Error("Error finishing callback", "err", err)
 	}
 	eofring.outputExchange.Send(*msgToOutput)
 
 	msg.Hops++
 
-	if msg.Hops >= eofring.amountReplicas-1 {
+	if msg.Hops >= eofring.amountReplicas {
 		return nil
 	}
 

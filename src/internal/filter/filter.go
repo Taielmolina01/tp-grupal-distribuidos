@@ -75,7 +75,7 @@ func newFilter[T comparable, O comparable](
 			uint32(config.Id),
 			outputExchange,
 			handlerMessages,
-			func() error {
+			func(clientID int) error {
 				return nil
 			},
 			queryId,

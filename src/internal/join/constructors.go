@@ -48,5 +48,11 @@ func CreateTransferAccountByBankJoin(config JoinConfig) (worker.Worker, error) {
 				Amount:      t.AmountPaid,
 			}
 		},
+		func(t1, t2 transfer.Transfer) transfer.Transfer {
+			if t1.AmountPaid > t2.AmountPaid {
+				return t1
+			}
+			return t2
+		},
 	)
 }

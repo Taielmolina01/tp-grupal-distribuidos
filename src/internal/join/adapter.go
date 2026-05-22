@@ -13,11 +13,14 @@ import (
 )
 
 type TwoInputAdapter[L, R, O any] struct {
-	join       *Join[L, R, O]
-	leftInput  middleware.Middleware
-	rightInput middleware.Middleware
-	eofCount   map[int]int
-	lock       sync.Mutex
+	join              *Join[L, R, O]
+	leftInput         middleware.Middleware
+	rightInput        middleware.Middleware
+	leftEofCount      map[int]int
+	rightEofCount     map[int]int
+	leftEofsExpected  int
+	rightEofsExpected int
+	lock              sync.Mutex
 }
 
 func newTwoInputJoin[L, R, O any](
@@ -25,6 +28,7 @@ func newTwoInputJoin[L, R, O any](
 	leftKey func(L) string,
 	rightKey func(R) string,
 	combine func(L, R) O,
+	leftCombine func(L, L) L,
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
@@ -58,11 +62,23 @@ func newTwoInputJoin[L, R, O any](
 		"output_exchange", config.OutputExchange, "output_keys", config.OutputRoutingKeys,
 	)
 
+	leftEofs := config.LeftEofsExpected
+	if leftEofs <= 0 {
+		leftEofs = 1
+	}
+	rightEofs := config.RightEofsExpected
+	if rightEofs <= 0 {
+		rightEofs = 1
+	}
+
 	return &TwoInputAdapter[L, R, O]{
-		join:       newJoin[L, R, O](output, leftKey, rightKey, combine, config.QueryID),
-		leftInput:  leftInput,
-		rightInput: rightInput,
-		eofCount:   map[int]int{},
+		join:              newJoin[L, R, O](output, leftKey, rightKey, combine, leftCombine, config.QueryID),
+		leftInput:         leftInput,
+		rightInput:        rightInput,
+		leftEofCount:      map[int]int{},
+		rightEofCount:     map[int]int{},
+		leftEofsExpected:  leftEofs,
+		rightEofsExpected: rightEofs,
 	}, nil
 }
 
@@ -79,7 +95,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 			}
 			if data.IsEOF() {
 				slog.Info("join got left EOF", "client_id", data.ClientID)
-				a.handleEOF(data.ClientID)
+				a.handleEOF(data.ClientID, true)
 				return
 			}
 			a.join.HandleLeft(data.ClientID, data.Payload)
@@ -98,7 +114,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 		}
 		if data.IsEOF() {
 			slog.Info("join got right EOF", "client_id", data.ClientID)
-			a.handleEOF(data.ClientID)
+			a.handleEOF(data.ClientID, false)
 			return
 		}
 		a.join.HandleRight(data.ClientID, data.Payload)
@@ -109,12 +125,17 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 	<-done
 }
 
-func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
+func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int, isLeft bool) {
 	a.lock.Lock()
 	defer a.lock.Unlock()
-	a.eofCount[clientID]++
-	if a.eofCount[clientID] == 2 {
-		delete(a.eofCount, clientID)
+	if isLeft {
+		a.leftEofCount[clientID]++
+	} else {
+		a.rightEofCount[clientID]++
+	}
+	if a.leftEofCount[clientID] >= a.leftEofsExpected && a.rightEofCount[clientID] >= a.rightEofsExpected {
+		delete(a.leftEofCount, clientID)
+		delete(a.rightEofCount, clientID)
 		a.join.HandleQueryEOF(clientID)
 	}
 }
@@ -148,7 +169,7 @@ func newSingleInputJoin[T, O any](
 	}
 
 	return &SingleInputAdapter[T, O]{
-		join:   newJoin[T, T, O](output, leftKey, rightKey, combine, config.QueryID),
+		join:   newJoin[T, T, O](output, leftKey, rightKey, combine, nil, config.QueryID),
 		input:  input,
 		isLeft: isLeft,
 	}, nil

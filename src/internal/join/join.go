@@ -12,6 +12,7 @@ func newJoin[L, R, O any](
 	leftKey func(L) string,
 	rightKey func(R) string,
 	combine func(L, R) O,
+	leftCombine func(L, L) L,
 	queryID uint8,
 ) *Join[L, R, O] {
 	return &Join[L, R, O]{
@@ -21,25 +22,35 @@ func newJoin[L, R, O any](
 		leftKey:     leftKey,
 		rightKey:    rightKey,
 		combine:     combine,
+		leftCombine: leftCombine,
 		queryID:     queryID,
 	}
 }
 
 func (j *Join[L, R, O]) HandleLeft(clientID int, record L) {
 	key := j.leftKey(record)
-	slog.Info("join HandleLeft", "client_id", clientID, "key", key)
 
 	j.mu.Lock()
-	rightSize := len(j.rightBuffer[clientID])
+	if j.leftCombine != nil {
+		if j.leftBuffer[clientID] == nil {
+			j.leftBuffer[clientID] = map[string]L{}
+		}
+		if existing, ok := j.leftBuffer[clientID][key]; ok {
+			j.leftBuffer[clientID][key] = j.leftCombine(existing, record)
+		} else {
+			j.leftBuffer[clientID][key] = record
+		}
+		j.mu.Unlock()
+		return
+	}
+
 	if rightMap, ok := j.rightBuffer[clientID]; ok {
 		if rightRecord, ok := rightMap[key]; ok {
 			j.mu.Unlock()
-			slog.Info("join HandleLeft MATCH", "client_id", clientID, "key", key)
 			j.emit(clientID, j.combine(record, rightRecord))
 			return
 		}
 	}
-	slog.Info("join HandleLeft NO MATCH, buffering", "client_id", clientID, "key", key, "right_buffer_size", rightSize)
 
 	if j.leftBuffer[clientID] == nil {
 		j.leftBuffer[clientID] = map[string]L{}
@@ -52,6 +63,15 @@ func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
 	key := j.rightKey(record)
 
 	j.mu.Lock()
+	if j.leftCombine != nil {
+		if j.rightBuffer[clientID] == nil {
+			j.rightBuffer[clientID] = map[string]R{}
+		}
+		j.rightBuffer[clientID][key] = record
+		j.mu.Unlock()
+		return
+	}
+
 	if leftMap, ok := j.leftBuffer[clientID]; ok {
 		if leftRecord, ok := leftMap[key]; ok {
 			j.mu.Unlock()
@@ -69,7 +89,17 @@ func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
 
 func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
 	slog.Info("join sending QueryEOF", "client_id", clientID, "query_id", j.queryID)
+
 	j.mu.Lock()
+	if j.leftCombine != nil {
+		leftMap := j.leftBuffer[clientID]
+		rightMap := j.rightBuffer[clientID]
+		for key, leftRecord := range leftMap {
+			if rightRecord, ok := rightMap[key]; ok {
+				j.emit(clientID, j.combine(leftRecord, rightRecord))
+			}
+		}
+	}
 	delete(j.leftBuffer, clientID)
 	delete(j.rightBuffer, clientID)
 	j.mu.Unlock()

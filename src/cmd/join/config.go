@@ -40,6 +40,9 @@ func loadConfig() (join.JoinConfig, error) {
 		return join.JoinConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
 	}
 
+	leftEofs, _ := strconv.Atoi(os.Getenv("LEFT_EOFS_EXPECTED"))
+	rightEofs, _ := strconv.Atoi(os.Getenv("RIGHT_EOFS_EXPECTED"))
+
 	return join.JoinConfig{
 		MomHost:            momHost,
 		MomPort:            momPort,
@@ -55,5 +58,7 @@ func loadConfig() (join.JoinConfig, error) {
 		OutputExchange:     outputExchange,
 		OutputQueue:        os.Getenv("OUTPUT_QUEUE"),
 		OutputRoutingKeys:  splitKeys(os.Getenv("OUTPUT_ROUTING_KEYS")),
+		LeftEofsExpected:   leftEofs,
+		RightEofsExpected:  rightEofs,
 	}, nil
 }

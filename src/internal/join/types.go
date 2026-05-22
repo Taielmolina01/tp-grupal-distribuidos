@@ -29,6 +29,8 @@ type JoinConfig struct {
 	OutputQueue        string
 	OutputRoutingKeys  []string
 	QueryID            uint8
+	LeftEofsExpected   int
+	RightEofsExpected  int
 }
 
 type Join[L, R, O any] struct {
@@ -38,6 +40,7 @@ type Join[L, R, O any] struct {
 	leftKey     func(L) string
 	rightKey    func(R) string
 	combine     func(L, R) O
+	leftCombine func(L, L) L // optional: if set, left values with same key are combined and emit happens at QueryEOF
 	queryID     uint8
 	mu          sync.Mutex
 }

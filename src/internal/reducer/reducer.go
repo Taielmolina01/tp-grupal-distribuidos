@@ -16,36 +16,41 @@ import (
 )
 
 type ReducerConfig struct {
-	Id             int
-	ReducerAmount  int
-	MomHost        string
-	MomPort        int
-	InputExchange  string
-	OutputExchange string
-	QueryId        uint8
-	OutputQueue    string
+	Id                int
+	ReducerAmount     int
+	MomHost           string
+	MomPort           int
+	InputExchange     string
+	OutputExchange    string
+	QueryId           uint8
+	InputQueue        string
+	OutputQueue       string
 	InputRoutingKeys  []string
 	OutputRoutingKeys []string
+	InputEofsExpected int
 }
 
 type Reducer[T comparable] struct {
-	id              int
-	inputExchange   middleware.Middleware
-	outputExchange  middleware.Middleware
-	actualValue     *T
-	callback        func(T, T) T
-	eofHandler      eofring.EofRingAlgorithm
-	handlerMessages msgmonitor.MessageMonitor
-	outputQueueEof  middleware.Middleware
-	queryId        uint8
-	clientID       int
+	id                int
+	inputExchange     middleware.Middleware
+	outputExchange    middleware.Middleware
+	actualValues      map[int]map[string]T
+	callback          func(T, T) T
+	keyFunc           func(T) string
+	eofHandler        eofring.EofRingAlgorithm
+	handlerMessages   msgmonitor.MessageMonitor
+	outputQueueEof    middleware.Middleware
+	queryId           uint8
+	inputEofsExpected int
+	inputEofCount     map[int]int
+	totalRealAmount   map[int]uint32
 }
 
 
-func newReducer[T comparable](config ReducerConfig, callback func(T, T) T, queryId uint8) (worker.Worker, error) {
+func newReducer[T comparable](config ReducerConfig, callback func(T, T) T, keyFunc func(T) string, queryId uint8) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, config.OutputQueue, config.OutputRoutingKeys, connSettings)
+	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, config.InputQueue, config.InputRoutingKeys, connSettings)
 	if err != nil {
 		return nil, err
 	}
@@ -81,11 +86,20 @@ func newReducer[T comparable](config ReducerConfig, callback func(T, T) T, query
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
 	
+	expectedEofs := config.InputEofsExpected
+	if expectedEofs <= 0 {
+		expectedEofs = 1
+	}
+
 	reducer := &Reducer[T]{
-		inputExchange:  inputExchange,
-		outputExchange: outputExchange,
-		actualValue:    nil,
-		callback:       callback,
+		inputExchange:     inputExchange,
+		outputExchange:    outputExchange,
+		actualValues:      map[int]map[string]T{},
+		callback:          callback,
+		keyFunc:           keyFunc,
+		inputEofsExpected: expectedEofs,
+		inputEofCount:     map[int]int{},
+		totalRealAmount:   map[int]uint32{},
 	}
 
 	eofHandler := eofring.CreateEofRingAlgorithm(
@@ -95,16 +109,23 @@ func newReducer[T comparable](config ReducerConfig, callback func(T, T) T, query
 		uint32(config.Id),
 		outputExchange,
 		handlerMessages,
-		func() error {
-			msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
-				Payload:  *reducer.actualValue,
-				ClientID: reducer.clientID,
-				QueryID:  reducer.queryId,
-			})
-			if err != nil {
-				return err
+		func(clientID int) error {
+			values := reducer.actualValues[clientID]
+			for _, v := range values {
+				msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
+					Payload:  v,
+					ClientID: clientID,
+					QueryID:  reducer.queryId,
+				})
+				if err != nil {
+					return err
+				}
+				if err := reducer.outputExchange.Send(*msgOutput); err != nil {
+					return err
+				}
 			}
-			return reducer.outputExchange.Send(*msgOutput)
+			delete(reducer.actualValues, clientID)
+			return nil
 		},
 		queryId,
 	)
@@ -138,19 +159,25 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 	}
 
 	if result.IsEOF() {
-		slog.Info("EOF message received, sending final result")
-
-		if reducer.actualValue == nil {
-			slog.Info("No data received, sending EOF message")
+		reducer.inputEofCount[result.ClientID]++
+		reducer.totalRealAmount[result.ClientID] = result.EOF.TotalMessages
+		slog.Info("input EOF received", "client_id", result.ClientID, "count", reducer.inputEofCount[result.ClientID], "expected", reducer.inputEofsExpected)
+		if reducer.inputEofCount[result.ClientID] < reducer.inputEofsExpected {
+			return
 		}
 
+		slog.Info("all input EOFs received, starting ring", "client_id", result.ClientID, "total_real", reducer.totalRealAmount[result.ClientID])
+
 		eofRingMessage := eofmessagetypes.EofRingMessage{
-			RealAmount:     result.EOF.TotalMessages,
+			RealAmount:     reducer.totalRealAmount[result.ClientID],
 			ActualAmount:   reducer.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
 			ClientId:       result.ClientID,
 			Leader:         uint32(reducer.id),
 			FilteredAmount: reducer.handlerMessages.GetFilteredMessagesAmountByClientId(result.ClientID),
 		}
+		delete(reducer.inputEofCount, result.ClientID)
+		delete(reducer.totalRealAmount, result.ClientID)
+
 		serializedEofRingMessage, err := inner.SerializeEofFromQueueMsg(eofRingMessage)
 
 		if err != nil {
@@ -164,15 +191,17 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 			slog.Error("While sending EOF message to EOF ring", "err", err)
 		}
 		slog.Info("EOF message sent to EOF ring", "filter_id", reducer.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
-		slog.Info("Total messages processed by filter", "filter_id", reducer.id, "client_id", reducer.id, "processed_messages", reducer.handlerMessages.GetProcessedMessagesAmountByClientId(int(reducer.id)))
 	} else {
 		reducer.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
-		reducer.clientID = result.ClientID
-		if reducer.actualValue == nil {
-			reducer.actualValue = &result.Payload
+		key := reducer.keyFunc(result.Payload)
+		if reducer.actualValues[result.ClientID] == nil {
+			reducer.actualValues[result.ClientID] = map[string]T{}
+		}
+		existing, ok := reducer.actualValues[result.ClientID][key]
+		if !ok {
+			reducer.actualValues[result.ClientID][key] = result.Payload
 		} else {
-			actualValue := reducer.callback(*reducer.actualValue, result.Payload)
-			reducer.actualValue = &actualValue
+			reducer.actualValues[result.ClientID][key] = reducer.callback(existing, result.Payload)
 		}
 	}
 
