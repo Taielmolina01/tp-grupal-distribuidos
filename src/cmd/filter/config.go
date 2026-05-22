@@ -32,9 +32,6 @@ func loadConfig() (filter.FilterConfig, error) {
 	}
 
 	inputExchange := os.Getenv("INPUT_EXCHANGE")
-	if inputExchange == "" {
-		return filter.FilterConfig{}, errors.New("INPUT_EXCHANGE environment variable is required")
-	}
 
 	inputQueue := os.Getenv("INPUT_QUEUE")
 
@@ -45,9 +42,6 @@ func loadConfig() (filter.FilterConfig, error) {
 	}
 
 	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
-	if outputExchange == "" {
-		return filter.FilterConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
-	}
 
 	outputQueue := os.Getenv("OUTPUT_QUEUE")
 
@@ -136,6 +130,15 @@ func loadCountAndFilterVenv(config *filter.FilterConfig) error {
 	return nil
 }
 
+func loadBankDistinctVenv(config *filter.FilterConfig) error {
+	outputQueues := os.Getenv("OUTPUT_QUEUES")
+	if outputQueues == "" {
+		return errors.New("OUTPUT_QUEUES environment variable is required if FILTER_TYPE is BANK_DISTINCT")
+	}
+	config.OutputQueues = strings.Split(outputQueues, ",")
+	return nil
+}
+
 func loadFilterTypeConfig(config *filter.FilterConfig) error {
 	filterTypeVenv := os.Getenv("FILTER_TYPE")
 	if filterTypeVenv == "" {
@@ -171,8 +174,10 @@ func loadFilterTypeConfig(config *filter.FilterConfig) error {
 		}
 	case filter.TRANSFER_DISTINCT:
 		break
-	case filter.ACCOUNT_DISTINCT:
-		break
+	case filter.BANK_DISTINCT:
+		if err := loadBankDistinctVenv(config); err != nil {
+			return err
+		}
 	case filter.AVERAGE_FILTER:
 		if err := loadAmountVenv(config); err != nil {
 			return err

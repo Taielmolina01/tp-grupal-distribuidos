@@ -19,7 +19,7 @@ const (
 	COUNT_AND_FILTER        FilterType = "COUNT_AND_FILTER"
 	DATE_RANGE_AND_SPLITTER FilterType = "DATE_RANGE_AND_SPLITTER"
 	TRANSFER_DISTINCT       FilterType = "TRANSFER_DISTINCT"
-	ACCOUNT_DISTINCT        FilterType = "ACCOUNT_DISTINCT"
+	BANK_DISTINCT           FilterType = "BANK_DISTINCT"
 	AVERAGE_FILTER          FilterType = "AVERAGE_FILTER"
 )
 
@@ -40,6 +40,7 @@ type FilterConfig struct {
 	Currencies        []string
 	AmountTreshold    int
 	FilterAmount      int
+	OutputQueues      []string
 }
 
 type Filter[T comparable, O comparable] struct {
@@ -63,12 +64,14 @@ type FilterAndSplitter struct {
 	splitFunction  func(transfer.Transfer) (transfer.SplittedTransfer, transfer.SplittedTransfer)
 }
 
-type DistinctFilter[T comparable] struct {
-	id             uint32
-	inputExchange  middleware.Middleware
-	outputExchange middleware.Middleware
-	// alreadySeen    map[T]bool
-	compareFunc func(T, T) bool
+type DistinctFilter[T comparable, S comparable] struct {
+	id            uint32
+	inputQueue    middleware.Middleware
+	outputQueues  []middleware.Middleware
+	alreadySeen   map[S]bool
+	compareFunc   func(T, T) bool
+	keyFunc       func(T) S
+	shardCriteria func(T) string
 }
 
 type AverageFilter struct {

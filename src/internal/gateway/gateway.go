@@ -15,11 +15,13 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/external"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/normalizer"
 	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/shard"
 )
 
 type GatewayConfig struct {
-	AccountsExchange  string
+	AccountQueues     []string
 	TransfersExchange string
 	ResultsQueue      string
 	ServerHost        string
@@ -31,7 +33,7 @@ type GatewayConfig struct {
 
 type Gateway struct {
 	registry          clientregistry.ClientRegistry
-	accountsExchange  middleware.Middleware
+	accountQueues     []middleware.Middleware
 	transfersExchange middleware.Middleware
 	resultsQueue      middleware.Middleware
 	listener          net.Listener
@@ -50,7 +52,6 @@ const (
 	TRANSFERS_Q5_KEY    = "TRANSFERS_Q5_KEY"
 	TRANSFERS_Q1234_KEY = "TRANSFERS_Q1234_KEY"
 	ACCOUNTS_KEY        = "ACCOUNTS_KEY"
-	ACCOUNTS_QUEUE      = ""
 	TRANSFER_QUEUE      = "transfers_queue"
 )
 
@@ -58,25 +59,33 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	//Quiza las keys deberían ser config, quizá no. Quien sabe
-	accountsExchange, err := middleware.CreateExchangeMiddleware(config.AccountsExchange, ACCOUNTS_QUEUE, []string{ACCOUNTS_KEY}, connSettings)
-	if err != nil {
-		return nil, err
+	accountQueues := make([]middleware.Middleware, 0, len(config.AccountQueues))
+	for _, queue := range config.AccountQueues {
+		accountQueue, err := middleware.CreateQueueMiddleware(queue, connSettings)
+		if err != nil {
+			return nil, err
+		}
+		accountQueues = append(accountQueues, accountQueue)
 	}
 
 	// Las keys acá vienen x config xq son dinámicas
 	// Se requiere sharding
 	transfersExchange, err := middleware.CreateExchangeMiddleware(config.TransfersExchange, TRANSFER_QUEUE, []string{TRANSFERS_Q1234_KEY}, connSettings)
 	if err != nil {
-		if err := accountsExchange.Close(); err != nil {
-			slog.Error("While closing accounts exchange", "err", err)
+		for _, q := range accountQueues {
+			if err := q.Close(); err != nil {
+				slog.Error("While closing accounts queue", "err", err)
+			}
 		}
 		return nil, err
 	}
 
 	resultsQueue, err := middleware.CreateQueueMiddleware(config.ResultsQueue, connSettings)
 	if err != nil {
-		if err := accountsExchange.Close(); err != nil {
-			slog.Error("While closing accounts exchange", "err", err)
+		for _, q := range accountQueues {
+			if err := q.Close(); err != nil {
+				slog.Error("While closing accounts queue", "err", err)
+			}
 		}
 		if err := transfersExchange.Close(); err != nil {
 			slog.Error("While closing transfers exchange", "err", err)
@@ -86,8 +95,10 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 
 	listener, err := net.Listen("tcp", config.ServerHost+":"+config.ServerPort)
 	if err != nil {
-		if err := accountsExchange.Close(); err != nil {
-			slog.Error("While closing accounts exchange", "err", err)
+		for _, q := range accountQueues {
+			if err := q.Close(); err != nil {
+				slog.Error("While closing accounts queue", "err", err)
+			}
 		}
 		if err := transfersExchange.Close(); err != nil {
 			slog.Error("While closing transfers exchange", "err", err)
@@ -99,7 +110,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 	}
 
 	gateway := &Gateway{
-		accountsExchange:  accountsExchange,
+		accountQueues:     accountQueues,
 		transfersExchange: transfersExchange,
 		resultsQueue:      resultsQueue,
 		listener:          listener,
@@ -410,6 +421,26 @@ func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind strin
 	return nil
 }
 
+func (gateway *Gateway) broadcastEOF(client clientregistry.ClientState, kind string, total uint32) error {
+	slog.Info("Received EOF message", "kind", kind, "client_id", client.ID, "total", total)
+	msg, err := inner.SerializeData(inner.DataMsg[any]{
+		ClientID: client.ID,
+		EOF:      &inner.EOFInfo{Kind: kind, TotalMessages: total},
+	})
+	if err != nil {
+		slog.Debug("While serializing EOF", "kind", kind, "err", err)
+		return err
+	}
+	for _, q := range gateway.accountQueues {
+		if err := q.Send(*msg); err != nil {
+			slog.Debug("While sending EOF to accounts exchange", "kind", kind, "err", err)
+			return err
+		}
+
+	}
+	return nil
+}
+
 func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) error {
 	accounts, err := external.ReadAccountBatch(client.Conn)
 	if err != nil {
@@ -422,7 +453,16 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) er
 			slog.Debug("While serializing account", "err", err)
 			return err
 		}
-		if err := gateway.accountsExchange.Send(*msg); err != nil {
+
+		idx := shard.CalculateIndexForShard(
+			client.ID,
+			normalizer.NormalizeBankID(acc.BankId),
+			len(gateway.accountQueues),
+		)
+
+		slog.Info("Sending account to accounts exchange", "client_id", client.ID, "bank_id", acc.BankId, "shard_idx", idx)
+
+		if err := gateway.accountQueues[idx].Send(*msg); err != nil {
 			slog.Debug("While sending account to accounts exchange", "err", err)
 			return err
 		}
@@ -454,7 +494,7 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState) erro
 
 func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState) error {
 	total := gateway.takeCount(gateway.accountsCount, client.ID)
-	return gateway.forwardEOF(client, "accounts", total, gateway.accountsExchange)
+	return gateway.broadcastEOF(client, "accounts", total)
 }
 
 func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState) error {

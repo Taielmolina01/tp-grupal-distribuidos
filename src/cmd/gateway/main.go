@@ -5,15 +5,18 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 
 	"tp-grupal-distribuidos/internal/gateway"
 )
 
 func loadConfig() (gateway.GatewayConfig, error) {
-	accountsExchange := os.Getenv("ACCOUNTS_EXCHANGE")
-	if accountsExchange == "" {
-		return gateway.GatewayConfig{}, errors.New("ACCOUNTS_EXCHANGE environment variable is required")
+	accountQueues := os.Getenv("ACCOUNT_QUEUES")
+	if accountQueues == "" {
+		return gateway.GatewayConfig{}, errors.New("ACCOUNT_QUEUES environment variable is required")
 	}
+
+	accountQueueList := strings.Split(accountQueues, ",")
 
 	transfersExchange := os.Getenv("TRANSFERS_EXCHANGE")
 	if transfersExchange == "" {
@@ -55,7 +58,7 @@ func loadConfig() (gateway.GatewayConfig, error) {
 	}
 
 	return gateway.GatewayConfig{
-		AccountsExchange:  accountsExchange,
+		AccountQueues:     accountQueueList,
 		TransfersExchange: transfersExchange,
 		ResultsQueue:      resultsQueue,
 		ServerHost:        serverHost,

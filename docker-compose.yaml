@@ -26,7 +26,7 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ACCOUNTS_EXCHANGE=accounts_exchange
+      - ACCOUNT_QUEUES=filter_account_id_0,filter_account_id_1
       - TRANSFERS_EXCHANGE=transfers_exchange
       - RESULTS_QUEUE=results_queue
       - MOM_HOST=rabbitmq
@@ -91,62 +91,6 @@ services:
   #   - ./input:/input
   #   - ./output:/output
 
-  # client_3:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_3
-  #   depends_on:
-  #   - gateway
-  #   environment:
-  #   - SERVER_HOST=gateway
-  #   - SERVER_PORT=5678
-  #   - INPUT_FILE_ACCOUNTS=/input/accounts_1.csv
-  #   - INPUT_FILE_TRANS=/input/transactions_0.csv
-  #   - OUTPUT_FILE_PREFIX=/output/output_3
-  #   - MAX_BATCH_SIZE=1000
-  #   - LOG_LEVEL=DEBUG
-  #   volumes:
-  #   - ./input:/input
-  #   - ./output:/output
-
-  # client_4:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_4
-  #   depends_on:
-  #   - gateway
-  #   environment:
-  #   - SERVER_HOST=gateway
-  #   - SERVER_PORT=5678
-  #   - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
-  #   - INPUT_FILE_TRANS=/input/transactions_0.csv
-  #   - OUTPUT_FILE_PREFIX=/output/output_4
-  #   - MAX_BATCH_SIZE=1000
-  #   - LOG_LEVEL=DEBUG
-  #   volumes:
-  #   - ./input:/input
-  #   - ./output:/output
-
-  # client_5:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_5
-  #   depends_on:
-  #   - gateway
-  #   environment:
-  #   - SERVER_HOST=gateway
-  #   - SERVER_PORT=5678
-  #   - INPUT_FILE_ACCOUNTS=/input/accounts_1.csv
-  #   - INPUT_FILE_TRANS=/input/transactions_0.csv
-  #   - OUTPUT_FILE_PREFIX=/output/output_5
-  #   - MAX_BATCH_SIZE=1000
-  #   - LOG_LEVEL=DEBUG
-  #   volumes:
-  #   - ./input:/input
-  #   - ./output:/output
 
   filter_currency_0:
     build:
@@ -308,31 +252,40 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # reducer_q2_2:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/reducer/Dockerfile
-  #   container_name: reducer_q2_2
-  #   depends_on:
-  #     rabbitmq:
-  #       condition: service_healthy
-  #   environment:
-  #     - ID=2
-  #     - REDUCER_AMOUNT=3
-  #     - MOM_HOST=rabbitmq
-  #     - MOM_PORT=5672
-  #     - INPUT_EXCHANGE=filtered_transfers_exchange
-  #     - INPUT_QUEUE=reducer_q2_in_q
-  #     - INPUT_ROUTING_KEYS=falopa
-  #     - OUTPUT_EXCHANGE=reduced_transfers_q2_exchange
-  #     - OUTPUT_QUEUE=reduced_transfers_q2_q
-  #     - OUTPUT_ROUTING_KEYS=falopa
-  #     - QUERY_ID=2
-  #   logging:
-  #     driver: json-file
-  #     options:
-  #       max-size: "50m"
-  #       max-file: "3"
+  filter_account_id_already_seen_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/filter/Dockerfile
+    container_name: filter_account_id_already_seen_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - ID=1
+      - INPUT_QUEUE=filter_account_id_0
+      - OUTPUT_QUEUES=join_q2_accounts_q_0,join_q2_accounts_q_1
+      - FILTER_AMOUNT=2
+      - FILTER_TYPE=BANK_DISTINCT
+
+  filter_account_id_already_seen_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/filter/Dockerfile
+    container_name: filter_account_id_already_seen_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - ID=1
+      - INPUT_QUEUE=filter_account_id_1
+      - OUTPUT_QUEUES=join_q2_accounts_q_0,join_q2_accounts_q_1
+      - FILTER_AMOUNT=2
+      - FILTER_TYPE=BANK_DISTINCT
+
 
   join_q2_0:
     build:
@@ -348,13 +301,13 @@ services:
       - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_QUEUE=reduced_transfers_q2_0
       - RIGHT_INPUT_EXCHANGE=accounts_exchange
-      - RIGHT_INPUT_QUEUE=join_q2_accounts_q
+      - RIGHT_INPUT_QUEUE=join_q2_accounts_q_0
       - RIGHT_INPUT_ROUTING_KEYS=ACCOUNTS_KEY
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=falopa2
       - LEFT_EOFS_EXPECTED=2
-      - RIGHT_EOFS_EXPECTED=1
+      - RIGHT_EOFS_EXPECTED=2
       - JOIN_AMOUNT=0
       - ID=1
 
@@ -363,7 +316,7 @@ services:
     build:
       context: ./src/
       dockerfile: cmd/join/Dockerfile
-    container_name: join_q2_0
+    container_name: join_q2_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -373,13 +326,13 @@ services:
       - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_QUEUE=reduced_transfers_q2_1
       - RIGHT_INPUT_EXCHANGE=accounts_exchange
-      - RIGHT_INPUT_QUEUE=join_q2_accounts_q
+      - RIGHT_INPUT_QUEUE=join_q2_accounts_q_1
       - RIGHT_INPUT_ROUTING_KEYS=ACCOUNTS_KEY
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=falopa2
       - LEFT_EOFS_EXPECTED=2
-      - RIGHT_EOFS_EXPECTED=1
+      - RIGHT_EOFS_EXPECTED=2
       - JOIN_AMOUNT=2
       - ID=1
 
@@ -388,3 +341,4 @@ services:
       options:
         max-size: "50m"
         max-file: "3"
+  

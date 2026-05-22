@@ -63,6 +63,8 @@ func (j *Join[L, R, O]) HandleLeft(clientID int, record L) {
 }
 
 func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
+
+	slog.Info("client_id", strconv.Itoa(clientID), "received right record", "record", record)
 	key := j.rightKey(record)
 
 	j.mu.Lock()

@@ -1,8 +1,6 @@
 package reducer
 
 import (
-	"fmt"
-	"hash/fnv"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -15,6 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
@@ -131,13 +130,16 @@ func newReducer[T comparable](
 					return err
 				}
 				slog.Info("Reducer sending message to output exchange", "client_id", clientID, "payload", v)
-				if err := reducer.outputQueues[reducer.calculateIndexForShard(clientID, keyFunc(v))].Send(*msgOutput); err != nil { // shard by client_id_from_Bank
+				if err := reducer.outputQueues[shard.CalculateIndexForShard(
+					clientID,
+					keyFunc(v),
+					len(reducer.outputQueues))].Send(*msgOutput); err != nil {
 					return err
 				}
 			}
 
 			for _, outputQueue := range reducer.outputQueues {
-				if err := outputQueue.Send(*msg); err != nil { // shard by client_id_from_Bank
+				if err := outputQueue.Send(*msg); err != nil {
 					return err
 				}
 			}
@@ -247,15 +249,4 @@ func (reducer *Reducer[T]) Close() error {
 		}
 	}
 	return nil
-}
-
-func (reducer *Reducer[T]) convertToBytes(FromBank string, clientID int) []byte {
-	return []byte(fmt.Sprintf("%v%d", FromBank, clientID))
-}
-
-func (reducer *Reducer[T]) calculateIndexForShard(clientID int, FromBank string) int {
-	bytes := reducer.convertToBytes(FromBank, clientID)
-	hash := fnv.New64a()
-	hash.Write(bytes)
-	return int(hash.Sum64() % uint64(reducer.joinsAmount))
 }

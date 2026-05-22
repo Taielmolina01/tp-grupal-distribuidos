@@ -2,6 +2,7 @@ package filter
 
 import (
 	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/normalizer"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -83,15 +84,33 @@ func CreateFilterAndSplitter(config FilterConfig) (worker.Worker, error) {
 }
 
 func CreateTransferDistinctFilter(config FilterConfig) (worker.Worker, error) {
-	return newDistinctFilter(config, func(t1 transfer.Transfer, t2 transfer.Transfer) bool {
-		return t1.Equals(t2)
-	})
+	return newDistinctFilter(
+		config,
+		func(t1 transfer.Transfer, t2 transfer.Transfer) bool {
+			return t1.Equals(t2)
+		},
+		func(t transfer.Transfer) transfer.Transfer {
+			return t
+		},
+		func(t transfer.Transfer) string {
+			return t.FromBank
+		},
+	)
 }
 
-func CreateFilterByAccountId(config FilterConfig) (worker.Worker, error) {
-	return newDistinctFilter(config, func(ac1 account.Account, ac2 account.Account) bool {
-		return ac1.Equals(ac2)
-	})
+func CreateBankDistinctFilter(config FilterConfig) (worker.Worker, error) {
+	return newDistinctFilter(
+		config,
+		func(ac1 account.Account, ac2 account.Account) bool {
+			return ac1.BankId == ac2.BankId
+		},
+		func(ac account.Account) string {
+			return ac.BankId
+		},
+		func(t account.Account) string {
+			return normalizer.NormalizeBankID(t.BankId)
+		},
+	)
 }
 
 func CreateAverageFilter(config FilterConfig) (worker.Worker, error) {
