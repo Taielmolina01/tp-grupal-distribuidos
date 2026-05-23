@@ -1,0 +1,21 @@
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_e3c80ef5fd8524::t_dea79644e397a9 88,92-116,126,131,136
+  s_e3c80ef5fd8524::t_1707e662d89774 71-74
+  s_e3c80ef5fd8524::t_35f811740b2f23 122-125,127-130,132-135,137-139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "d617ef31217ec36a83bb4a082b713e5f0afed4cc",
+  "prompts": {},
+  "sessions": {
+    "s_e3c80ef5fd8524": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "71986871-96ad-4282-b873-c8f5794800a2",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
