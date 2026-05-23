@@ -1,0 +1,42 @@
+src/cmd/joinaccounts/Dockerfile
+  s_e3c80ef5fd8524::t_47493d0945b6ba 1-15
+src/cmd/filterandsplitter/config.go
+  s_e3c80ef5fd8524::t_4c18187e87de04 1-93
+src/cmd/joinaccounts/config.go
+  s_e3c80ef5fd8524::t_9ea541c9dd99ad 1-62
+src/internal/filter/joinaccounts/joinaccounts.go
+  s_e3c80ef5fd8524::t_26c77e4637f17f 225
+  s_e3c80ef5fd8524::t_4cd25b6a0d104f 289
+  h_3c9b41718876fe 261,325
+src/cmd/joinaccounts/main.go
+  s_e3c80ef5fd8524::t_1f4ef951f659fb 1-30
+docker-compose.yaml
+  s_e3c80ef5fd8524::t_f251e40bae59d8 333-337,339-430
+src/cmd/filterandsplitter/main.go
+  s_e3c80ef5fd8524::t_02d7085c547c60 1-30
+src/cmd/filterandsplitter/Dockerfile
+  s_e3c80ef5fd8524::t_04df4a71a44007 1-15
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 226-229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "518cf40c23d0fa6f9bc972b5b51a3ee1f1875453",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_e3c80ef5fd8524": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "71986871-96ad-4282-b873-c8f5794800a2",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
