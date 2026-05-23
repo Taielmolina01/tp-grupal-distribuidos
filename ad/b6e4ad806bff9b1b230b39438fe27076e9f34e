@@ -1,0 +1,18 @@
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 25-26,50,64-66,160,263
+src/internal/common/account/account.go
+  h_3c9b41718876fe 21-24,27-30,38-41
+src/internal/filter/joinaccounts/joinaccounts.go
+  h_3c9b41718876fe 1-370
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "adb6e4ad806bff9b1b230b39438fe27076e9f34e",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
