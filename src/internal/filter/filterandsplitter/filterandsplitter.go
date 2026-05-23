@@ -128,12 +128,12 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		return nil, fmt.Errorf("declaring output queues: %w", err)
 	}
 
-	eofInput, err = middleware.CreateQueueMiddleware("ETC_"+strconv.Itoa(config.Id), connSettings)
+	eofInput, err = middleware.CreateQueueMiddleware("FILTER_AND_SPLIITER_EOF_"+strconv.Itoa(config.Id), connSettings)
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF input queue: %w", err)
 	}
 
-	eofOutput, err = middleware.CreateQueueMiddleware("ETC_"+strconv.Itoa(getRingNextIndex(config)), connSettings)
+	eofOutput, err = middleware.CreateQueueMiddleware("FILTER_AND_SPLIITER_EOF_"+strconv.Itoa(getRingNextIndex(config)), connSettings)
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF output queue: %w", err)
 	}
