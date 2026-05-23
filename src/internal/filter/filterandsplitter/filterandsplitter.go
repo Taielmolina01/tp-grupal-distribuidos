@@ -22,8 +22,8 @@ type FilterAndSplitterConfig struct {
 	StartDate time.Time
 	EndDate   time.Time
 
-	JoinAccoutAmount int
-	JoinAccoutPrefix string
+	OutputMiddlewareAmount int
+	OutputMiddlewarePrefix string
 
 	FilterAndSpliterAmount int
 
@@ -47,7 +47,7 @@ type FilterAndSplitter struct {
 	startDate time.Time
 	endDate   time.Time
 
-	joinAccoutAmount int
+	outputMiddlewareAmount int
 
 	inputExchange middleware.Middleware
 	outputQueues  []middleware.Middleware
@@ -61,9 +61,9 @@ type FilterAndSplitter struct {
 }
 
 func declareOutputQueues(config FilterAndSplitterConfig, connSettings middleware.ConnSettings) ([]middleware.Middleware, error) {
-	outputQueues := make([]middleware.Middleware, 0, config.JoinAccoutAmount)
-	for i := range config.JoinAccoutAmount {
-		q, err := middleware.CreateQueueMiddleware(fmt.Sprintf("%s_%d", config.JoinAccoutPrefix, i), connSettings)
+	outputQueues := make([]middleware.Middleware, 0, config.OutputMiddlewareAmount)
+	for i := range config.OutputMiddlewareAmount {
+		q, err := middleware.CreateQueueMiddleware(fmt.Sprintf("%s_%d", config.OutputMiddlewarePrefix, i), connSettings)
 		if err != nil {
 			for _, opened := range outputQueues {
 				opened.Close()
@@ -154,17 +154,17 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 	)
 
 	return &FilterAndSplitter{
-		id:               config.Id,
-		startDate:        config.StartDate,
-		endDate:          config.EndDate,
-		joinAccoutAmount: config.JoinAccoutAmount,
-		queryID:          config.QueryID,
-		handlerMessages:  handlerMessages,
-		inputExchange:    inputExchange,
-		outputQueues:     outputQueues,
-		eofInput:         eofInput,
-		eofOutput:        eofOutput,
-		eofHandler:       eofHandler,
+		id:                     config.Id,
+		startDate:              config.StartDate,
+		endDate:                config.EndDate,
+		outputMiddlewareAmount: config.OutputMiddlewareAmount,
+		queryID:                config.QueryID,
+		handlerMessages:        handlerMessages,
+		inputExchange:          inputExchange,
+		outputQueues:           outputQueues,
+		eofInput:               eofInput,
+		eofOutput:              eofOutput,
+		eofHandler:             eofHandler,
 	}, nil
 }
 
@@ -260,7 +260,7 @@ func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer)
 func (f *FilterAndSplitter) shardFor(clientID int, bank, acc string) int {
 	h := fnv.New32a()
 	fmt.Fprintf(h, "%d\x00%s\x00%s", clientID, bank, acc)
-	return int(h.Sum32() % uint32(f.joinAccoutAmount))
+	return int(h.Sum32() % uint32(f.outputMiddlewareAmount))
 }
 
 func (f *FilterAndSplitter) handleEOF(data inner.DataMsg[transfer.Transfer]) {
