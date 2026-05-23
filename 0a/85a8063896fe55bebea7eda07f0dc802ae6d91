@@ -1,0 +1,14 @@
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 86,129,134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "0a85a8063896fe55bebea7eda07f0dc802ae6d91",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
