@@ -1,0 +1,16 @@
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 146-147
+src/internal/common/msgmonitor/msgmonitor.go
+  h_3c9b41718876fe 12,65-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "4943823934ff9357a27a8b4f8ae02b1bb139a066",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
