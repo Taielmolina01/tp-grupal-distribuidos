@@ -142,10 +142,19 @@ func (f *FilterAndSplitter) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
+
+	f.inputExchange.StopConsuming()
+	f.eofInput.StopConsuming()
 }
 
 func (f *FilterAndSplitter) close() {
+	f.inputExchange.Close()
+	f.eofInput.Close()
+	f.eofOutput.Close()
 
+	for _, queue := range f.outputQueues {
+		queue.Close()
+	}
 }
 
 func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
