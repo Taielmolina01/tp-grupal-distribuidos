@@ -1,0 +1,14 @@
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 145-147,151-153,155-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "247aefecec8679257355d048895c6283bd685fd6",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
