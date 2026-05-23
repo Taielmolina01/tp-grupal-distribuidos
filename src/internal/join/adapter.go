@@ -4,34 +4,27 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strconv"
 	"sync"
 	"syscall"
 
-	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
-	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 type TwoInputAdapter[L, R, O any] struct {
 	id                int
 	joinAmount        int
-	handlerMessages   msgmonitor.MessageMonitor
-	eofHandler        eofring.EofRingAlgorithm
-	outputQueueEof    middleware.Middleware
-	totalRealAmount   map[int]uint32
-	ringFired         map[int]bool
 	queryID           uint8
 	join              *Join[L, R, O]
 	leftInput         middleware.Middleware
 	rightInput        middleware.Middleware
+	output            middleware.Middleware
 	leftEofCount      map[int]int
 	rightEofCount     map[int]int
 	leftEofsExpected  int
 	rightEofsExpected int
+	fired             map[int]bool
 	lock              sync.Mutex
 }
 
@@ -44,12 +37,12 @@ func newTwoInputJoin[L, R, O any](
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	leftInput, err := middleware.CreateExchangeMiddleware(config.LeftInputExchange, config.LeftInputQueue, config.LeftRoutingKeys, connSettings)
+	leftInput, err := middleware.CreateQueueMiddleware(config.LeftInputQueue, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	rightInput, err := middleware.CreateExchangeMiddleware(config.RightInputExchange, config.RightInputQueue, config.RightRoutingKeys, connSettings)
+	rightInput, err := middleware.CreateQueueMiddleware(config.RightInputQueue, connSettings)
 	if err != nil {
 		if err := leftInput.Close(); err != nil {
 			slog.Error("while closing left input", "err", err)
@@ -69,8 +62,8 @@ func newTwoInputJoin[L, R, O any](
 	}
 
 	slog.Info("join started",
-		"left_exchange", config.LeftInputExchange, "left_queue", config.LeftInputQueue, "left_keys", config.LeftRoutingKeys,
-		"right_exchange", config.RightInputExchange, "right_queue", config.RightInputQueue, "right_keys", config.RightRoutingKeys,
+		"left_queue", config.LeftInputQueue,
+		"right_queue", config.RightInputQueue,
 		"output_exchange", config.OutputExchange, "output_keys", config.OutputRoutingKeys,
 	)
 
@@ -83,70 +76,26 @@ func newTwoInputJoin[L, R, O any](
 		rightEofs = 1
 	}
 
-	next := config.Id + 1
-	if config.Id == config.Amount-1 {
-		next = 0
-	}
-
-	eofInput, err := middleware.CreateQueueMiddleware(
-		"JOIN_Q2_"+strconv.Itoa(config.Id),
-		connSettings,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		"JOIN_Q2_"+strconv.Itoa(next),
-		connSettings,
-	)
-
-	if err != nil {
-		eofInput.Close()
-		return nil, err
-	}
-
-	handlerMessages := msgmonitor.NewMessageMonitor()
-
 	adapter := &TwoInputAdapter[L, R, O]{
 		id:                config.Id,
 		joinAmount:        config.Amount,
-		handlerMessages:   handlerMessages,
-		outputQueueEof:    eofOutput,
-		totalRealAmount:   map[int]uint32{},
-		ringFired:         map[int]bool{},
 		queryID:           config.QueryID,
 		join:              newJoin[L, R, O](output, leftKey, rightKey, combine, leftCombine, config.QueryID),
 		leftInput:         leftInput,
 		rightInput:        rightInput,
+		output:            output,
 		leftEofCount:      map[int]int{},
 		rightEofCount:     map[int]int{},
 		leftEofsExpected:  leftEofs,
 		rightEofsExpected: rightEofs,
+		fired:             map[int]bool{},
 	}
-
-	// no deberia haber anillo
-	adapter.eofHandler = eofring.CreateEofRingAlgorithm(
-		eofInput,
-		eofOutput,
-		config.Amount,
-		uint32(config.Id),
-		handlerMessages,
-		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
-			adapter.join.HandleQueryEOF(clientID)
-
-			return output.Send(*msg)
-		},
-		config.QueryID,
-	)
 
 	return adapter, nil
 }
 
 func (a *TwoInputAdapter[L, R, O]) Run() {
 	done := make(chan struct{})
-	go a.eofHandler.Run()
 	go func() {
 		if err := a.leftInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 			defer ack()
@@ -156,12 +105,15 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 				return
 			}
 			if data.IsEOF() {
-				slog.Info("join got left EOF", "client_id", data.ClientID, "total_messages", data.EOF.TotalMessages)
-				a.handleEOF(data.ClientID, true, data.EOF.TotalMessages)
+				a.lock.Lock()
+				a.leftEofCount[data.ClientID]++
+				count := a.leftEofCount[data.ClientID]
+				a.lock.Unlock()
+				slog.Info("join got LEFT EOF", "join_id", a.id, "client_id", data.ClientID, "left_count", count, "left_expected", a.leftEofsExpected)
+				a.handleEOF(data.ClientID)
 				return
 			}
 			a.join.HandleLeft(data.ClientID, data.Payload)
-			a.handlerMessages.AddProcessedMessagesAmountByClientId(data.ClientID, 1)
 		}); err != nil {
 			slog.Error("while consuming left input", "err", err)
 		}
@@ -176,8 +128,12 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 			return
 		}
 		if data.IsEOF() {
-			slog.Info("join got right EOF", "client_id", data.ClientID)
-			a.handleEOF(data.ClientID, false, 0)
+			a.lock.Lock()
+			a.rightEofCount[data.ClientID]++
+			count := a.rightEofCount[data.ClientID]
+			a.lock.Unlock()
+			slog.Info("join got RIGHT EOF", "join_id", a.id, "client_id", data.ClientID, "right_count", count, "right_expected", a.rightEofsExpected)
+			a.handleEOF(data.ClientID)
 			return
 		}
 		a.join.HandleRight(data.ClientID, data.Payload)
@@ -188,47 +144,37 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 	<-done
 }
 
-func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int, isLeft bool, totalMessages uint32) {
+func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
 	a.lock.Lock()
-	defer a.lock.Unlock()
-	if isLeft {
-		a.leftEofCount[clientID]++
-		if totalMessages > a.totalRealAmount[clientID] {
-			a.totalRealAmount[clientID] = totalMessages
-		}
-	} else {
-		a.rightEofCount[clientID]++
+	if a.fired[clientID] {
+		a.lock.Unlock()
+		return
 	}
-
 	if a.leftEofCount[clientID] < a.leftEofsExpected || a.rightEofCount[clientID] < a.rightEofsExpected {
+		a.lock.Unlock()
 		return
 	}
-	if a.ringFired[clientID] {
-		return
-	}
-	a.ringFired[clientID] = true
-
-	ringMsg := eofmessagetypes.EofRingMessage{
-		RealAmount:     a.totalRealAmount[clientID],
-		ActualAmount:   a.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
-		ClientId:       clientID,
-		CoordinatorId:  uint32(a.id),
-		FilteredAmount: a.handlerMessages.GetFilteredMessagesAmountByClientId(clientID),
-	}
-
+	a.fired[clientID] = true
 	delete(a.leftEofCount, clientID)
 	delete(a.rightEofCount, clientID)
-	delete(a.totalRealAmount, clientID)
+	a.lock.Unlock()
 
-	serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
+	slog.Info("join finishing", "join_id", a.id, "client_id", clientID)
+	a.join.HandleQueryEOF(clientID)
+
+	msgOut, err := inner.SerializeData(inner.DataMsg[any]{
+		ClientID: clientID,
+		EOF:      &inner.EOFInfo{Kind: "commit"},
+		QueryID:  a.queryID,
+	})
 	if err != nil {
-		slog.Error("while serializing ring message", "err", err)
+		slog.Error("while serializing join EOF", "err", err)
 		return
 	}
-	if err := a.outputQueueEof.Send(*serialized); err != nil {
-		slog.Error("while sending ring message", "err", err)
+	if err := a.output.Send(*msgOut); err != nil {
+		slog.Error("while sending join EOF downstream", "err", err)
 	}
-	slog.Info("join sent EOF ring message", "join_id", a.id, "client_id", clientID, "real_amount", ringMsg.RealAmount, "actual_amount", ringMsg.ActualAmount)
+	slog.Info("join sent EOF downstream", "join_id", a.id, "client_id", clientID)
 }
 
 type SingleInputAdapter[T, O any] struct {
