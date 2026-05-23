@@ -114,7 +114,7 @@ func newReducer[T comparable](
 		config.ReducerAmount,
 		uint32(config.Id),
 		handlerMessages,
-		func(clientID int, msg *middleware.Message) error {
+		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
 			reducer.lock.Lock()
 			values := reducer.actualValues[clientID]
 			delete(reducer.actualValues, clientID)
@@ -185,7 +185,7 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 			RealAmount:     reducer.totalRealAmount[result.ClientID],
 			ActualAmount:   reducer.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
 			ClientId:       result.ClientID,
-			Leader:         uint32(reducer.id),
+			CoordinatorId:  uint32(reducer.id),
 			FilteredAmount: reducer.handlerMessages.GetFilteredMessagesAmountByClientId(result.ClientID),
 		}
 		delete(reducer.inputEofCount, result.ClientID)

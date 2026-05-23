@@ -126,13 +126,14 @@ func newTwoInputJoin[L, R, O any](
 		rightEofsExpected: rightEofs,
 	}
 
+	// no deberia haber anillo
 	adapter.eofHandler = eofring.CreateEofRingAlgorithm(
 		eofInput,
 		eofOutput,
 		config.Amount,
 		uint32(config.Id),
 		handlerMessages,
-		func(clientID int, msg *middleware.Message) error {
+		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
 			adapter.join.HandleQueryEOF(clientID)
 
 			return output.Send(*msg)
@@ -211,7 +212,7 @@ func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int, isLeft bool, totalMes
 		RealAmount:     a.totalRealAmount[clientID],
 		ActualAmount:   a.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
 		ClientId:       clientID,
-		Leader:         uint32(a.id),
+		CoordinatorId:  uint32(a.id),
 		FilteredAmount: a.handlerMessages.GetFilteredMessagesAmountByClientId(clientID),
 	}
 

@@ -23,7 +23,7 @@ type eofRingAlgorithmImpl struct {
 	// typeOfNode should be an enum defined somewhere in common, but for simplicity I just left it as a string
 	typeOfNode     string
 	totalMessages  *uint32
-	finishCallback func(clientID int, msg *middleware.Message) error
+	finishCallback func(clientID int, msg *middleware.Message, isCoordinator bool) error
 	queryId        uint8
 }
 
@@ -32,7 +32,7 @@ func CreateEofRingAlgorithm(
 	amountReplicas int,
 	id uint32,
 	messageMonitor msgmonitor.MessageMonitor,
-	finishCallback func(clientID int, msg *middleware.Message) error,
+	finishCallback func(clientID int, msg *middleware.Message, isCoordinator bool) error,
 	queryId uint8,
 ) EofRingAlgorithm {
 	return &eofRingAlgorithmImpl{
@@ -83,7 +83,7 @@ func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Me
 		eofring.totalMessages = &eofRingMessage.ActualAmount
 	}
 
-	if eofRingMessage.Leader == eofring.id && eofRingMessage.ActualAmount == eofRingMessage.RealAmount {
+	if eofRingMessage.CoordinatorId == eofring.id && eofRingMessage.ActualAmount == eofRingMessage.RealAmount {
 		// Si soy el líder y la cantidad de todos los mensajes enviados por el cliente (contados por el gateway) y la suma de lo que cada uno
 		// de los nodos me dice que proceso, entonces envio el commit otra vez en forma de anillo para que cada uno le pase al exchange de los
 		// aggregations sus mensajes.
@@ -91,7 +91,7 @@ func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Me
 		eofring.sendEofCommitToReplicas(eofRingMessage, ack, nack)
 	} else {
 		value := eofring.messagesMonitor.GetProcessedMessagesAmountByClientId(eofRingMessage.ClientId)
-		if eofRingMessage.Leader == eofring.id {
+		if eofRingMessage.CoordinatorId == eofring.id {
 			// Si soy el líder y la cantidad de todos los mensajes enviados por el cliente (contados por el gateway) y la suma de lo que cada uno
 			// de los nodos me dice que proceso no coinciden, simplemente inicio el anillo de nuevo. Esto porque estoy asumiendo que lo único que paso
 			// es que un nodo no había terminado de procesar los mensajes de un cliente en particular. Como asumimos que no hay caida, eventualmente va a converger
@@ -111,7 +111,12 @@ func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Me
 }
 
 func (eofring *eofRingAlgorithmImpl) sendEofCommitToReplicas(eofRingMessage *eofmessagetypes.EofRingMessage, ack, nack func()) {
-	msg, err := inner.SerializeEofMessageCommit(eofmessagetypes.EofMessageCommit{ClientID: eofRingMessage.ClientId, Hops: 0, FilteredAmount: eofRingMessage.FilteredAmount})
+	msg, err := inner.SerializeEofMessageCommit(eofmessagetypes.EofMessageCommit{
+		CoordinatorId:  eofRingMessage.CoordinatorId,
+		ClientID:       eofRingMessage.ClientId,
+		Hops:           0,
+		FilteredAmount: eofRingMessage.FilteredAmount,
+	})
 	if err != nil {
 		slog.Error("Error serializing EOF commit", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "err", err)
 		ack()
@@ -151,7 +156,7 @@ func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *eofmessagetypes
 		QueryID: eofring.queryId,
 	})
 
-	if err := eofring.finishCallback(msg.ClientID, msgToOutput); err != nil {
+	if err := eofring.finishCallback(msg.ClientID, msgToOutput, msg.CoordinatorId == eofring.id); err != nil {
 		slog.Error("Error finishing callback", "err", err)
 	}
 

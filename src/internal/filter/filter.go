@@ -74,8 +74,11 @@ func newFilter[T comparable, O comparable](
 			config.FilterAmount,
 			uint32(config.Id),
 			handlerMessages,
-			func(clientID int, msg *middleware.Message) error {
-				return outputExchange.Send(*msg)
+			func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+				if isCoordinator {
+					return outputExchange.Send(*msg)
+				}
+				return nil
 			},
 			queryId,
 		),
@@ -111,7 +114,7 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func
 			RealAmount:     result.EOF.TotalMessages,
 			ActualAmount:   filter.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
 			ClientId:       result.ClientID,
-			Leader:         uint32(filter.id),
+			CoordinatorId:  uint32(filter.id),
 			FilteredAmount: filter.handlerMessages.GetFilteredMessagesAmountByClientId(result.ClientID),
 		}
 		serializedEofRingMessage, err := inner.SerializeEofFromQueueMsg(eofRingMessage)

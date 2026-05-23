@@ -64,19 +64,29 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 		return
 	}
 
+	if deserializedMsg.IsEOF() {
+		for _, outputQueue := range distinctfilter.outputQueues {
+			if err := outputQueue.Send(msg); err != nil {
+				slog.Error("While sending EOF message to output exchange", "err", err)
+			}
+		}
+		ack()
+	} else {
+		if value, _ := distinctfilter.alreadySeen[distinctfilter.keyFunc(deserializedMsg.Payload)]; !value {
+			if err := distinctfilter.outputQueues[shard.CalculateIndexForShard(
+				deserializedMsg.ClientID,
+				distinctfilter.shardCriteria(deserializedMsg.Payload),
+				len(distinctfilter.outputQueues),
+			)].Send(msg); err != nil {
+				slog.Error("While sending message to output exchange", "err", err)
+				return
+			}
+			distinctfilter.alreadySeen[distinctfilter.keyFunc(deserializedMsg.Payload)] = true
+		}
+	}
+
 	slog.Info("message to process", deserializedMsg.Payload, "client_id", deserializedMsg.ClientID)
 
-	if value, _ := distinctfilter.alreadySeen[distinctfilter.keyFunc(deserializedMsg.Payload)]; !value {
-		if err := distinctfilter.outputQueues[shard.CalculateIndexForShard(
-			deserializedMsg.ClientID,
-			distinctfilter.shardCriteria(deserializedMsg.Payload),
-			len(distinctfilter.outputQueues),
-		)].Send(msg); err != nil {
-			slog.Error("While sending message to output exchange", "err", err)
-			return
-		}
-		distinctfilter.alreadySeen[distinctfilter.keyFunc(deserializedMsg.Payload)] = true
-	}
 }
 
 func (distinctfilter *DistinctFilter[T, S]) HandleSignals() {

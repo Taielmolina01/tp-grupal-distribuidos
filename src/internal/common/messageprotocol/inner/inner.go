@@ -58,7 +58,7 @@ func DeserializeEofRingMessage(data []interface{}) (*eofmessagetypes.EofRingMess
 	}
 
 	return &eofmessagetypes.EofRingMessage{
-		Leader:         uint32(leaderAsFloat),
+		CoordinatorId:  uint32(leaderAsFloat),
 		ActualAmount:   uint32(actualAmountAsFloat),
 		RealAmount:     uint32(realAmountAsFloat),
 		ClientId:       parsedClientID,
@@ -106,7 +106,7 @@ func DeserializeRingMessage(message *middleware.Message) (*eofmessagetypes.EofRi
 }
 
 func SerializeEofFromQueueMsg(msg eofmessagetypes.EofRingMessage) (*middleware.Message, error) {
-	data, err := serializeJson([]interface{}{msg.Leader, msg.ActualAmount, msg.RealAmount, msg.ClientId, msg.FilteredAmount})
+	data, err := serializeJson([]interface{}{msg.CoordinatorId, msg.ActualAmount, msg.RealAmount, msg.ClientId, msg.FilteredAmount})
 	if err != nil {
 		return nil, err
 	}
