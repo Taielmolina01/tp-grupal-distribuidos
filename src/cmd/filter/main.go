@@ -27,6 +27,8 @@ func run() int {
 		server, err = filter.CreateDateRangeAndPaymentMethod(config)
 	case filter.BANK_DISTINCT:
 		server, err = filter.CreateBankDistinctFilter(config)
+	case filter.DATE_RANGE_AND_SPLITTER:
+		server, err = filter.CreateDateAndRangeSplitter(config)
 	default:
 		slog.Error("While loading filter type", "err", errors.New("invalid filter type"))
 		return 1

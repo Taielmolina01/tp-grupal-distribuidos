@@ -336,3 +336,40 @@ services:
       options:
         max-size: "50m"
         max-file: "3"
+
+  filter_range_q3_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/filter/Dockerfile
+    container_name: filter_range_q3_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=0
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_EXCHANGE=filtered_transfers_exchange
+      - INPUT_QUEUE=filter_range_q3_in
+      - INPUT_ROUTING_KEYS=falopa
+      - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
+      - FILTER_AMOUNT=2
+      - FILTER_TYPE=DATE_RANGE_AND_SPLITTER
+  filter_range_q3_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/filter/Dockerfile
+    container_name: filter_range_q3_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=1
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_EXCHANGE=filtered_transfers_exchange
+      - INPUT_QUEUE=filter_range_q3_in
+      - INPUT_ROUTING_KEYS=falopa
+      - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
+      - FILTER_AMOUNT=2
+      - FILTER_TYPE=DATE_RANGE_AND_SPLITTER
