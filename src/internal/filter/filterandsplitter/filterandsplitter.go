@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"sync"
 	"syscall"
 	"time"
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
@@ -44,9 +43,7 @@ type clientState struct {
 }
 
 type FilterAndSplitter struct {
-	id int
-	mu sync.Mutex
-
+	id        int
 	startDate time.Time
 	endDate   time.Time
 
@@ -86,6 +83,7 @@ func getRingNextIndex(config FilterAndSplitterConfig) int {
 }
 
 func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter, err error) {
+	const ring_prefix = "FILTER_AND_SPLIITER_EOF_"
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
@@ -128,12 +126,12 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		return nil, fmt.Errorf("declaring output queues: %w", err)
 	}
 
-	eofInput, err = middleware.CreateQueueMiddleware("FILTER_AND_SPLIITER_EOF_"+strconv.Itoa(config.Id), connSettings)
+	eofInput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(config.Id), connSettings)
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF input queue: %w", err)
 	}
 
-	eofOutput, err = middleware.CreateQueueMiddleware("FILTER_AND_SPLIITER_EOF_"+strconv.Itoa(getRingNextIndex(config)), connSettings)
+	eofOutput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(getRingNextIndex(config)), connSettings)
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF output queue: %w", err)
 	}
@@ -217,9 +215,6 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
 }
 
 func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	f.handlerMessages.AddProcessedMessagesAmountByClientId(clientID, 1)
 
 	if record.Timestamp.Before(f.startDate) || record.Timestamp.After(f.endDate) {
@@ -267,9 +262,6 @@ func (f *FilterAndSplitter) shardFor(clientID int, bank, acc string) int {
 }
 
 func (f *FilterAndSplitter) handleEOF(data inner.DataMsg[transfer.Transfer]) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	eofRingMessage := eofmessagetypes.EofRingMessage{
 		RealAmount:     data.EOF.TotalMessages,
 		ActualAmount:   f.handlerMessages.GetProcessedMessagesAmountByClientId(data.ClientID),
