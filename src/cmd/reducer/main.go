@@ -27,10 +27,10 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		return reducer.ReducerConfig{}, errors.New("INPUT_EXCHANGE environment variable is required")
 	}
 
-	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
-	if outputExchange == "" {
-		return reducer.ReducerConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
-	}
+	// outputExchange := os.Getenv("OUTPUT_EXCHANGE")
+	// if outputExchange == "" {
+	// 	return reducer.ReducerConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
+	// }
 
 	queryId, err := strconv.Atoi(os.Getenv("QUERY_ID"))
 	if err != nil {

@@ -91,7 +91,6 @@ services:
   #   - ./input:/input
   #   - ./output:/output
 
-
   filter_currency_0:
     build:
       context: ./src/
@@ -220,6 +219,7 @@ services:
       - OUTPUT_ROUTING_KEYS=falopa
       - QUERY_ID=2
       - INPUT_EOFS_EXPECTED=2
+      - JOINS_AMOUNT=2
     logging:
       driver: json-file
       options:
@@ -246,6 +246,7 @@ services:
       - OUTPUT_ROUTING_KEYS=falopa
       - QUERY_ID=2
       - INPUT_EOFS_EXPECTED=2
+      - JOINS_AMOUNT=2
     logging:
       driver: json-file
       options:
@@ -286,7 +287,6 @@ services:
       - FILTER_AMOUNT=2
       - FILTER_TYPE=BANK_DISTINCT
 
-
   join_q2_0:
     build:
       context: ./src/
@@ -300,17 +300,14 @@ services:
       - MOM_PORT=5672
       - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_QUEUE=reduced_transfers_q2_0
-      - RIGHT_INPUT_EXCHANGE=accounts_exchange
       - RIGHT_INPUT_QUEUE=join_q2_accounts_q_0
-      - RIGHT_INPUT_ROUTING_KEYS=ACCOUNTS_KEY
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=falopa2
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2
-      - JOIN_AMOUNT=0
-      - ID=1
-
+      - JOIN_AMOUNT=2
+      - ID=0
 
   join_q2_1:
     build:
@@ -325,9 +322,7 @@ services:
       - MOM_PORT=5672
       - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_QUEUE=reduced_transfers_q2_1
-      - RIGHT_INPUT_EXCHANGE=accounts_exchange
       - RIGHT_INPUT_QUEUE=join_q2_accounts_q_1
-      - RIGHT_INPUT_ROUTING_KEYS=ACCOUNTS_KEY
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=falopa2
@@ -341,4 +336,3 @@ services:
       options:
         max-size: "50m"
         max-file: "3"
-  

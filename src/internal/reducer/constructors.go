@@ -1,6 +1,7 @@
 package reducer
 
 import (
+	"tp-grupal-distribuidos/internal/common/normalizer"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -15,7 +16,7 @@ func CreateReducerMaxAmountFromBank(config ReducerConfig) (worker.Worker, error)
 				return t2
 			}
 		},
-		func(t transfer.Transfer) string { return t.FromBank },
+		func(t transfer.Transfer) string { return normalizer.NormalizeBankID(t.FromBank) },
 		config.QueryId,
 	)
 }

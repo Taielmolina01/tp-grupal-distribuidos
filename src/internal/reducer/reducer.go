@@ -62,11 +62,13 @@ func newReducer[T comparable](
 		return nil, err
 	}
 
+	outputQueues := make([]middleware.Middleware, 0, len(config.OutputQueues))
 	for _, outputQueue := range config.OutputQueues {
-		_, err := middleware.CreateQueueMiddleware(outputQueue, connSettings)
+		m, err := middleware.CreateQueueMiddleware(outputQueue, connSettings)
 		if err != nil {
 			return nil, err
 		}
+		outputQueues = append(outputQueues, m)
 	}
 
 	next := config.Id + 1
@@ -99,7 +101,7 @@ func newReducer[T comparable](
 	reducer := &Reducer[T]{
 		id:                config.Id,
 		inputExchange:     inputExchange,
-		outputQueues:      []middleware.Middleware{},
+		outputQueues:      outputQueues,
 		actualValues:      map[int]map[string]T{},
 		callback:          callback,
 		keyFunc:           keyFunc,

@@ -38,7 +38,7 @@ func newDistinctFilter[T comparable, S comparable](
 		id:            uint32(config.Id),
 		inputQueue:    inputQueue,
 		outputQueues:  outputQueues,
-		alreadySeen:   map[S]bool{},
+		alreadySeen:   map[int]map[S]bool{},
 		compareFunc:   compareFunc,
 		keyFunc:       keyFunc,
 		shardCriteria: shardCriteria,
@@ -55,9 +55,6 @@ func (distinctfilter *DistinctFilter[T, S]) Run() {
 }
 
 func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message, ack, nack func()) {
-	// Acá cuando no usemos más el mapa en memoria deberiamos usar la funcion de comparación
-	// leyendo el archivo donde tenemos las ya guardadas.
-
 	deserializedMsg, err := inner.DeserializeData[T](&msg)
 	if err != nil {
 		slog.Error("While deserializing message", "err", err)
@@ -65,28 +62,35 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 	}
 
 	if deserializedMsg.IsEOF() {
+		slog.Info("EOF received, broadcasting to all output queues", "client_id", deserializedMsg.ClientID)
 		for _, outputQueue := range distinctfilter.outputQueues {
 			if err := outputQueue.Send(msg); err != nil {
-				slog.Error("While sending EOF message to output exchange", "err", err)
+				slog.Error("While broadcasting EOF to output queue", "err", err)
 			}
 		}
 		ack()
-	} else {
-		if value, _ := distinctfilter.alreadySeen[distinctfilter.keyFunc(deserializedMsg.Payload)]; !value {
-			if err := distinctfilter.outputQueues[shard.CalculateIndexForShard(
-				deserializedMsg.ClientID,
-				distinctfilter.shardCriteria(deserializedMsg.Payload),
-				len(distinctfilter.outputQueues),
-			)].Send(msg); err != nil {
-				slog.Error("While sending message to output exchange", "err", err)
-				return
-			}
-			distinctfilter.alreadySeen[distinctfilter.keyFunc(deserializedMsg.Payload)] = true
-		}
+		return
 	}
 
 	slog.Info("message to process", deserializedMsg.Payload, "client_id", deserializedMsg.ClientID)
 
+	clientSeen, ok := distinctfilter.alreadySeen[deserializedMsg.ClientID]
+	if !ok {
+		clientSeen = map[S]bool{}
+		distinctfilter.alreadySeen[deserializedMsg.ClientID] = clientSeen
+	}
+	key := distinctfilter.keyFunc(deserializedMsg.Payload)
+	if !clientSeen[key] {
+		if err := distinctfilter.outputQueues[shard.CalculateIndexForShard(
+			deserializedMsg.ClientID,
+			distinctfilter.shardCriteria(deserializedMsg.Payload),
+			len(distinctfilter.outputQueues),
+		)].Send(msg); err != nil {
+			slog.Error("While sending message to output exchange", "err", err)
+			return
+		}
+		clientSeen[key] = true
+	}
 }
 
 func (distinctfilter *DistinctFilter[T, S]) HandleSignals() {
