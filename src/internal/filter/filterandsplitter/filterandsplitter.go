@@ -68,7 +68,10 @@ func declareOutputQueues(config FilterAndSplitterConfig, connSettings middleware
 	for i := range config.JoinAccoutAmount {
 		q, err := middleware.CreateQueueMiddleware(fmt.Sprintf("%s_%d", config.JoinAccoutPrefix, i), connSettings)
 		if err != nil {
-			return nil, err
+			for _, opened := range outputQueues {
+				opened.Close()
+			}
+			return nil, fmt.Errorf("creating output queue %d: %w", i, err)
 		}
 		outputQueues = append(outputQueues, q)
 	}
@@ -82,19 +85,58 @@ func getRingNextIndex(config FilterAndSplitterConfig) int {
 	return config.Id + 1
 }
 
-func NewFilterAndSplitter(config FilterAndSplitterConfig) (*FilterAndSplitter, error) {
+func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter, err error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
-	inputExchange, _ := middleware.CreateExchangeMiddleware(
+	var (
+		inputExchange middleware.Middleware
+		outputQueues  []middleware.Middleware
+		eofInput      middleware.Middleware
+		eofOutput     middleware.Middleware
+	)
+
+	defer func() {
+		if err != nil {
+			if eofOutput != nil {
+				eofOutput.Close()
+			}
+			if eofInput != nil {
+				eofInput.Close()
+			}
+			for _, q := range outputQueues {
+				q.Close()
+			}
+			if inputExchange != nil {
+				inputExchange.Close()
+			}
+		}
+	}()
+
+	inputExchange, err = middleware.CreateExchangeMiddleware(
 		config.InputExchange,
 		config.InputQueue,
 		config.InputRoutingKeys,
 		connSettings,
 	)
-	outputQueues, _ := declareOutputQueues(config, connSettings)
-	eofInput, _ := middleware.CreateQueueMiddleware("ETC_"+strconv.Itoa(config.Id), connSettings)
-	eofOutput, _ := middleware.CreateQueueMiddleware("ETC_"+strconv.Itoa(getRingNextIndex(config)), connSettings)
+	if err != nil {
+		return nil, fmt.Errorf("creating input exchange: %w", err)
+	}
+
+	outputQueues, err = declareOutputQueues(config, connSettings)
+	if err != nil {
+		return nil, fmt.Errorf("declaring output queues: %w", err)
+	}
+
+	eofInput, err = middleware.CreateQueueMiddleware("ETC_"+strconv.Itoa(config.Id), connSettings)
+	if err != nil {
+		return nil, fmt.Errorf("creating EOF input queue: %w", err)
+	}
+
+	eofOutput, err = middleware.CreateQueueMiddleware("ETC_"+strconv.Itoa(getRingNextIndex(config)), connSettings)
+	if err != nil {
+		return nil, fmt.Errorf("creating EOF output queue: %w", err)
+	}
 
 	eofHandler := eofring.CreateEofRingAlgorithm(
 		eofInput,
