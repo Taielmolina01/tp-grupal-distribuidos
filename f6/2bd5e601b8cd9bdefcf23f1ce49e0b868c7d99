@@ -1,0 +1,16 @@
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 1,4-5,7-15,17,21-24,26-27,29,31-32,34-71,73,75-112,115-125,129-134,136,140-165,168-191,193-215,218-241
+src/internal/filter/constructors.go
+  h_3c9b41718876fe 9,74-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "f62bd5e601b8cd9bdefcf23f1ce49e0b868c7d99",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
