@@ -143,6 +143,8 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		uint32(config.Id),
 		handlerMessages,
 		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+			handlerMessages.RemoveClient(clientID)
+
 			if isCoordinator {
 				return outputQueues[clientID].Send(*msg)
 			}
