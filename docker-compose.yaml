@@ -330,7 +330,104 @@ services:
       - RIGHT_EOFS_EXPECTED=2
       - JOIN_AMOUNT=2
       - ID=1
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
+  filter_and_splitter_q4_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/filterandsplitter/Dockerfile
+    container_name: filter_and_splitter_q4_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=0
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - FILTER_AMOUNT=2
+      - OUTPUT_AMOUNT=2
+      - OUTPUT_QUEUE_PREFIX=join_accounts_q4
+      - INPUT_EXCHANGE=transfers_exchange
+      - INPUT_QUEUE=transfers_q4_queue
+      - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
+      - "DATE_RANGE=2000-01-01 00:00:00,2030-01-01 00:00:00"
+      - QUERY_ID=4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  filter_and_splitter_q4_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/filterandsplitter/Dockerfile
+    container_name: filter_and_splitter_q4_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=1
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - FILTER_AMOUNT=2
+      - OUTPUT_AMOUNT=2
+      - OUTPUT_QUEUE_PREFIX=join_accounts_q4
+      - INPUT_EXCHANGE=transfers_exchange
+      - INPUT_QUEUE=transfers_q4_queue
+      - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
+      - "DATE_RANGE=2000-01-01 00:00:00,2030-01-01 00:00:00"
+      - QUERY_ID=4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  join_accounts_q4_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/joinaccounts/Dockerfile
+    container_name: join_accounts_q4_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=0
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - OUTPUT_AMOUNT=1
+      - OUTPUT_QUEUE_PREFIX=join_accounts_result_q4
+      - EXPECTED_EOFS=1
+      - INPUT_QUEUE_PREFIX=join_accounts_q4_
+      - QUERY_ID=4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  join_accounts_q4_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/joinaccounts/Dockerfile
+    container_name: join_accounts_q4_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=1
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - OUTPUT_AMOUNT=1
+      - OUTPUT_QUEUE_PREFIX=join_accounts_result_q4
+      - EXPECTED_EOFS=1
+      - INPUT_QUEUE_PREFIX=join_accounts_q4_
+      - QUERY_ID=4
     logging:
       driver: json-file
       options:

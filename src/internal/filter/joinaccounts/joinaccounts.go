@@ -222,6 +222,7 @@ func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.Splitt
 	accMap, ok := state.left[identifierKey]
 	if !ok {
 		accMap = map[string]account.AccountPair{}
+		state.left[identifierKey] = accMap
 	}
 
 	//Veo si ya existe el par shardkey + esta key de la derecha
@@ -237,7 +238,6 @@ func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.Splitt
 	//Ahora que existe, busco matches en el otro grupo
 	accMapRight, ok := state.right[identifierKey]
 	if !ok {
-		accMapRight = map[string]account.AccountPair{}
 		return
 	}
 
@@ -258,6 +258,7 @@ func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.Splitt
 		}
 
 		output_index := j.shardFor(clientID, identifierKey, rightIdentifierKey)
+		slog.Info("LEFT A B C", "shard", output_index, "A", v.Left, "B", idenetifier, "C", rightIdentifier)
 		if err := j.outputQueues[output_index].Send(*msg); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
@@ -285,6 +286,7 @@ func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.Split
 	accMap, ok := state.right[identifierKey]
 	if !ok {
 		accMap = map[string]account.AccountPair{}
+		state.right[identifierKey] = accMap
 	}
 
 	//Veo si ya existe el par shardkey + esta key de la izquierda
@@ -300,7 +302,6 @@ func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.Split
 	//Ahora que existe, busco matches en el otro grupo
 	accMapRight, ok := state.left[identifierKey]
 	if !ok {
-		accMapRight = map[string]account.AccountPair{}
 		return
 	}
 
@@ -321,6 +322,7 @@ func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.Split
 		}
 
 		output_index := j.shardFor(clientID, identifierKey, leftIdentifierKey)
+		slog.Info("RIGHT A B C", "shard", output_index, "A", leftIdentifier, "B", idenetifier, "C", v.Right)
 		if err := j.outputQueues[output_index].Send(*msg); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}

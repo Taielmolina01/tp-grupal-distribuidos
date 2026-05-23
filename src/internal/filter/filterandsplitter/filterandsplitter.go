@@ -223,6 +223,10 @@ func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer)
 		return
 	}
 
+	if record.FromBankAccount == record.ToBankAccount && record.FromBank == record.ToBank {
+		return
+	}
+
 	output := []transfer.SplittedTransfer{
 		{Transfer: record, IsLeftPart: true},
 		{Transfer: record, IsLeftPart: false},
