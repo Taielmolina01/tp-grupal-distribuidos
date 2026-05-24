@@ -2,6 +2,7 @@ package filter
 
 import (
 	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/fetcherresponse"
 	"tp-grupal-distribuidos/internal/common/normalizer"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -116,4 +117,38 @@ func CreateAverageFilter(config FilterConfig) (worker.Worker, error) {
 	return newAverageFilter(config, func(n1 float32, n2 float32) bool {
 		return n1 <= n2+config.Amount && n1 >= n2-config.Amount
 	})
+}
+
+func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
+	return newConvertedAmountFilter[transfer.Transfer, fetcherresponse.FetcherResponse](
+		config,
+		func(t transfer.Transfer, f fetcherresponse.FetcherResponse) bool {
+			return t.AmountPaid*f.Rate < config.Amount
+		},
+		func(f fetcherresponse.FetcherResponse) string {
+			return f.Date
+		},
+		func(f fetcherresponse.FetcherResponse) string {
+			return f.Base
+		},
+		func(f fetcherresponse.FetcherResponse) float32 {
+			return f.Rate
+		},
+		func(t transfer.Transfer) string {
+			return t.Timestamp.Format(DATE_LAYOUT)
+		},
+		func(t transfer.Transfer) string {
+			return t.ReceivingCurrency
+		},
+		func(t transfer.Transfer) float32 {
+			return t.AmountPaid
+		},
+		func(t transfer.Transfer, rate float32) fetcherresponse.FetcherResponse {
+			return fetcherresponse.FetcherResponse{
+				Date: t.Timestamp.Format(DATE_LAYOUT),
+				Base: t.ReceivingCurrency,
+				Rate: rate,
+			}
+		},
+	)
 }

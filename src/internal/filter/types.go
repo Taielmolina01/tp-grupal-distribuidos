@@ -34,6 +34,8 @@ type FilterConfig struct {
 	OutputExchange    string
 	OutputQueue       string
 	OutputRoutingKeys []string
+	LeftInputQueue    string
+	RightInputQueue   string
 	Amount            float32
 	StartDateRange    time.Time
 	EndDateRange      time.Time
@@ -81,4 +83,20 @@ type AverageFilter struct {
 	inputExchange  middleware.Middleware
 	outputExchange middleware.Middleware
 	compareFunc    func(float32, float32) bool
+}
+
+type ConvertedAmountFilter[T, S comparable] struct {
+	leftInputQueue     middleware.Middleware
+	rightInputQueue    middleware.Middleware
+	outputQueue        middleware.Middleware
+	compareFunc        func(t T, s S) bool
+	queryId            uint8
+	leftKeyFunc        func(S) string
+	leftSecondKeyFunc  func(S) string
+	leftValueFunc      func(S) float32
+	rightKeyFunc       func(T) string
+	rightsecondKeyFunc func(T) string
+	rightValueFunc     func(T) float32
+	conversionFunc     func(T, float32) S
+	conversionsByDay   map[string]map[string]float32
 }

@@ -17,7 +17,7 @@ type Fetcher struct {
 	outputQueues     []middleware.Middleware
 	queryId          uint8
 	quote            string
-	conversionsByDay map[string]map[string]float64
+	conversionsByDay map[string]map[string]float32
 }
 
 type apiResponse struct {
@@ -28,5 +28,5 @@ type apiResponseRates struct {
 	Date  string  `json:"date"`
 	Base  string  `json:"base"`
 	Quote string  `json:"quote"`
-	Rate  float64 `json:"rate"`
+	Rate  float32 `json:"rate"`
 }

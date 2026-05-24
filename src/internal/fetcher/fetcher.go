@@ -54,7 +54,7 @@ func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 		outputQueues:     outputQueues,
 		queryId:          config.QueryId,
 		quote:            config.Quote,
-		conversionsByDay: make(map[string]map[string]float64),
+		conversionsByDay: make(map[string]map[string]float32),
 	}, nil
 }
 
@@ -78,7 +78,7 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 
 	today := transfer.Timestamp.Format(DATE_LAYOUT)
 	if _, ok := fetcher.conversionsByDay[today]; !ok {
-		fetcher.conversionsByDay[today] = make(map[string]float64)
+		fetcher.conversionsByDay[today] = make(map[string]float32)
 		if err := fetcher.fetchExchangeRate(transfer); err != nil {
 			slog.Error("while fetching exchange rate", "err", err)
 			return
