@@ -1,0 +1,34 @@
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  h_3c9b41718876fe 1-192
+src/cmd/joinaccounts/config.go
+  h_3c9b41718876fe 8
+src/internal/joinaccounts/joinaccounts.go
+  h_3c9b41718876fe 1-334
+src/cmd/joinaccounts/main.go
+  h_3c9b41718876fe 7
+src/internal/acumaccounts/acumaccounts.go
+  s_7921c2f79ec51d::t_9ed6f699ac275d 171,197
+  s_7921c2f79ec51d::t_25f4df8d53350b 235
+  h_3c9b41718876fe 1-170,172-196,198-234,236-240
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "c2cfd6071e2710ce8f1d759b93111463e16f964c",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_7921c2f79ec51d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "53d3f787-8399-4bb8-955e-1303f5d4e539",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
