@@ -55,6 +55,8 @@ func (distinctfilter *DistinctFilter[T, S]) Run() {
 }
 
 func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message, ack, nack func()) {
+	defer ack()
+
 	deserializedMsg, err := inner.DeserializeData[T](&msg)
 	if err != nil {
 		slog.Error("While deserializing message", "err", err)
@@ -67,7 +69,6 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 				slog.Error("While broadcasting EOF to output queue", "err", err)
 			}
 		}
-		ack()
 		return
 	}
 
