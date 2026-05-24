@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	// TODO: subir a 5 cuando se implementen Q3/Q4/Q5.
-	numQueries           = 2
+	// TODO: subir a 5 cuando se implementen Q4/Q5.
+	numQueries           = 3
 	transTimestampLayout = "2006/01/02 15:04"
 )
 

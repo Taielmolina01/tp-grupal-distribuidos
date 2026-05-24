@@ -351,16 +351,18 @@ func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.DataMsg
 	}
 }
 
-// TODO: subir totalQueries cuando se implementen Q3/Q4/Q5.
-const totalQueries = 2
+// TODO: subir totalQueries cuando se implementen Q4/Q5.
+const totalQueries = 3
 
 // eofsPerQuery: cuántos EOFs manda cada query por cliente al gateway.
 // Depende de cómo emite el último stage de cada pipeline:
 //   - Q1 (filter_amount): isCoordinator pattern → 1 EOF por cliente (solo el coordinator manda).
 //   - Q2 (join sin ring): 2 joins, cada uno manda 1 EOF → 2 EOFs por cliente.
+//   - Q3 (average_filter): isCoordinator pattern → 1 EOF por cliente.
 var eofsPerQuery = map[uint8]int{
 	1: 1,
 	2: 2,
+	3: 1,
 }
 
 // markQueryEOF incrementa el contador y devuelve (shouldWrite, shouldClose):

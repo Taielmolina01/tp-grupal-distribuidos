@@ -181,9 +181,20 @@ func loadFilterTypeConfig(config *filter.FilterConfig) error {
 			return err
 		}
 	case filter.AVERAGE_FILTER:
-		if err := loadAmountVenv(config); err != nil {
-			return err
+		avgInputQueue := os.Getenv("AVG_INPUT_QUEUE")
+		if avgInputQueue == "" {
+			return errors.New("AVG_INPUT_QUEUE environment variable is required if FILTER_TYPE is AVERAGE_FILTER")
 		}
+		config.AvgInputQueue = avgInputQueue
+		avgExpectedEofsStr := os.Getenv("AVG_EXPECTED_EOFS")
+		if avgExpectedEofsStr == "" {
+			return errors.New("AVG_EXPECTED_EOFS environment variable is required if FILTER_TYPE is AVERAGE_FILTER")
+		}
+		n, err := strconv.Atoi(avgExpectedEofsStr)
+		if err != nil {
+			return errors.New("AVG_EXPECTED_EOFS environment variable must be a number")
+		}
+		config.AvgExpectedEofs = n
 	default:
 		return errors.New("FILTER_TYPE environment variable hasn't a valid value")
 	}
