@@ -160,44 +160,6 @@ func (j *JoinAccounts) handleRecord(clientID int, record transfer.SplittedTransf
 		return
 	}
 	j.handleRightPartRecord(clientID, record)
-	// j.handlerMessages.AddProcessedMessagesAmountByClientId(clientID, 1)
-
-	// if record.Timestamp.Before(j.startDate) || record.Timestamp.After(j.endDate) {
-	// 	return
-	// }
-
-	// output := []transfer.SplittedTransfer{
-	// 	{Transfer: record, IsLeftPart: true},
-	// 	{Transfer: record, IsLeftPart: false},
-	// }
-
-	// for _, o := range output {
-	// 	var bank, acc string
-	// 	if o.IsLeftPart {
-	// 		bank = o.Transfer.FromBank
-	// 		acc = o.Transfer.FromBankAccount
-	// 	} else {
-	// 		bank = o.Transfer.ToBank
-	// 		acc = o.Transfer.ToBankAccount
-	// 	}
-
-	// 	output_index := j.shardFor(clientID, bank, acc)
-
-	// 	msg, err := inner.SerializeData(inner.DataMsg[transfer.SplittedTransfer]{
-	// 		ClientID: clientID,
-	// 		QueryID:  uint8(j.queryID),
-	// 		Payload:  o,
-	// 	})
-
-	// 	if err != nil {
-	// 		slog.Error("While serializing output message", "err", err)
-	// 	}
-
-	// 	j.handlerMessages.AddFilteredMessagesAmountByClientId(clientID, 1)
-	// 	if err := j.outputQueues[output_index].Send(*msg); err != nil {
-	// 		slog.Error("While sending output message", "err", err)
-	// 	}
-	// }
 }
 
 func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.SplittedTransfer) {
@@ -257,8 +219,7 @@ func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.Splitt
 			slog.Error("While serializing output message", "err", err)
 		}
 
-		output_index := j.shardFor(clientID, identifierKey, rightIdentifierKey)
-		slog.Info("LEFT A B C", "shard", output_index, "A", v.Left, "B", idenetifier, "C", rightIdentifier)
+		output_index := j.shardFor(clientID, v.Right.GetKey(), rightIdentifierKey)
 		if err := j.outputQueues[output_index].Send(*msg); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
@@ -321,8 +282,7 @@ func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.Split
 			slog.Error("While serializing output message", "err", err)
 		}
 
-		output_index := j.shardFor(clientID, identifierKey, leftIdentifierKey)
-		slog.Info("RIGHT A B C", "shard", output_index, "A", leftIdentifier, "B", idenetifier, "C", v.Right)
+		output_index := j.shardFor(clientID, leftIdentifierKey, v.Right.GetKey())
 		if err := j.outputQueues[output_index].Send(*msg); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
@@ -357,6 +317,8 @@ func (j *JoinAccounts) handleEOF(data inner.DataMsg[transfer.SplittedTransfer]) 
 			slog.Error("While sending EOF message", "err", err)
 		}
 	}
+
+	delete(j.clientsState, data.ClientID)
 }
 
 func (j *JoinAccounts) stateFor(clientID int) *clientState {

@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"os"
 
-	"tp-grupal-distribuidos/internal/filter/joinaccounts"
+	"tp-grupal-distribuidos/internal/joinaccounts"
 )
 
 func run() int {

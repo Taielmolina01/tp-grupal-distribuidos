@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"tp-grupal-distribuidos/internal/filter/joinaccounts"
+	"tp-grupal-distribuidos/internal/joinaccounts"
 )
 
 func loadConfig() (joinaccounts.JoinAccountsConfig, error) {

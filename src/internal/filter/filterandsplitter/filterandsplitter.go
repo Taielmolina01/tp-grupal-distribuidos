@@ -37,11 +37,6 @@ type FilterAndSplitterConfig struct {
 	QueryID int
 }
 
-type clientState struct {
-	msgCount     uint64
-	msgSentCount uint64
-}
-
 type FilterAndSplitter struct {
 	id        int
 	startDate time.Time
