@@ -5,7 +5,7 @@ WORKDIR /build/
 COPY go.mod .
 COPY go.sum .
 COPY internal/common ./internal/common
-COPY internal/filter/joinaccounts ./internal/filter/joinaccounts
+COPY internal/joinaccounts ./internal/joinaccounts
 COPY cmd/joinaccounts ./cmd/joinaccounts
 RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -o bin/joinaccounts ./cmd/joinaccounts/
