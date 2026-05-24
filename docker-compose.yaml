@@ -373,3 +373,37 @@ services:
       - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=DATE_RANGE_AND_SPLITTER
+
+  sum_q3_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/sum/Dockerfile
+    container_name: sum_q3_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=0
+      - SUM_AMOUNT=2
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_QUEUE=transfers_avg_period_q
+      - OUTPUT_QUEUES=sum_aggregate_q3_0,sum_aggregate_q3_1
+      - QUERY_ID=3
+
+  sum_q3_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/sum/Dockerfile
+    container_name: sum_q3_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=1
+      - SUM_AMOUNT=2
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_QUEUE=transfers_avg_period_q
+      - OUTPUT_QUEUES=sum_aggregate_q3_0,sum_aggregate_q3_1
+      - QUERY_ID=3
