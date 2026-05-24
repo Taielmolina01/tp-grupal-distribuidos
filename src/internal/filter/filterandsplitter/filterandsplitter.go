@@ -141,7 +141,9 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 			handlerMessages.RemoveClient(clientID)
 
 			if isCoordinator {
-				return outputQueues[clientID].Send(*msg)
+				for _, q := range outputQueues {
+					return q.Send(*msg)
+				}
 			}
 			return nil
 		},
