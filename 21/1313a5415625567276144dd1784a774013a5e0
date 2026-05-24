@@ -1,0 +1,14 @@
+src/internal/gateway/gateway.go
+  h_3c9b41718876fe 355,364
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "211313a5415625567276144dd1784a774013a5e0",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
