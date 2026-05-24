@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	_DATE_LAYOUT = "2006-01-02 15:04:05"
+	_DATE_LAYOUT            = "2006-01-02 15:04:05"
+	_DATES_DIFFERENCE_GUARD = 10
 )
 
 func loadConfig() (filter.FilterConfig, error) {
@@ -127,6 +128,15 @@ func loadDateRangeVenv(config *filter.FilterConfig) error {
 	}
 	config.StartDateRange = dates[0]
 	config.EndDateRange = dates[1]
+
+	if config.StartDateRange.After(config.EndDateRange) {
+		return errors.New("start date must be before end date in DATE_RANGE environment variable")
+	}
+
+	if time.Duration(config.StartDateRange.Sub(config.EndDateRange).Hours())/24 > _DATES_DIFFERENCE_GUARD {
+		return fmt.Errorf("the range between start and end date in DATE_RANGE environment variable must be less than %d", _DATES_DIFFERENCE_GUARD)
+	}
+
 	return nil
 }
 
