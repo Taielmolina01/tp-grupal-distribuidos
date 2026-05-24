@@ -62,7 +62,6 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 	}
 
 	if deserializedMsg.IsEOF() {
-		slog.Info("EOF received, broadcasting to all output queues", "client_id", deserializedMsg.ClientID)
 		for _, outputQueue := range distinctfilter.outputQueues {
 			if err := outputQueue.Send(msg); err != nil {
 				slog.Error("While broadcasting EOF to output queue", "err", err)
@@ -71,8 +70,6 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 		ack()
 		return
 	}
-
-	slog.Info("message to process", deserializedMsg.Payload, "client_id", deserializedMsg.ClientID)
 
 	clientSeen, ok := distinctfilter.alreadySeen[deserializedMsg.ClientID]
 	if !ok {

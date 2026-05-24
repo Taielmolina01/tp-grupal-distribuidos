@@ -50,7 +50,7 @@ func newTwoInputJoin[L, R, O any](
 		return nil, err
 	}
 
-	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, config.OutputQueue, config.OutputRoutingKeys, connSettings)
+	output, err := middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
 	if err != nil {
 		if err := leftInput.Close(); err != nil {
 			slog.Error("while closing left input", "err", err)
@@ -64,7 +64,7 @@ func newTwoInputJoin[L, R, O any](
 	slog.Info("join started",
 		"left_queue", config.LeftInputQueue,
 		"right_queue", config.RightInputQueue,
-		"output_exchange", config.OutputExchange, "output_keys", config.OutputRoutingKeys,
+		"output_queue", config.OutputQueue,
 	)
 
 	leftEofs := config.LeftEofsExpected
@@ -192,12 +192,12 @@ func newSingleInputJoin[T, O any](
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	input, err := middleware.CreateExchangeMiddleware(config.InputExchange, config.InputQueue, config.InputRoutingKeys, connSettings)
+	input, err := middleware.CreateQueueMiddleware(config.LeftInputQueue, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, config.OutputQueue, config.OutputRoutingKeys, connSettings)
+	output, err := middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
 	if err != nil {
 		if err := input.Close(); err != nil {
 			slog.Error("while closing input", "err", err)

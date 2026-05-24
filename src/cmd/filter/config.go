@@ -61,6 +61,15 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("FILTER_AMOUNT environment variable must be a number")
 	}
 
+	queryIdStr := os.Getenv("QUERY_ID")
+	if queryIdStr == "" {
+		return filter.FilterConfig{}, errors.New("QUERY_ID environment variable is required")
+	}
+	queryId, err := strconv.Atoi(queryIdStr)
+	if err != nil {
+		return filter.FilterConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
+	}
+
 	config := filter.FilterConfig{
 		Id:                id,
 		MomHost:           momHost,
@@ -72,6 +81,7 @@ func loadConfig() (filter.FilterConfig, error) {
 		OutputQueue:       outputQueue,
 		OutputRoutingKeys: outputRoutingKeys,
 		FilterAmount:      filterAmountInt,
+		QueryId:           uint8(queryId),
 	}
 
 	if err := loadFilterTypeConfig(&config); err != nil {

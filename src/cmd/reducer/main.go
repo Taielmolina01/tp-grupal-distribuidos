@@ -27,11 +27,6 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		return reducer.ReducerConfig{}, errors.New("INPUT_EXCHANGE environment variable is required")
 	}
 
-	// outputExchange := os.Getenv("OUTPUT_EXCHANGE")
-	// if outputExchange == "" {
-	// 	return reducer.ReducerConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
-	// }
-
 	queryId, err := strconv.Atoi(os.Getenv("QUERY_ID"))
 	if err != nil {
 		return reducer.ReducerConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
@@ -69,11 +64,6 @@ func loadConfig() (reducer.ReducerConfig, error) {
 	}
 	outputQueuesStr := strings.Split(outputQueues, ",")
 
-	joinsAmount, err := strconv.Atoi(os.Getenv("JOINS_AMOUNT"))
-	if err != nil {
-		return reducer.ReducerConfig{}, errors.New("JOINS_AMOUNT environment variable is required and must be a number")
-	}
-
 	return reducer.ReducerConfig{
 		Id:                id,
 		ReducerAmount:     reducerAmount,
@@ -85,7 +75,6 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		InputRoutingKeys:  inputRoutingKeys,
 		OutputQueues:      outputQueuesStr,
 		InputEofsExpected: inputEofsExpected,
-		JoinsAmount:       joinsAmount,
 	}, nil
 }
 

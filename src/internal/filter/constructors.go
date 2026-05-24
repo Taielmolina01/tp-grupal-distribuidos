@@ -17,7 +17,6 @@ func CreateCurrencyFilter(config FilterConfig) (worker.Worker, error) {
 		func(t transfer.Transfer) transfer.Transfer {
 			return t
 		},
-		1,
 	)
 }
 
@@ -36,7 +35,6 @@ func CreateAmountFilter(config FilterConfig) (worker.Worker, error) {
 				Amount:      t.AmountPaid,
 			}
 		},
-		1,
 	)
 }
 
@@ -49,7 +47,6 @@ func CreateDateRangeFilter(config FilterConfig) (worker.Worker, error) {
 		func(t transfer.Transfer) transfer.Transfer {
 			return t
 		},
-		1,
 	)
 }
 
@@ -62,7 +59,6 @@ func CreateDateRangeAndPaymentMethod(config FilterConfig) (worker.Worker, error)
 		func(t transfer.Transfer) transfer.Transfer {
 			return t
 		},
-		1,
 	)
 }
 
