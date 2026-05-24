@@ -32,8 +32,6 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 		return fetcher.FetcherConfig{}, errors.New("INPUT_QUEUE environment variable is required")
 	}
 
-	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
-
 	outputQueues := os.Getenv("OUTPUT_QUEUES")
 	if outputQueues == "" {
 		return fetcher.FetcherConfig{}, errors.New("OUTPUT_QUEUES environment variable is required")
@@ -50,13 +48,18 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 		return fetcher.FetcherConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
 	}
 
+	quote := os.Getenv("QUOTE")
+	if quote == "" {
+		return fetcher.FetcherConfig{}, errors.New("QUOTE environment variable is required")
+	}
+
 	return fetcher.FetcherConfig{
-		Id:             id,
-		MomHost:        momHost,
-		MomPort:        momPort,
-		InputQueue:     inputQueue,
-		OutputExchange: outputExchange,
-		OutputQueues:   outputQueuesList,
-		QueryId:        uint8(queryId),
+		Id:           id,
+		MomHost:      momHost,
+		MomPort:      momPort,
+		InputQueue:   inputQueue,
+		Quote:        quote,
+		OutputQueues: outputQueuesList,
+		QueryId:      uint8(queryId),
 	}, nil
 }

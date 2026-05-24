@@ -22,7 +22,6 @@ func run() int {
 	go server.HandleSignals()
 
 	server.Run()
-	slog.Info("FUME FUME FUME FUMETEO")
 	return 0
 }
 
