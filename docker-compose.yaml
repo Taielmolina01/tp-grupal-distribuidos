@@ -27,6 +27,7 @@ services:
         condition: service_healthy
     environment:
       - ACCOUNT_QUEUES=filter_account_id_0,filter_account_id_1
+      - TRANSFERS_QUEUES=transfers_queue_q5,transfers_queue_q1234
       - TRANSFERS_EXCHANGE=transfers_exchange
       - RESULTS_QUEUE=results_queue
       - MOM_HOST=rabbitmq
@@ -72,24 +73,7 @@ services:
       - ./input:/input
       - ./output:/output
 
-  # client_2:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_2
-  #   depends_on:
-  #   - gateway
-  #   environment:
-  #   - SERVER_HOST=gateway
-  #   - SERVER_PORT=5678
-  #   - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
-  #   - INPUT_FILE_TRANS=/input/transactions_0.csv
-  #   - OUTPUT_FILE_PREFIX=/output/output_2
-  #   - MAX_BATCH_SIZE=1000
-  #   - LOG_LEVEL=DEBUG
-  #   volumes:
-  #   - ./input:/input
-  #   - ./output:/output
+  # Query 1
 
   filter_currency_0:
     build:
@@ -104,7 +88,7 @@ services:
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
       - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_QUEUE=transfers_queue
+      - INPUT_QUEUE=transfers_queue_q1234
       - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
       - OUTPUT_EXCHANGE=filtered_transfers_exchange
       - OUTPUT_QUEUE=filtered_transfers_q
@@ -132,7 +116,7 @@ services:
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
       - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_QUEUE=transfers_queue
+      - INPUT_QUEUE=transfers_queue_q1234
       - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
       - OUTPUT_EXCHANGE=filtered_transfers_exchange
       - OUTPUT_QUEUE=filtered_transfers_q
@@ -202,6 +186,8 @@ services:
       options:
         max-size: "50m"
         max-file: "3"
+
+  # Query 2
 
   reducer_q2_0:
     build:
@@ -340,3 +326,45 @@ services:
       options:
         max-size: "50m"
         max-file: "3"
+
+  # Query 5
+
+  filter_date_and_payment_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/filter/Dockerfile
+    container_name: filter_date_and_payment_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - ID=1
+      - INPUT_QUEUE=transfers_queue_q5
+      - OUTPUT_QUEUES=filtered_transfers_q5
+      - FILTER_AMOUNT=2
+      - FILTER_TYPE=DATE_RANGE_AND_PAYMENT
+      - DATE_RANGE=2022-09-01 00:00, 2022-09-06 00:00
+      - PAYMENT_FORMATS=ACH,Wire
+      - QUERY_ID=5
+
+  filter_date_and_payment_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/filter/Dockerfile
+    container_name: filter_date_and_payment_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - ID=1
+      - INPUT_QUEUE=transfers_queue_q5
+      - OUTPUT_QUEUES=filtered_transfers_q5
+      - FILTER_AMOUNT=2
+      - FILTER_TYPE=DATE_RANGE_AND_PAYMENT
+      - DATE_RANGE=2022-09-01 00:00, 2022-09-06 00:00
+      - PAYMENT_FORMATS=ACH,Wire
+      - QUERY_ID=5

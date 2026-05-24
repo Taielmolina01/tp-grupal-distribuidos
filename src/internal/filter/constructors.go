@@ -54,7 +54,7 @@ func CreateDateRangeAndPaymentMethod(config FilterConfig) (worker.Worker, error)
 	return newFilter(
 		config,
 		func(t transfer.Transfer) bool {
-			return isValidCurrency(t, config) && t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
+			return isValidPaymentMethod(t, config) && t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
 		},
 		func(t transfer.Transfer) transfer.Transfer {
 			return t

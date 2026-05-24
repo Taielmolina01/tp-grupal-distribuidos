@@ -42,6 +42,7 @@ type FilterConfig struct {
 	FilterAmount      int
 	OutputQueues      []string
 	QueryId           uint8
+	PaymentMethods    []string
 }
 
 type Filter[T comparable, O comparable] struct {

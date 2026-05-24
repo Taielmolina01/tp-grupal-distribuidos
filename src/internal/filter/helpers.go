@@ -9,3 +9,7 @@ import (
 func isValidCurrency(t transfer.Transfer, config FilterConfig) bool {
 	return slices.Contains(config.Currencies, t.PaymentCurrency)
 }
+
+func isValidPaymentMethod(t transfer.Transfer, config FilterConfig) bool {
+	return slices.Contains(config.PaymentMethods, t.PaymentFormat)
+}
