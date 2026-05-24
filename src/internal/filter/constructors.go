@@ -1,6 +1,10 @@
 package filter
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
 	"tp-grupal-distribuidos/internal/common/normalizer"
@@ -149,6 +153,57 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 				Base: t.ReceivingCurrency,
 				Rate: rate,
 			}
+		},
+		func(t transfer.Transfer, clientID int) string {
+			fields := []string{}
+			fields = append(fields, t.Timestamp.Format(DATE_LAYOUT))
+			fields = append(fields, t.FromBank)
+			fields = append(fields, t.FromBankAccount)
+			fields = append(fields, t.ToBank)
+			fields = append(fields, t.ToBankAccount)
+			fields = append(fields, fmt.Sprintf("%f", t.AmountReceived))
+			fields = append(fields, t.ReceivingCurrency)
+			fields = append(fields, fmt.Sprintf("%f", t.AmountPaid))
+			fields = append(fields, t.PaymentCurrency)
+			fields = append(fields, t.PaymentFormat)
+			fields = append(fields, fmt.Sprintf("%t", t.IsLaundering))
+			fields = append(fields, fmt.Sprintf("%d", clientID))
+			return strings.Join(fields, ",")
+		},
+		func(line string) (transfer.Transfer, int, error) {
+			columns := strings.Split(line, ",")
+			if len(columns) < 11 {
+				return transfer.Transfer{}, -1, fmt.Errorf("invalid line format")
+			}
+			timestamp, err := time.Parse(DATE_LAYOUT_WITH_HOUR, columns[0])
+			if err != nil {
+				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing timestamp: %w", err)
+			}
+			amountReceived, err := strconv.ParseFloat(columns[5], 32)
+			if err != nil {
+				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing amount received: %w", err)
+			}
+			amountPaid, err := strconv.ParseFloat(columns[7], 32)
+			if err != nil {
+				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing amount paid: %w", err)
+			}
+			clientId, err := strconv.Atoi(columns[12])
+			if err != nil {
+				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing client ID: %w", err)
+			}
+			return transfer.Transfer{
+				Timestamp:         timestamp,
+				FromBank:          columns[1],
+				FromBankAccount:   columns[2],
+				ToBank:            columns[3],
+				ToBankAccount:     columns[4],
+				AmountReceived:    float32(amountReceived),
+				ReceivingCurrency: columns[6],
+				AmountPaid:        float32(amountPaid),
+				PaymentCurrency:   columns[8],
+				PaymentFormat:     columns[9],
+				IsLaundering:      columns[10] == "true",
+			}, clientId, nil
 		},
 	)
 }

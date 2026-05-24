@@ -1,13 +1,21 @@
 package filter
 
 import (
+	"bufio"
+	"errors"
+	"fmt"
 	"log/slog"
+	"os"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-const DATE_LAYOUT = "2006-01-02"
+const (
+	DATE_LAYOUT           = "2006-01-02"
+	DATE_LAYOUT_WITH_HOUR = "2006-01-02 15:04"
+	FILE_LAYOUT           = "%s_%s.csv"
+)
 
 func newConvertedAmountFilter[T, S comparable](
 	config FilterConfig,
@@ -19,6 +27,8 @@ func newConvertedAmountFilter[T, S comparable](
 	rightsecondKeyFunc func(T) string,
 	rightValueFunc func(T) float32,
 	conversionFunc func(T, float32) S,
+	toSaveFunc func(T, int) string,
+	fromSaveFunc func(string) (T, int, error),
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{
 		Hostname: config.MomHost,
@@ -75,6 +85,8 @@ func newConvertedAmountFilter[T, S comparable](
 		rightsecondKeyFunc: rightsecondKeyFunc,
 		rightValueFunc:     rightValueFunc,
 		conversionFunc:     conversionFunc,
+		toSaveFunc:         toSaveFunc,
+		fromSaveFunc:       fromSaveFunc,
 	}, nil
 }
 
@@ -99,8 +111,12 @@ func (filter *ConvertedAmountFilter[T, S]) consumeLeft(msg middleware.Message, a
 		slog.Error("while deserializing transfer", "err", err)
 		return
 	}
-
-	filter.conversionsByDay[filter.leftKeyFunc(result.Payload)][filter.leftSecondKeyFunc(result.Payload)] = filter.leftValueFunc(result.Payload)
+	if _, ok := filter.conversionsByDay[filter.leftKeyFunc(result.Payload)]; !ok {
+		filter.conversionsByDay[filter.leftKeyFunc(result.Payload)] = make(map[string]float32)
+	} else if _, ok := filter.conversionsByDay[filter.leftKeyFunc(result.Payload)][filter.leftSecondKeyFunc(result.Payload)]; !ok {
+		filter.conversionsByDay[filter.leftKeyFunc(result.Payload)][filter.leftSecondKeyFunc(result.Payload)] = filter.leftValueFunc(result.Payload)
+		filter.CheckTransfersWithoutConversion(result.Payload)
+	}
 }
 
 func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, ack, nack func()) {
@@ -116,8 +132,7 @@ func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, 
 
 	key := filter.rightKeyFunc(payload)
 	if _, ok := filter.conversionsByDay[key]; !ok {
-		slog.Error("no conversion rate for today", "date", key)
-		// deberia guardar esta transaccion a disco
+		filter.saveTransfersInFile(payload, result.ClientID)
 	} else {
 		conversion := filter.conversionsByDay[key][filter.rightsecondKeyFunc(payload)]
 		if filter.compareFunc(payload, filter.conversionFunc(
@@ -139,6 +154,85 @@ func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, 
 				return
 			}
 		}
+	}
+}
+
+func (filter *ConvertedAmountFilter[T, S]) CheckTransfersWithoutConversion(s S) {
+	_, err := os.Stat(fmt.Sprintf(FILE_LAYOUT, filter.leftKeyFunc(s), filter.leftSecondKeyFunc(s)))
+
+	if errors.Is(err, os.ErrNotExist) {
+		return
+	} else {
+		file, err := os.Open(fmt.Sprintf(FILE_LAYOUT, filter.leftKeyFunc(s), filter.leftSecondKeyFunc(s)))
+		if err != nil {
+			slog.Error("while opening file", "err", err)
+			return
+		}
+		defer func() {
+			if err := file.Close(); err != nil {
+				slog.Error("while closing file", "err", err)
+			}
+		}()
+
+		scanner := bufio.NewScanner(file)
+
+		for scanner.Scan() {
+			line := scanner.Text()
+			transfer, clientID, err := filter.fromSaveFunc(line)
+			if err != nil {
+				slog.Error("while parsing line", "err", err)
+				continue
+			}
+			if filter.compareFunc(transfer, s) {
+				msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
+					ClientID: clientID,
+					QueryID:  filter.queryId,
+					Payload:  transfer,
+					EOF:      nil,
+				})
+				if err != nil {
+					slog.Error("while serializing message", "err", err)
+					return
+				}
+				if err := filter.outputQueue.Send(*msgOutput); err != nil {
+					slog.Error("while publishing message to output queue", "err", err)
+					return
+				}
+			}
+		}
+	}
+}
+
+func (filter *ConvertedAmountFilter[T, S]) saveTransfersInFile(transfer T, clientID int) {
+	// https://www.solvetic.com/tutoriales/article/1458-entender-los-permisos-linux-chmod/
+	file, err := os.OpenFile(
+		"data.csv",
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+		0644,
+	)
+
+	if err != nil {
+		slog.Error("while opening file", "err", err)
+		return
+	}
+
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Error("while closing file", "err", err)
+		}
+	}()
+
+	writer := bufio.NewWriter(file)
+
+	line := filter.toSaveFunc(transfer, clientID) + "\n"
+
+	_, err = writer.WriteString(line)
+	if err != nil {
+		slog.Error("while writing to file", "err", err)
+	}
+
+	if err := writer.Flush(); err != nil {
+		slog.Error("while flushing writer", "err", err)
 	}
 }
 
