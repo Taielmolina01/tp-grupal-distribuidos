@@ -12,6 +12,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofmessage"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/queryresult"
 )
 
 type FilterAccountSeenConfig struct {
@@ -143,10 +144,10 @@ func (f *FilterAccountSeen) handleRecord(clientID int, record account.AccountIde
 
 	state.seenAccounts[record.GetKey()] = true
 
-	msg, err := inner.SerializeData(inner.DataMsg[account.AccountIdentifier]{
+	msg, err := inner.SerializeData(inner.DataMsg[queryresult.Query4Result]{
 		ClientID: clientID,
 		QueryID:  uint8(f.queryID),
-		Payload:  record,
+		Payload:  queryresult.Query4Result{BankId: record.BankID, AccountNumber: record.AccountNumber},
 	})
 
 	if err != nil {
