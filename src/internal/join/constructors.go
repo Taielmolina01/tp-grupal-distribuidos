@@ -18,8 +18,8 @@ func CreateSplittedTransferJoin(config JoinConfig) (worker.Worker, error) {
 		func(t transfer.SplittedTransfer) string { return t.Transfer.FromBankAccount },
 		func(left, right transfer.SplittedTransfer) queryresult.Query4Result {
 			return queryresult.Query4Result{
-				BankId:    left.Transfer.FromBank,
-				AccountId: left.Transfer.FromBankAccount,
+				BankId:        left.Transfer.FromBank,
+				AccountNumber: left.Transfer.FromBankAccount,
 			}
 		},
 	)

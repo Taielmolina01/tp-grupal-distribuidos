@@ -23,7 +23,7 @@ import (
 
 const (
 	// TODO: subir a 5 cuando se implementen Q3/Q4/Q5.
-	numQueries           = 2
+	numQueries           = 5
 	transTimestampLayout = "2006/01/02 15:04"
 )
 
@@ -250,6 +250,14 @@ func (client *Client) recvResults() error {
 		}
 	}()
 
+	headers := [][]string{
+		queryresult.Query1Result{}.GetHeaders(),
+		queryresult.Query2Result{}.GetHeaders(),
+		queryresult.Query3Result{}.GetHeaders(),
+		queryresult.Query4Result{}.GetHeaders(),
+		queryresult.Query5Result{}.GetHeaders(),
+	}
+
 	for i := range numQueries {
 		path := fmt.Sprintf("%s_%d.csv", client.config.OutputFilePrefix, i+1)
 		f, err := os.Create(path)
@@ -259,6 +267,10 @@ func (client *Client) recvResults() error {
 		}
 		files[i] = f
 		writers[i] = csv.NewWriter(f)
+		if err := writers[i].Write(headers[i]); err != nil {
+			slog.Error("While writing header to output file", "query", i+1, "err", err)
+			return err
+		}
 	}
 
 	doneCount := 0
@@ -317,7 +329,7 @@ func (client *Client) flushBatchToWriters(results *queryresult.BatchResults, wri
 		}
 	}
 	for _, r := range results.Query4 {
-		if err := writers[3].Write([]string{r.BankId, r.AccountId}); err != nil {
+		if err := writers[3].Write([]string{r.BankId, r.AccountNumber}); err != nil {
 			slog.Error("While writing to output file", "query", 4, "err", err)
 		}
 	}
