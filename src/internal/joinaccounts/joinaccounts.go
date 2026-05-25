@@ -142,15 +142,10 @@ func (j *JoinAccounts) handleInput(msg middleware.Message, ack func()) {
 	}
 
 	if m.IsEOF() {
-		slog.Info("RCV EOF", "id", j.id, "clientID", m.ClientID)
 		j.handleEOF(*m)
 		return
 	}
 
-	slog.Info("RCV split", "id", j.id, "clientID", m.ClientID,
-		"isLeft", m.Payload.IsLeftPart,
-		"from", m.Payload.Transfer.FromBank+"/"+m.Payload.Transfer.FromBankAccount,
-		"to", m.Payload.Transfer.ToBank+"/"+m.Payload.Transfer.ToBankAccount)
 	j.handleRecord(m.ClientID, m.Payload)
 }
 
