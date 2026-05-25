@@ -2,7 +2,10 @@ package reducer
 
 import (
 	"log/slog"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
@@ -36,10 +39,10 @@ func newCountReducer(
 	}
 
 	return &CountReducer{
-		actualCount: 0,
-		inputQueue:  inputQueue,
-		outputQueue: out,
-		queryId:     config.QueryId,
+		inputQueue:    inputQueue,
+		outputQueue:   out,
+		queryId:       config.QueryId,
+		countByClient: map[int]uint32{},
 	}, nil
 }
 
@@ -51,7 +54,38 @@ func (count *CountReducer) Run() {
 
 func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func()) {
 	// No deberían llegar repetidos asique simplemente por cada vez que me llamen sumo uno al contador
-	count.actualCount++
+	// si me llega un EOF ahi si deberia cortar  y mandar el resultado a la siguiente etapa. Ver si necesito
+	// un EOF o N EOF siendo N la cantidad de filters de la etapa anterior.
+	defer ack()
+
+	deserialized, err := inner.DeserializeData[transfer.Transfer](&msg) // no está el generic aca
+	if err != nil {
+		slog.Error("while deserializing message", "err", err)
+		return
+	}
+
+	if !deserialized.IsEOF() {
+		count.countByClient[deserialized.ClientID]++
+	} else {
+		result, err := inner.SerializeData(inner.DataMsg[queryresult.Query5Result]{
+			Payload: queryresult.Query5Result{
+				Qty: count.countByClient[deserialized.ClientID],
+			},
+			QueryID: count.queryId,
+			EOF: &inner.EOFInfo{
+				TotalMessages: 1,
+			},
+			ClientID: deserialized.ClientID,
+		})
+		if err != nil {
+			slog.Error("while serializing EOF message", "err", err)
+			return
+		}
+		if err := count.outputQueue.Send(*result); err != nil {
+			slog.Error("while sending EOF message", "err", err)
+		}
+	}
+
 }
 
 func (count *CountReducer) HandleSignals() {

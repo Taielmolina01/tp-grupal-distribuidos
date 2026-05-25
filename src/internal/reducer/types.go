@@ -45,8 +45,8 @@ type Reducer[T comparable] struct {
 }
 
 type CountReducer struct {
-	actualCount int
-	inputQueue  middleware.Middleware
-	outputQueue middleware.Middleware
-	queryId     uint8
+	countByClient map[int]uint32
+	inputQueue    middleware.Middleware
+	outputQueue   middleware.Middleware
+	queryId       uint8
 }

@@ -31,6 +31,12 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		return gateway.GatewayConfig{}, errors.New("TRANSFERS_EXCHANGE environment variable is required")
 	}
 
+	transfersRoutingKeysStr := os.Getenv("TRANSFERS_ROUTING_KEYS")
+	transfersRoutingKeys := []string{}
+	if transfersRoutingKeysStr != "" {
+		transfersRoutingKeys = splitter.Split(transfersRoutingKeysStr, QUEUES_SEPARATOR)
+	}
+
 	resultsQueue := os.Getenv("RESULTS_QUEUE")
 	if resultsQueue == "" {
 		return gateway.GatewayConfig{}, errors.New("RESULTS_QUEUE environment variable is required")
@@ -66,15 +72,16 @@ func loadConfig() (gateway.GatewayConfig, error) {
 	}
 
 	return gateway.GatewayConfig{
-		AccountQueues:     accountQueueList,
-		TransfersQueues:   transfersQueueList,
-		TransfersExchange: transfersExchange,
-		ResultsQueue:      resultsQueue,
-		ServerHost:        serverHost,
-		ServerPort:        serverPort,
-		MomHost:           momHost,
-		MomPort:           momPort,
-		MaxBatchSize:      maxBatchSize,
+		AccountQueues:        accountQueueList,
+		TransfersQueues:      transfersQueueList,
+		TransfersExchange:    transfersExchange,
+		TransfersRoutingKeys: transfersRoutingKeys,
+		ResultsQueue:         resultsQueue,
+		ServerHost:           serverHost,
+		ServerPort:           serverPort,
+		MomHost:              momHost,
+		MomPort:              momPort,
+		MaxBatchSize:         maxBatchSize,
 	}, nil
 }
 

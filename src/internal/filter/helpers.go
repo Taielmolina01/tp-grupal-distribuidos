@@ -11,5 +11,5 @@ func isValidCurrency(t transfer.Transfer, config FilterConfig) bool {
 }
 
 func isValidPaymentMethod(t transfer.Transfer, config FilterConfig) bool {
-	return slices.Contains(config.PaymentMethods, t.PaymentFormat)
+	return slices.Contains(config.PaymentFormats, t.PaymentFormat)
 }

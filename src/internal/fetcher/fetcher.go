@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
@@ -15,7 +18,7 @@ import (
 const (
 	API           = "https://api.frankfurter.dev/v2"
 	ENDPOINT      = "/rates"
-	QUERY         = "?quotes=%s&date=%s"
+	QUERY         = "?base=%s&date=%s"
 	FULL_ENDPOINT = API + ENDPOINT + QUERY
 	DATE_LAYOUT   = "2006-01-02"
 )
@@ -26,8 +29,18 @@ func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 		Port:     config.MomPort,
 	}
 
-	inputQueue, err := middleware.CreateQueueMiddleware(
+	slog.Info("Initializing fetcher",
+		"config.inputexchange",
+		config.InputExchange,
+		"config.InputQueue",
 		config.InputQueue,
+		"config.inputroutingkeys",
+		config.InputRoutingKeys,
+	)
+	inputQueue, err := middleware.CreateExchangeMiddleware(
+		config.InputExchange,
+		config.InputQueue,
+		config.InputRoutingKeys,
 		connSettings,
 	)
 
@@ -74,7 +87,18 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 		return
 	}
 
+	if result.EOF != nil {
+		for _, outputQueue := range fetcher.outputQueues {
+			if err := outputQueue.Send(msg); err != nil {
+				slog.Error("while sending EOF to filter amount", "err", err)
+			}
+		}
+		return
+	}
+
 	transfer := result.Payload
+
+	slog.Info("transfer reached", "payload", transfer)
 
 	today := transfer.Timestamp.Format(DATE_LAYOUT)
 	if _, ok := fetcher.conversionsByDay[today]; !ok {
@@ -89,9 +113,9 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 					ClientID: result.ClientID,
 					QueryID:  fetcher.queryId,
 					Payload: fetcherresponse.FetcherResponse{
-						Date: today,
-						Base: base,
-						Rate: rate,
+						Date:  today,
+						Quote: base,
+						Rate:  rate,
 					},
 					EOF: nil,
 				})
@@ -124,19 +148,27 @@ func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.Transfer) error {
 	}
 
 	decoder := json.NewDecoder(response.Body)
-	var body apiResponse
+	var body []apiResponseRates
 	if err = decoder.Decode(&body); err != nil {
 		return fmt.Errorf("error decoding response body: %v", err)
 	}
 
-	for _, rate := range body.Rates {
-		fetcher.conversionsByDay[rate.Date][rate.Base] = rate.Rate
+	for _, row := range body {
+		fetcher.conversionsByDay[row.Date][row.Quote] = row.Rate
 	}
 
 	return nil
 }
 
 func (fetcher *Fetcher) HandleSignals() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	<-signals
+	slog.Info("SIGTERM signal received")
+	fetcher.close()
+}
+
+func (fetcher *Fetcher) close() {
 	if err := fetcher.inputQueue.StopConsuming(); err != nil {
 		slog.Error("while stopping consuming from input queue", "err", err)
 	}

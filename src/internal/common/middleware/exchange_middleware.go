@@ -138,6 +138,7 @@ func (e *exchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack f
 		nil,          // args
 	)
 	if err != nil {
+		slog.Info("1", "err", err)
 		return ErrMessageMiddlewareDisconnected
 	}
 
@@ -149,7 +150,10 @@ func (e *exchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack f
 
 	for {
 		select {
-		case d := <-msgs:
+		case d, ok := <-msgs:
+			if !ok {
+				return ErrMessageMiddlewareDisconnected
+			}
 			callbackFunc(
 				Message{Body: string(d.Body)},
 				func() {

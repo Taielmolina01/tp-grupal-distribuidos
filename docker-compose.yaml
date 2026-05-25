@@ -27,8 +27,9 @@ services:
         condition: service_healthy
     environment:
       - ACCOUNT_QUEUES=filter_account_id_0,filter_account_id_1
-      - TRANSFERS_QUEUES=transfers_queue_q5,transfers_queue_q1234
+      - TRANSFERS_QUEUES=transfers_queue
       - TRANSFERS_EXCHANGE=transfers_exchange
+      - TRANSFERS_ROUTING_KEYS=TRANSFERS_Q5_KEY,TRANSFERS_Q1234_KEY
       - RESULTS_QUEUE=results_queue
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
@@ -209,6 +210,7 @@ services:
       - OUTPUT_ROUTING_KEYS=falopa
       - QUERY_ID=2
       - INPUT_EOFS_EXPECTED=2
+      - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
       driver: json-file
       options:
@@ -235,6 +237,7 @@ services:
       - OUTPUT_ROUTING_KEYS=falopa
       - QUERY_ID=2
       - INPUT_EOFS_EXPECTED=2
+      - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
       driver: json-file
       options:
@@ -340,12 +343,15 @@ services:
     environment:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - ID=1
+      - ID=0
+      - INPUT_EXCHANGE=transfers_exchange
+      - INPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
       - INPUT_QUEUE=transfers_queue_q5
-      - OUTPUT_QUEUES=filtered_transfers_q5
+      - OUTPUT_EXCHANGE=filtered_date_and_payment_exchange
+      - OUTPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
       - FILTER_AMOUNT=2
       - FILTER_TYPE=DATE_RANGE_AND_PAYMENT
-      - DATE_RANGE=2022-09-01 00:00, 2022-09-06 00:00
+      - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - PAYMENT_FORMATS=ACH,Wire
       - QUERY_ID=5
 
@@ -361,10 +367,94 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - ID=1
+      - INPUT_EXCHANGE=transfers_exchange
+      - INPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
       - INPUT_QUEUE=transfers_queue_q5
-      - OUTPUT_QUEUES=filtered_transfers_q5
+      - OUTPUT_EXCHANGE=filtered_date_and_payment_exchange
+      - OUTPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
       - FILTER_AMOUNT=2
       - FILTER_TYPE=DATE_RANGE_AND_PAYMENT
-      - DATE_RANGE=2022-09-01 00:00, 2022-09-06 00:00
+      - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - PAYMENT_FORMATS=ACH,Wire
+      - QUERY_ID=5
+
+  fetcher:
+    build:
+      context: ./src/
+      dockerfile: cmd/fetcher/Dockerfile
+    container_name: fetcher
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_QUEUE=filtered_transfers_q5_fetcher
+      - INPUT_EXCHANGE=filtered_date_and_payment_exchange
+      - INPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
+      - OUTPUT_QUEUES=fetcher_output_0,fetcher_output_1
+      - QUERY_ID=5
+      - QUOTE=USD
+    
+  filter_amt_q5_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/filter/Dockerfile
+    container_name: filter_amt_q5_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - ID=0
+      - AMOUNT=1
+      - LEFT_INPUT_QUEUE=fetcher_output_0
+      - RIGHT_INPUT_QUEUE=filtered_transfers_q5_filter
+      - RIGHT_INPUT_EXCHANGE=filtered_date_and_payment_exchange
+      - RIGHT_INPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
+      - OUTPUT_QUEUES=filtered_to_count_q5
+      - FILTER_AMOUNT=2
+      - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
+      - QUERY_ID=5
+
+  filter_amt_q5_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/filter/Dockerfile
+    container_name: filter_amt_q5_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - ID=1
+      - AMOUNT=1
+      - LEFT_INPUT_QUEUE=fetcher_output_1
+      - RIGHT_INPUT_QUEUE=filtered_transfers_q5_filter
+      - RIGHT_INPUT_EXCHANGE=filtered_date_and_payment_exchange
+      - RIGHT_INPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
+      - OUTPUT_QUEUES=filtered_to_count_q5
+      - FILTER_AMOUNT=2
+      - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
+      - QUERY_ID=5
+
+  count_reducer_q5:
+    build:
+      context: ./src/
+      dockerfile: cmd/reducer/Dockerfile
+    container_name: count_reducer_q5
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - ID=0
+      - REDUCER_AMOUNT=1
+      - INPUT_EOFS_EXPECTED=2
+      - INPUT_QUEUE=filtered_to_count_q5
+      - OUTPUT_QUEUES=results_queue
+      - REDUCER_TYPE=COUNT
       - QUERY_ID=5

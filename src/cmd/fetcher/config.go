@@ -12,11 +12,6 @@ import (
 const QUEUES_SEPARATOR = ","
 
 func loadConfig() (fetcher.FetcherConfig, error) {
-	id, err := strconv.Atoi(os.Getenv("ID"))
-	if err != nil {
-		return fetcher.FetcherConfig{}, err
-	}
-
 	momPort, err := strconv.Atoi(os.Getenv("MOM_PORT"))
 	if err != nil {
 		return fetcher.FetcherConfig{}, errors.New("MOM_PORT environment variable is required and must be a number")
@@ -30,6 +25,16 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 	inputQueue := os.Getenv("INPUT_QUEUE")
 	if inputQueue == "" {
 		return fetcher.FetcherConfig{}, errors.New("INPUT_QUEUE environment variable is required")
+	}
+
+	inputExchange := os.Getenv("INPUT_EXCHANGE")
+	if inputExchange == "" {
+		return fetcher.FetcherConfig{}, errors.New("INPUT_EXCHANGE environment variable is required")
+	}
+
+	inputRoutingKeys := []string{}
+	if inputRoutingKeysStr := os.Getenv("INPUT_ROUTING_KEYS"); inputRoutingKeysStr != "" {
+		inputRoutingKeys = splitter.Split(inputRoutingKeysStr, QUEUES_SEPARATOR)
 	}
 
 	outputQueues := os.Getenv("OUTPUT_QUEUES")
@@ -54,12 +59,13 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 	}
 
 	return fetcher.FetcherConfig{
-		Id:           id,
-		MomHost:      momHost,
-		MomPort:      momPort,
-		InputQueue:   inputQueue,
-		Quote:        quote,
-		OutputQueues: outputQueuesList,
-		QueryId:      uint8(queryId),
+		MomHost:          momHost,
+		MomPort:          momPort,
+		InputQueue:       inputQueue,
+		InputExchange:    inputExchange,
+		InputRoutingKeys: inputRoutingKeys,
+		Quote:            quote,
+		OutputQueues:     outputQueuesList,
+		QueryId:          uint8(queryId),
 	}, nil
 }

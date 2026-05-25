@@ -21,30 +21,33 @@ const (
 	TRANSFER_DISTINCT       FilterType = "TRANSFER_DISTINCT"
 	BANK_DISTINCT           FilterType = "BANK_DISTINCT"
 	AVERAGE_FILTER          FilterType = "AVERAGE_FILTER"
+	CONVERTED_AMOUNT_FILTER FilterType = "CONVERTED_AMOUNT_FILTER"
 )
 
 type FilterConfig struct {
-	Type              FilterType
-	Id                int
-	MomHost           string
-	MomPort           int
-	InputExchange     string
-	InputQueue        string
-	InputRoutingKeys  []string
-	OutputExchange    string
-	OutputQueue       string
-	OutputRoutingKeys []string
-	LeftInputQueue    string
-	RightInputQueue   string
-	Amount            float32
-	StartDateRange    time.Time
-	EndDateRange      time.Time
-	Currencies        []string
-	AmountTreshold    int
-	FilterAmount      int
-	OutputQueues      []string
-	QueryId           uint8
-	PaymentMethods    []string
+	Type                  FilterType
+	Id                    int
+	MomHost               string
+	MomPort               int
+	InputExchange         string
+	InputQueue            string
+	InputRoutingKeys      []string
+	OutputExchange        string
+	OutputQueue           string
+	OutputRoutingKeys     []string
+	LeftInputQueue        string
+	RightInputQueue       string
+	RightInputExchange    string
+	RightInputRoutingKeys []string
+	Amount                float32
+	StartDateRange        time.Time
+	EndDateRange          time.Time
+	Currencies            []string
+	AmountTreshold        int
+	FilterAmount          int
+	OutputQueues          []string
+	QueryId               uint8
+	PaymentFormats        []string
 }
 
 type Filter[T comparable, O comparable] struct {

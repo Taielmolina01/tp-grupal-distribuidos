@@ -124,16 +124,16 @@ func CreateAverageFilter(config FilterConfig) (worker.Worker, error) {
 }
 
 func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
-	return newConvertedAmountFilter[transfer.Transfer, fetcherresponse.FetcherResponse](
+	return newConvertedAmountFilter(
 		config,
 		func(t transfer.Transfer, f fetcherresponse.FetcherResponse) bool {
-			return t.AmountPaid*f.Rate < config.Amount
+			return t.AmountPaid/f.Rate < config.Amount
 		},
 		func(f fetcherresponse.FetcherResponse) string {
 			return f.Date
 		},
 		func(f fetcherresponse.FetcherResponse) string {
-			return f.Base
+			return f.Quote
 		},
 		func(f fetcherresponse.FetcherResponse) float32 {
 			return f.Rate
@@ -149,9 +149,9 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 		},
 		func(t transfer.Transfer, rate float32) fetcherresponse.FetcherResponse {
 			return fetcherresponse.FetcherResponse{
-				Date: t.Timestamp.Format(DATE_LAYOUT),
-				Base: t.ReceivingCurrency,
-				Rate: rate,
+				Date:  t.Timestamp.Format(DATE_LAYOUT),
+				Quote: t.ReceivingCurrency,
+				Rate:  rate,
 			}
 		},
 		func(t transfer.Transfer, clientID int) string {

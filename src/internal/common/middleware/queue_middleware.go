@@ -110,7 +110,10 @@ func (q *queueMiddleware) StartConsuming(callbackFunc func(msg Message, ack func
 
 	for {
 		select {
-		case d := <-msgs:
+		case d, ok := <-msgs:
+			if !ok {
+				return ErrMessageMiddlewareDisconnected
+			}
 			callbackFunc(
 				Message{Body: string(d.Body)},
 				func() {

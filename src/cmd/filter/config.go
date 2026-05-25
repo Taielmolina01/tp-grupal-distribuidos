@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"tp-grupal-distribuidos/internal/common/splitter"
 	"tp-grupal-distribuidos/internal/filter"
 )
 
@@ -32,14 +33,12 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	inputExchange := os.Getenv("INPUT_EXCHANGE")
-
 	inputQueue := os.Getenv("INPUT_QUEUE")
-
+	inputExchange := os.Getenv("INPUT_EXCHANGE")
 	inputRoutingKeysStr := os.Getenv("INPUT_ROUTING_KEYS")
 	inputRoutingKeys := []string{}
 	if inputRoutingKeysStr != "" {
-		inputRoutingKeys = strings.Split(inputRoutingKeysStr, ",")
+		inputRoutingKeys = splitter.Split(inputRoutingKeysStr, ",")
 	}
 
 	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
@@ -71,18 +70,31 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
 	}
 
+	rightInputExchange := os.Getenv("RIGHT_INPUT_EXCHANGE")
+	rightInputQueue := os.Getenv("RIGHT_INPUT_QUEUE")
+	leftInputQueue := os.Getenv("LEFT_INPUT_QUEUE")
+	rightInputRoutingKeysStr := os.Getenv("RIGHT_INPUT_ROUTING_KEYS")
+	rightInputRoutingKeys := []string{}
+	if rightInputRoutingKeysStr != "" {
+		rightInputRoutingKeys = splitter.Split(rightInputRoutingKeysStr, ",")
+	}
+
 	config := filter.FilterConfig{
-		Id:                id,
-		MomHost:           momHost,
-		MomPort:           momPort,
-		InputExchange:     inputExchange,
-		InputQueue:        inputQueue,
-		InputRoutingKeys:  inputRoutingKeys,
-		OutputExchange:    outputExchange,
-		OutputQueue:       outputQueue,
-		OutputRoutingKeys: outputRoutingKeys,
-		FilterAmount:      filterAmountInt,
-		QueryId:           uint8(queryId),
+		Id:                    id,
+		MomHost:               momHost,
+		MomPort:               momPort,
+		InputQueue:            inputQueue,
+		InputExchange:         inputExchange,
+		InputRoutingKeys:      inputRoutingKeys,
+		OutputExchange:        outputExchange,
+		OutputQueue:           outputQueue,
+		OutputRoutingKeys:     outputRoutingKeys,
+		LeftInputQueue:        leftInputQueue,
+		RightInputQueue:       rightInputQueue,
+		FilterAmount:          filterAmountInt,
+		QueryId:               uint8(queryId),
+		RightInputExchange:    rightInputExchange,
+		RightInputRoutingKeys: rightInputRoutingKeys,
 	}
 
 	if err := loadFilterTypeConfig(&config); err != nil {
@@ -120,7 +132,8 @@ func loadDateRangeVenv(config *filter.FilterConfig) error {
 	}
 	dates := []time.Time{}
 	for _, dateStr := range dateRangeStr {
-		date, err := time.Parse(dateStr, _DATE_LAYOUT)
+		dateStr = strings.TrimSpace(dateStr)
+		date, err := time.Parse(_DATE_LAYOUT, dateStr)
 		if err != nil {
 			return fmt.Errorf("DATE_RANGE environment variable has an invalid date:\nValue %s\nLayout: %s", dateStr, _DATE_LAYOUT)
 		}
@@ -133,10 +146,24 @@ func loadDateRangeVenv(config *filter.FilterConfig) error {
 		return errors.New("start date must be before end date in DATE_RANGE environment variable")
 	}
 
-	if time.Duration(config.StartDateRange.Sub(config.EndDateRange).Hours())/24 > _DATES_DIFFERENCE_GUARD {
+	// Ensure the checked range uses End - Start and compare in days
+	if config.EndDateRange.Sub(config.StartDateRange).Hours()/24 > float64(_DATES_DIFFERENCE_GUARD) {
 		return fmt.Errorf("the range between start and end date in DATE_RANGE environment variable must be less than %d", _DATES_DIFFERENCE_GUARD)
 	}
 
+	return nil
+}
+
+func loadPaymentMethods(config *filter.FilterConfig) error {
+	paymentFormatStr := os.Getenv("PAYMENT_FORMATS")
+	if paymentFormatStr == "" {
+		return errors.New("PAYMENT_FORMATS environment variable is required if FILTER_TYPE is DATE_RANGE_AND_PAYMENT")
+	}
+	paymentFormats := splitter.Split(paymentFormatStr, ",")
+	if len(paymentFormats) < 1 {
+		return errors.New("PAYMENT_FORMATS environment variable is required if FILTER_TYPE is DATE_RANGE_AND_PAYMENT")
+	}
+	config.PaymentFormats = paymentFormats
 	return nil
 }
 
@@ -173,6 +200,7 @@ func loadFilterTypeConfig(config *filter.FilterConfig) error {
 			return err
 		}
 	case filter.AMOUNT:
+	case filter.CONVERTED_AMOUNT_FILTER:
 		if err := loadAmountVenv(config); err != nil {
 			return err
 		}
@@ -182,6 +210,9 @@ func loadFilterTypeConfig(config *filter.FilterConfig) error {
 		}
 	case filter.DATE_RANGE_AND_PAYMENT:
 		if err := loadDateRangeVenv(config); err != nil {
+			return err
+		}
+		if err := loadPaymentMethods(config); err != nil {
 			return err
 		}
 	case filter.COUNT_AND_FILTER:

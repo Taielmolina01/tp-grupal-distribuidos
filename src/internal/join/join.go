@@ -2,7 +2,6 @@ package join
 
 import (
 	"log/slog"
-	"strconv"
 
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
@@ -39,12 +38,9 @@ func (j *Join[L, R, O]) HandleLeft(clientID int, record L) {
 			j.leftBuffer[clientID] = map[string]L{}
 		}
 		if existing, ok := j.leftBuffer[clientID][key]; ok {
-			slog.Info("client_id", strconv.Itoa(clientID), "before combine", "existing", existing, "new", record)
 			j.leftBuffer[clientID][key] = j.leftCombine(existing, record)
-			slog.Info("client_id", strconv.Itoa(clientID), "after combine", "combined", j.leftBuffer[clientID][key])
 		} else {
 			j.leftBuffer[clientID][key] = record
-			slog.Info("client_id", strconv.Itoa(clientID), "new register", "key", key, "record", j.leftBuffer[clientID][key])
 		}
 		return
 	}
@@ -64,7 +60,6 @@ func (j *Join[L, R, O]) HandleLeft(clientID int, record L) {
 
 func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
 
-	slog.Info("client_id", strconv.Itoa(clientID), "received right record", "record", record)
 	key := j.rightKey(record)
 
 	j.mu.Lock()
@@ -93,7 +88,6 @@ func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
 }
 
 func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
-	slog.Info("join emitting results", "client_id", clientID, "query_id", j.queryID)
 
 	j.mu.Lock()
 	if j.leftCombine != nil {

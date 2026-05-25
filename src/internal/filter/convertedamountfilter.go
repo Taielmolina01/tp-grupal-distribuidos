@@ -2,10 +2,11 @@ package filter
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -44,8 +45,10 @@ func newConvertedAmountFilter[T, S comparable](
 		return nil, err
 	}
 
-	rightInputQueue, err := middleware.CreateQueueMiddleware(
+	rightInputQueue, err := middleware.CreateExchangeMiddleware(
+		config.RightInputExchange,
 		config.RightInputQueue,
+		config.RightInputRoutingKeys,
 		connSettings,
 	)
 
@@ -111,12 +114,17 @@ func (filter *ConvertedAmountFilter[T, S]) consumeLeft(msg middleware.Message, a
 		slog.Error("while deserializing transfer", "err", err)
 		return
 	}
+	if result.EOF != nil {
+		slog.Info("EOF received on left input queue", "client_id", result.ClientID, "query_id", filter.queryId)
+		return
+	}
+
 	if _, ok := filter.conversionsByDay[filter.leftKeyFunc(result.Payload)]; !ok {
 		filter.conversionsByDay[filter.leftKeyFunc(result.Payload)] = make(map[string]float32)
-	} else if _, ok := filter.conversionsByDay[filter.leftKeyFunc(result.Payload)][filter.leftSecondKeyFunc(result.Payload)]; !ok {
-		filter.conversionsByDay[filter.leftKeyFunc(result.Payload)][filter.leftSecondKeyFunc(result.Payload)] = filter.leftValueFunc(result.Payload)
-		filter.CheckTransfersWithoutConversion(result.Payload)
 	}
+	slog.Info("key on consume left", "key", filter.leftKeyFunc(result.Payload))
+	filter.conversionsByDay[filter.leftKeyFunc(result.Payload)][filter.leftSecondKeyFunc(result.Payload)] = filter.leftValueFunc(result.Payload)
+	filter.CheckTransfersWithoutConversion(result.Payload)
 }
 
 func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, ack, nack func()) {
@@ -130,15 +138,23 @@ func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, 
 
 	payload := result.Payload
 
+	if result.EOF != nil {
+		slog.Info("EOF received on right input queue", "client_id", result.ClientID, "query_id", filter.queryId)
+		return
+	}
+
 	key := filter.rightKeyFunc(payload)
+	slog.Info("key on consume right", "key", key, "payload", payload)
 	if _, ok := filter.conversionsByDay[key]; !ok {
 		filter.saveTransfersInFile(payload, result.ClientID)
 	} else {
 		conversion := filter.conversionsByDay[key][filter.rightsecondKeyFunc(payload)]
+		slog.Info("before call comaprefunc", "transfer", payload, "s", conversion)
 		if filter.compareFunc(payload, filter.conversionFunc(
 			payload,
 			conversion,
 		)) {
+			slog.Info("sending payload to output queue", "client_id", result.ClientID, "query_id", filter.queryId, "payload", payload)
 			msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
 				ClientID: result.ClientID,
 				QueryID:  filter.queryId,
@@ -160,7 +176,8 @@ func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, 
 func (filter *ConvertedAmountFilter[T, S]) CheckTransfersWithoutConversion(s S) {
 	_, err := os.Stat(fmt.Sprintf(FILE_LAYOUT, filter.leftKeyFunc(s), filter.leftSecondKeyFunc(s)))
 
-	if errors.Is(err, os.ErrNotExist) {
+	if err != nil {
+		slog.Info("no file with pending transfers for this conversion", "err", err)
 		return
 	} else {
 		file, err := os.Open(fmt.Sprintf(FILE_LAYOUT, filter.leftKeyFunc(s), filter.leftSecondKeyFunc(s)))
@@ -171,6 +188,9 @@ func (filter *ConvertedAmountFilter[T, S]) CheckTransfersWithoutConversion(s S) 
 		defer func() {
 			if err := file.Close(); err != nil {
 				slog.Error("while closing file", "err", err)
+			}
+			if err := os.Remove(fmt.Sprintf(FILE_LAYOUT, filter.leftKeyFunc(s), filter.leftSecondKeyFunc(s))); err != nil {
+				slog.Error("while removing file", "err", err)
 			}
 		}()
 
@@ -183,7 +203,9 @@ func (filter *ConvertedAmountFilter[T, S]) CheckTransfersWithoutConversion(s S) 
 				slog.Error("while parsing line", "err", err)
 				continue
 			}
+			slog.Info("before call comaprefunc", "transfer", transfer, "s", s)
 			if filter.compareFunc(transfer, s) {
+				slog.Info("sending payload to output queue", "client_id", clientID, "query_id", filter.queryId, "payload", transfer)
 				msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
 					ClientID: clientID,
 					QueryID:  filter.queryId,
@@ -206,7 +228,7 @@ func (filter *ConvertedAmountFilter[T, S]) CheckTransfersWithoutConversion(s S) 
 func (filter *ConvertedAmountFilter[T, S]) saveTransfersInFile(transfer T, clientID int) {
 	// https://www.solvetic.com/tutoriales/article/1458-entender-los-permisos-linux-chmod/
 	file, err := os.OpenFile(
-		"data.csv",
+		fmt.Sprintf(FILE_LAYOUT, filter.rightKeyFunc(transfer), filter.rightsecondKeyFunc(transfer)),
 		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
 		0644,
 	)
@@ -237,6 +259,14 @@ func (filter *ConvertedAmountFilter[T, S]) saveTransfersInFile(transfer T, clien
 }
 
 func (filter *ConvertedAmountFilter[T, S]) HandleSignals() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	<-signals
+	slog.Info("SIGTERM signal received")
+	filter.close()
+}
+
+func (filter *ConvertedAmountFilter[T, S]) close() {
 	if err := filter.leftInputQueue.StopConsuming(); err != nil {
 		slog.Error("while stopping consuming from left input queue", "err", err)
 	}
@@ -245,5 +275,14 @@ func (filter *ConvertedAmountFilter[T, S]) HandleSignals() {
 	}
 	if err := filter.rightInputQueue.StopConsuming(); err != nil {
 		slog.Error("while stopping consuming from right input queue", "err", err)
+	}
+	if err := filter.rightInputQueue.Close(); err != nil {
+		slog.Error("while closing right input queue", "err", err)
+	}
+	if err := filter.outputQueue.StopConsuming(); err != nil {
+		slog.Error("while stopping consuming from output queue", "err", err)
+	}
+	if err := filter.outputQueue.Close(); err != nil {
+		slog.Error("while closing output queue", "err", err)
 	}
 }

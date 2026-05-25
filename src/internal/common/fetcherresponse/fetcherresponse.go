@@ -1,7 +1,7 @@
 package fetcherresponse
 
 type FetcherResponse struct {
-	Date string  `json:"date"`
-	Base string  `json:"base"`
-	Rate float32 `json:"rate"`
+	Date  string  `json:"date"`
+	Quote string  `json:"quote"`
+	Rate  float32 `json:"rate"`
 }

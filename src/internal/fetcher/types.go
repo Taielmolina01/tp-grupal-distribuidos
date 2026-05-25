@@ -3,13 +3,14 @@ package fetcher
 import "tp-grupal-distribuidos/internal/common/middleware"
 
 type FetcherConfig struct {
-	Id           int
-	MomHost      string
-	MomPort      int
-	InputQueue   string
-	OutputQueues []string
-	Quote        string
-	QueryId      uint8
+	MomHost          string
+	MomPort          int
+	InputQueue       string
+	InputExchange    string
+	InputRoutingKeys []string
+	OutputQueues     []string
+	Quote            string
+	QueryId          uint8
 }
 
 type Fetcher struct {
@@ -18,10 +19,6 @@ type Fetcher struct {
 	queryId          uint8
 	quote            string
 	conversionsByDay map[string]map[string]float32
-}
-
-type apiResponse struct {
-	Rates []apiResponseRates
 }
 
 type apiResponseRates struct {
