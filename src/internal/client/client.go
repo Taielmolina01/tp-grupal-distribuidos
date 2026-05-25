@@ -317,7 +317,7 @@ func (client *Client) flushBatchToWriters(results *queryresult.BatchResults, wri
 		}
 	}
 	for _, r := range results.Query4 {
-		if err := writers[3].Write([]string{r.BankId, r.AccountId}); err != nil {
+		if err := writers[3].Write([]string{r.BankId, r.AccountNumber}); err != nil {
 			slog.Error("While writing to output file", "query", 4, "err", err)
 		}
 	}

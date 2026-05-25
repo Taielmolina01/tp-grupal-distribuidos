@@ -24,8 +24,8 @@ type Query3Result struct {
 }
 
 type Query4Result struct {
-	BankId    string `json:"bank_id"`
-	AccountId string `json:"account_id"`
+	BankId        string `json:"bank_id"`
+	AccountNumber string `json:"account_number"`
 }
 
 type Query5Result struct {

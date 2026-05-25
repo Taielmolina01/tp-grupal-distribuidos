@@ -270,11 +270,8 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 	builder := gateway.getOrCreateBuilder(env.ClientID)
 
 	if env.IsEOF() {
-		shouldWrite, shouldClose := gateway.markQueryEOF(env.ClientID, env.QueryID)
-		if !shouldWrite {
-			ack()
-			return
-		}
+		shouldClose := gateway.markQueryEOF(env.ClientID, env.QueryID)
+
 		if !builder.IsEmpty() {
 			if err := builder.Flush(client.Conn); err != nil {
 				slog.Error("While flushing batch before QueryEOF", "client_id", env.ClientID, "err", err)
@@ -364,10 +361,9 @@ var eofsPerQuery = map[uint8]int{
 	4: 2,
 }
 
-// markQueryEOF incrementa el contador y devuelve (shouldWrite, shouldClose):
-//   - shouldWrite: true en el EOF que completa la query (contador alcanza el esperado).
+// markQueryEOF incrementa el contador y devuelve (shouldClose):
 //   - shouldClose: true cuando todas las queries completaron.
-func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (bool, bool) {
+func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) bool {
 	gateway.countsMu.Lock()
 	defer gateway.countsMu.Unlock()
 	if gateway.queryEOFsByClient[clientID] == nil {
@@ -379,7 +375,6 @@ func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (bool, bool) {
 	if expected == 0 {
 		expected = 1
 	}
-	shouldWrite := gateway.queryEOFsByClient[clientID][queryID] == expected
 
 	completed := 0
 	for q, c := range gateway.queryEOFsByClient[clientID] {
@@ -392,7 +387,7 @@ func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (bool, bool) {
 		}
 	}
 	shouldClose := completed >= totalQueries
-	return shouldWrite, shouldClose
+	return shouldClose
 }
 
 func (gateway *Gateway) closeClient(clientID int) {
