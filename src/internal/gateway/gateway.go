@@ -276,10 +276,7 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 
 	if env.IsEOF() {
 		shouldWrite, shouldClose := gateway.markQueryEOF(env.ClientID, env.QueryID)
-		if !shouldWrite {
-			ack()
-			return
-		}
+
 		if !builder.IsEmpty() {
 			if err := builder.Flush(client.Conn); err != nil {
 				slog.Error("While flushing batch before QueryEOF", "client_id", env.ClientID, "err", err)
@@ -287,6 +284,12 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 				return
 			}
 		}
+
+		if !shouldWrite {
+			ack()
+			return
+		}
+
 		if err := external.WriteQueryEOF(client.Conn, env.QueryID); err != nil {
 			slog.Error("While writing QueryEOF", "client_id", env.ClientID, "query_id", env.QueryID, "err", err)
 			nack()
@@ -356,23 +359,29 @@ func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.DataMsg
 	}
 }
 
-// TODO: subir totalQueries cuando se implementen Q3/Q4/Q5.
-const totalQueries = 3
+const totalQueries = 5
 
-// eofsPerQuery: cuántos EOFs manda cada query por cliente al gateway.
-// Depende de cómo emite el último stage de cada pipeline:
-//   - Q1 (filter_amount): isCoordinator pattern → 1 EOF por cliente (solo el coordinator manda).
-//   - Q2 (join sin ring): 2 joins, cada uno manda 1 EOF → 2 EOFs por cliente.
+// eofsPerQuery: cuántos EOFs internos manda cada query al gateway por cliente.
+// Cuando el último stage tiene N instancias sin coordinador, cada una manda 1 EOF → N total.
+// El gateway acumula hasta llegar a N y recién ahí reenvía 1 QueryEOF al cliente.
+//   - Q1 (filter_amount via eofring): el coordinator manda 1 EOF → 1 total.
+//   - Q2 (join_q2 x2, sin ring): 2 joins × 1 EOF → 2 total.
+//   - Q3: 1 (actualizar si se agregan más nodos al último stage).
+//   - Q4 (filteraccountseen x2): 2 instancias × 1 EOF → 2 total.
+//   - Q5: 1 (actualizar si se agregan más nodos al último stage).
 var eofsPerQuery = map[uint8]int{
 	1: 1,
 	2: 2,
+	3: 1,
+	4: 2,
 	5: 1,
 }
 
 // markQueryEOF incrementa el contador y devuelve (shouldWrite, shouldClose):
-//   - shouldWrite: true en el EOF que completa la query (contador alcanza el esperado).
-//   - shouldClose: true cuando todas las queries completaron.
-func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (bool, bool) {
+//   - shouldWrite: true solo cuando se recibe el último EOF esperado para esta query
+//     (es decir, el gateway debe reenviar 1 QueryEOF al cliente).
+//   - shouldClose: true cuando todas las queries completaron para este cliente.
+func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite bool, shouldClose bool) {
 	gateway.countsMu.Lock()
 	defer gateway.countsMu.Unlock()
 
@@ -380,11 +389,15 @@ func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (bool, bool) {
 		gateway.queryEOFsByClient[clientID] = map[uint8]int{}
 	}
 	gateway.queryEOFsByClient[clientID][queryID]++
+	count := gateway.queryEOFsByClient[clientID][queryID]
 	expected := eofsPerQuery[queryID]
 	if expected == 0 {
 		expected = 1
 	}
-	shouldWrite := gateway.queryEOFsByClient[clientID][queryID] == expected
+	slog.Info("Received QueryEOF", "client_id", clientID, "query_id", queryID,
+		"count", count, "expected", expected)
+
+	shouldWrite = count == expected
 
 	completed := 0
 	for q, c := range gateway.queryEOFsByClient[clientID] {
@@ -396,7 +409,7 @@ func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (bool, bool) {
 			completed++
 		}
 	}
-	shouldClose := completed >= totalQueries
+	shouldClose = completed >= totalQueries
 	return shouldWrite, shouldClose
 }
 

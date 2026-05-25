@@ -24,8 +24,8 @@ type Query3Result struct {
 }
 
 type Query4Result struct {
-	BankId    string `json:"bank_id"`
-	AccountId string `json:"account_id"`
+	BankId        string `json:"bank_id"`
+	AccountNumber string `json:"account_number"`
 }
 
 type Query5Result struct {
@@ -42,24 +42,31 @@ type BatchResults struct {
 
 type QueryResult interface {
 	GetQueryId() uint8
+	GetHeaders() []string
 }
 
-func (q Query1Result) GetQueryId() uint8 {
-	return inner.Query1ID
+func (q Query1Result) GetQueryId() uint8 { return inner.Query1ID }
+func (q Query2Result) GetQueryId() uint8 { return inner.Query2ID }
+func (q Query3Result) GetQueryId() uint8 { return inner.Query3ID }
+func (q Query4Result) GetQueryId() uint8 { return inner.Query4ID }
+func (q Query5Result) GetQueryId() uint8 { return inner.Query5ID }
+
+func (q Query1Result) GetHeaders() []string {
+	return []string{"From Bank", "Account", "To Bank", "Account.1", "Amount Paid"}
 }
 
-func (q Query2Result) GetQueryId() uint8 {
-	return inner.Query2ID
+func (q Query2Result) GetHeaders() []string {
+	return []string{"From Bank", "Account", "Bank Name", "Amount Paid"}
 }
 
-func (q Query3Result) GetQueryId() uint8 {
-	return inner.Query3ID
+func (q Query3Result) GetHeaders() []string {
+	return []string{"From Bank", "Account", "Payment Format", "Amount Paid"}
 }
 
-func (q Query4Result) GetQueryId() uint8 {
-	return inner.Query4ID
+func (q Query4Result) GetHeaders() []string {
+	return []string{"Bank", "Account"}
 }
 
-func (q Query5Result) GetQueryId() uint8 {
-	return inner.Query5ID
+func (q Query5Result) GetHeaders() []string {
+	return []string{"Size"}
 }

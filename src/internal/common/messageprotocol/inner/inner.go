@@ -116,13 +116,11 @@ func SerializeEofFromQueueMsg(msg eofmessagetypes.EofRingMessage) (*middleware.M
 }
 
 func SerializeEofMessage(msg eofmessage.EofMessage) (*middleware.Message, error) {
-	data, err := serializeJson([]interface{}{msg.ClientID, msg.TotalMessages})
-	if err != nil {
-		return nil, err
-	}
-	return &middleware.Message{
-		Body: string(data),
-	}, nil
+	return SerializeData(DataMsg[struct{}]{
+		ClientID: msg.ClientID,
+		QueryID:  msg.QueryID,
+		EOF:      &EOFInfo{TotalMessages: msg.TotalMessages},
+	})
 }
 
 func SerializeEofMessageCommit(msg eofmessagetypes.EofMessageCommit) (*middleware.Message, error) {

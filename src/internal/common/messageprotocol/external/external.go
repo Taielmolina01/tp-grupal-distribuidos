@@ -395,7 +395,7 @@ func deserializeQuery4Result(r io.Reader) (queryresult.Query4Result, error) {
 	if err != nil {
 		return queryresult.Query4Result{}, err
 	}
-	return queryresult.Query4Result{BankId: bankId, AccountId: accountId}, nil
+	return queryresult.Query4Result{BankId: bankId, AccountNumber: accountId}, nil
 }
 
 func deserializeQuery5Result(r io.Reader) (queryresult.Query5Result, error) {
@@ -432,7 +432,7 @@ func serializeQuery3Result(r *queryresult.Query3Result) []byte {
 
 func serializeQuery4Result(r *queryresult.Query4Result) []byte {
 	msg := serializer.SerializeString(r.BankId)
-	msg = append(msg, serializer.SerializeString(r.AccountId)...)
+	msg = append(msg, serializer.SerializeString(r.AccountNumber)...)
 	return msg
 }
 

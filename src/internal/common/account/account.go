@@ -18,15 +18,25 @@ func (account Account) Equals(other Account) bool {
 }
 
 type AccountChain struct {
-	// A -> B -> C
-	A AccountIdentifier `json:"A"`
-	B AccountIdentifier `json:"B"`
-	C AccountIdentifier `json:"C"`
+	// Left -> Middle -> Right
+	Left   AccountIdentifier `json:"left"`
+	Middle AccountIdentifier `json:"middle"`
+	Right  AccountIdentifier `json:"right"`
+}
+
+type AccountPair struct {
+	// Left -> Right
+	Left  AccountIdentifier `json:"left"`
+	Right AccountIdentifier `json:"right"`
 }
 
 type AccountIdentifier struct {
 	BankID        string `json:"bank_id"`
 	AccountNumber string `json:"account_number"`
+}
+
+func (a AccountIdentifier) GetKey() string {
+	return a.BankID + "_" + a.AccountNumber
 }
 
 type Bank struct {

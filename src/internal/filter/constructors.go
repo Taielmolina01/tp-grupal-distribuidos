@@ -11,6 +11,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
+	"tp-grupal-distribuidos/internal/filter/filterandsplitter"
 )
 
 func CreateCurrencyFilter(config FilterConfig) (worker.Worker, error) {
@@ -71,16 +72,9 @@ func CreateCountAndFilter(config CountAndFilterConfig) (worker.Worker, error) {
 	return newCountAndFilter[transfer.Transfer](config)
 }
 
-func CreateFilterAndSplitter(config FilterConfig) (worker.Worker, error) {
-	return newFilterAndSplitter(
+func CreateFilterAndSplitter(config filterandsplitter.FilterAndSplitterConfig) (worker.Worker, error) {
+	return filterandsplitter.NewFilterAndSplitter(
 		config,
-		func(t transfer.Transfer) bool {
-			return t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
-		},
-		func(t transfer.Transfer) (t1 transfer.SplittedTransfer, t2 transfer.SplittedTransfer) {
-			// TO DO: rellenar esto
-			return transfer.SplittedTransfer{}, transfer.SplittedTransfer{}
-		},
 	)
 }
 
