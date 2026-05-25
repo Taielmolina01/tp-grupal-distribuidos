@@ -1,0 +1,54 @@
+src/internal/common/shard/shard.go
+  s_48794cf75e1268::t_ed5c9ec9022ec3 8,14-15,17,19-21,23-24,26-27
+  s_48794cf75e1268::t_8a4a652f8945a2 9,12-13,16,18,22
+  h_3c9b41718876fe 25
+src/cmd/filterandsplitter/config.go
+  s_48794cf75e1268::t_bf6c636228261c 71-72
+  s_48794cf75e1268::t_1a1e8588ef5e66 42,44
+src/cmd/filteraccountseen/config.go
+  s_48794cf75e1268::t_b53d4c48aa009c 32,34,37,39
+  s_48794cf75e1268::t_8a56d717ba95c1 33
+  s_48794cf75e1268::t_f51ef2a1a31879 50
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_48794cf75e1268::t_82560d8f16e4f4 45,156-166,244,276
+  s_48794cf75e1268::t_078e92bdb4ffc5 16,33-35,47-51,58-59,63,66,68,70,86-89,100,103-104,109-111,116,119,121,144,174,177,187,192,196-197,257
+src/cmd/acumaccounts/config.go
+  s_48794cf75e1268::t_bb46550d2bce12 42,44
+  s_48794cf75e1268::t_b3112d3dfded23 32,34
+src/internal/joinaccounts/joinaccounts.go
+  s_48794cf75e1268::t_119f81afed86c1 15,28-29,42-43,50-51,55,58,60,62,69-70,75,78-79,84,89,92,94,110,113,123,127,129-130,216,221,279,294-295
+  s_48794cf75e1268::t_0443b10c939d6f 85
+  s_48794cf75e1268::t_3978c293ec78c9 40,98-103,215,278
+docker-compose.yaml
+  s_48794cf75e1268::t_5a2713c057b949 359,385,410,432
+  s_48794cf75e1268::t_4d9b43a1d75d76 411,433
+src/internal/acumaccounts/acumaccounts.go
+  s_48794cf75e1268::t_9fc367cc550652 43,103-110,182,221
+  s_48794cf75e1268::t_ccbeef598de029 90
+  s_48794cf75e1268::t_73f41d53675231 15,45-47,55-56,60,63,65,67,74-75,80,83-84,89,94,97,99,117,120,130,134,136-137,194,216-217
+src/cmd/joinaccounts/config.go
+  s_48794cf75e1268::t_4e75a93fd9b59f 32,34,37,39
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_48794cf75e1268::t_614a30d13eb8ad 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "462aa045acf3fc98445023522fa56310d401517e",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_48794cf75e1268": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75162357-3479-4909-ab56-949859a95449",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
