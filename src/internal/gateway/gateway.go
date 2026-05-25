@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -325,8 +326,14 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 			nack()
 			return
 		}
-		if _, err := addResultToBuilder(builder, env); err != nil {
+		added, err := addResultToBuilder(builder, env)
+		if err != nil {
 			slog.Error("While adding result to batch after flush", "client_id", env.ClientID, "err", err)
+			nack()
+			return
+		}
+		if !added {
+			slog.Error("Result too large to fit in empty batch", "client_id", env.ClientID, "query_id", env.QueryID)
 			nack()
 			return
 		}
@@ -483,14 +490,14 @@ func (gateway *Gateway) broadcastEOF(client clientregistry.ClientState, kind str
 		slog.Debug("While serializing EOF", "kind", kind, "err", err)
 		return err
 	}
+	var errs []error
 	for _, q := range gateway.accountQueues {
 		if err := q.Send(*msg); err != nil {
-			slog.Debug("While sending EOF to accounts exchange", "kind", kind, "err", err)
-			return err
+			slog.Error("While sending EOF to accounts queue", "kind", kind, "err", err)
+			errs = append(errs, err)
 		}
-
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) error {
