@@ -1,0 +1,14 @@
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  h_3c9b41718876fe 15,147,150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "494c68c27e6fe00934b7ef5d62c98c6da21d7821",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
