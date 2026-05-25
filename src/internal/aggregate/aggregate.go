@@ -29,7 +29,6 @@ type partial struct {
 	totalCount int
 }
 
-
 type AvgAggregator struct {
 	id              int
 	inputQueue      middleware.Middleware
@@ -171,7 +170,7 @@ func (a *AvgAggregator) handleMessage(msg middleware.Message, ack, nack func()) 
 			ActualAmount:   a.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
 			ClientId:       result.ClientID,
 			CoordinatorId:  uint32(a.id),
-			FilteredAmount: a.handlerMessages.GetFilteredMessagesAmountByClientId(result.ClientID),
+			FilteredAmount: a.handlerMessages.GetForwardedMessagesAmountByClientId(result.ClientID),
 		}
 		serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
 		if err != nil {
@@ -198,7 +197,7 @@ func (a *AvgAggregator) handleMessage(msg middleware.Message, ack, nack func()) 
 			totalSum:   p.Sum,
 			totalCount: p.Amount,
 		}
-		a.handlerMessages.AddFilteredMessagesAmountByClientId(result.ClientID, 1)
+		a.handlerMessages.AddForwardedMessagesAmountByClientId(result.ClientID, 1)
 	} else {
 		a.acumuladores[result.ClientID][method] = partial{
 			totalSum:   existing.totalSum + p.Sum,

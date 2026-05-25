@@ -164,7 +164,7 @@ func (s *DateRangeSplitter) handleMessage(msg middleware.Message, ack, nack func
 				ActualAmount:   s.monitors[idx].GetProcessedMessagesAmountByClientId(result.ClientID),
 				ClientId:       result.ClientID,
 				CoordinatorId:  uint32(s.id),
-				FilteredAmount: s.monitors[idx].GetFilteredMessagesAmountByClientId(result.ClientID),
+				FilteredAmount: s.monitors[idx].GetForwardedMessagesAmountByClientId(result.ClientID),
 			}
 			serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
 			if err != nil {
@@ -196,7 +196,7 @@ func (s *DateRangeSplitter) handleMessage(msg middleware.Message, ack, nack func
 	}
 
 	// Filtered solo se incrementa en el monitor de la queue destino.
-	s.monitors[idx].AddFilteredMessagesAmountByClientId(result.ClientID, 1)
+	s.monitors[idx].AddForwardedMessagesAmountByClientId(result.ClientID, 1)
 
 	if err := s.outputQueues[idx].Send(msg); err != nil {
 		slog.Error("While sending message to output queue", "idx", idx, "err", err)
