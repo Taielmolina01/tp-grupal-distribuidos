@@ -253,7 +253,7 @@ func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer)
 			slog.Error("While serializing output message", "err", err)
 		}
 
-		f.handlerMessages.AddFilteredMessagesAmountByClientId(clientID, 1)
+		f.handlerMessages.AddForwardedMessagesAmountByClientId(clientID, 1)
 		if err := f.outputQueues[output_index].Send(*msg); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
@@ -272,7 +272,7 @@ func (f *FilterAndSplitter) handleEOF(data inner.DataMsg[transfer.Transfer]) {
 		ActualAmount:   f.handlerMessages.GetProcessedMessagesAmountByClientId(data.ClientID),
 		ClientId:       data.ClientID,
 		CoordinatorId:  uint32(f.id),
-		FilteredAmount: f.handlerMessages.GetFilteredMessagesAmountByClientId(data.ClientID),
+		FilteredAmount: f.handlerMessages.GetForwardedMessagesAmountByClientId(data.ClientID),
 	}
 	serializedEofRingMessage, err := inner.SerializeEofFromQueueMsg(eofRingMessage)
 	if err != nil {
