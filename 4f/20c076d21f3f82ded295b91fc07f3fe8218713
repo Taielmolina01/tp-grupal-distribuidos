@@ -1,0 +1,36 @@
+src/cmd/reducer/Dockerfile
+  h_3c9b41718876fe 1
+src/cmd/acumaccounts/Dockerfile
+  h_3c9b41718876fe 1
+src/cmd/aggregate/Dockerfile
+  h_3c9b41718876fe 1
+src/cmd/filteraccountseen/Dockerfile
+  h_3c9b41718876fe 1
+src/cmd/gateway/Dockerfile
+  h_3c9b41718876fe 1
+src/cmd/fetcher/Dockerfile
+  h_3c9b41718876fe 1
+src/cmd/filter/Dockerfile
+  h_3c9b41718876fe 1
+src/cmd/client/Dockerfile
+  h_3c9b41718876fe 1
+src/cmd/sum/Dockerfile
+  h_3c9b41718876fe 1
+src/cmd/filterandsplitter/Dockerfile
+  h_3c9b41718876fe 1
+src/cmd/join/Dockerfile
+  h_3c9b41718876fe 1
+src/cmd/joinaccounts/Dockerfile
+  h_3c9b41718876fe 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "4f20c076d21f3f82ded295b91fc07f3fe8218713",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
