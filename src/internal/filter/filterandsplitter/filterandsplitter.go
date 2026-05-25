@@ -12,6 +12,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -44,30 +45,15 @@ type FilterAndSplitter struct {
 
 	hasher shard.Hasher
 
-	inputMiddleware   middleware.Middleware
-	outputMiddlewares []middleware.Middleware
-	eofInput          middleware.Middleware
-	eofOutput         middleware.Middleware
-	eofHandler        eofring.EofRingAlgorithm
+	inputMiddleware  middleware.Middleware
+	outputMiddleware newmiddleware.Middleware
+	eofInput         middleware.Middleware
+	eofOutput        middleware.Middleware
+	eofHandler       eofring.EofRingAlgorithm
 
 	handlerMessages msgmonitor.MessageMonitor
 
 	queryID int
-}
-
-func declareOutputMiddlewares(config FilterAndSplitterConfig, connSettings middleware.ConnSettings) ([]middleware.Middleware, error) {
-	outputMiddlewares := make([]middleware.Middleware, 0, config.OutputMiddlewareAmount)
-	for i := range config.OutputMiddlewareAmount {
-		q, err := middleware.CreateQueueMiddleware(fmt.Sprintf("%s_%d", config.OutputMiddlewarePrefix, i), connSettings)
-		if err != nil {
-			for _, opened := range outputMiddlewares {
-				opened.Close()
-			}
-			return nil, fmt.Errorf("creating output middleware %d: %w", i, err)
-		}
-		outputMiddlewares = append(outputMiddlewares, q)
-	}
-	return outputMiddlewares, nil
 }
 
 func getRingNextIndex(config FilterAndSplitterConfig) int {
@@ -79,14 +65,17 @@ func getRingNextIndex(config FilterAndSplitterConfig) int {
 
 func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter, err error) {
 	const ring_prefix = "FILTER_AND_SPLIITER_EOF_"
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+
+	oldConnSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
 	var (
-		inputMiddleware   middleware.Middleware
-		outputMiddlewares []middleware.Middleware
-		eofInput          middleware.Middleware
-		eofOutput         middleware.Middleware
+		inputMiddleware  middleware.Middleware
+		outputMiddleware newmiddleware.Middleware
+		eofInput         middleware.Middleware
+		eofOutput        middleware.Middleware
 	)
 
 	defer func() {
@@ -97,8 +86,8 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 			if eofInput != nil {
 				eofInput.Close()
 			}
-			for _, q := range outputMiddlewares {
-				q.Close()
+			if outputMiddleware != nil {
+				outputMiddleware.Close()
 			}
 			if inputMiddleware != nil {
 				inputMiddleware.Close()
@@ -110,23 +99,23 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		config.InputMiddlewareName,
 		config.InputMiddlewareQueue,
 		config.InputRoutingKeys,
-		connSettings,
+		oldConnSettings,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddlewares, err = declareOutputMiddlewares(config, connSettings)
+	outputMiddleware, err = newmiddleware.NewShardedMiddleware(newConnSettings, config.OutputMiddlewarePrefix, "", "")
 	if err != nil {
-		return nil, fmt.Errorf("declaring output middlewares: %w", err)
+		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
-	eofInput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(config.Id), connSettings)
+	eofInput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(config.Id), oldConnSettings)
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF input queue: %w", err)
 	}
 
-	eofOutput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(getRingNextIndex(config)), connSettings)
+	eofOutput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(getRingNextIndex(config)), oldConnSettings)
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF output queue: %w", err)
 	}
@@ -139,13 +128,11 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		handlerMessages,
 		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
 			handlerMessages.RemoveClient(clientID)
-
 			if isCoordinator {
-				for _, q := range outputMiddlewares {
-					if err := q.Send(*msg); err != nil {
-						return err
-					}
-				}
+				return outputMiddleware.Send(newmiddleware.Message{
+					Body:       msg.Body,
+					RoutingKey: newmiddleware.BroadcastRoutingKey,
+				})
 			}
 			return nil
 		},
@@ -153,17 +140,17 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 	)
 
 	return &FilterAndSplitter{
-		id:                config.Id,
-		startDate:         config.StartDate,
-		endDate:           config.EndDate,
-		hasher:            shard.New(config.OutputMiddlewareAmount),
-		queryID:           config.QueryID,
-		handlerMessages:   handlerMessages,
-		inputMiddleware:   inputMiddleware,
-		outputMiddlewares: outputMiddlewares,
-		eofInput:          eofInput,
-		eofOutput:         eofOutput,
-		eofHandler:        eofHandler,
+		id:               config.Id,
+		startDate:        config.StartDate,
+		endDate:          config.EndDate,
+		hasher:           shard.New(config.OutputMiddlewareAmount),
+		queryID:          config.QueryID,
+		handlerMessages:  handlerMessages,
+		inputMiddleware:  inputMiddleware,
+		outputMiddleware: outputMiddleware,
+		eofInput:         eofInput,
+		eofOutput:        eofOutput,
+		eofHandler:       eofHandler,
 	}, nil
 }
 
@@ -192,10 +179,7 @@ func (f *FilterAndSplitter) close() {
 	f.inputMiddleware.Close()
 	f.eofInput.Close()
 	f.eofOutput.Close()
-
-	for _, mw := range f.outputMiddlewares {
-		mw.Close()
-	}
+	f.outputMiddleware.Close()
 }
 
 func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
@@ -241,8 +225,6 @@ func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer)
 			acc = o.Transfer.ToBankAccount
 		}
 
-		outputIndex := f.hasher.ShardFor(clientID, bank, acc)
-
 		msg, err := inner.SerializeData(inner.DataMsg[transfer.SplittedTransfer]{
 			ClientID: clientID,
 			QueryID:  uint8(f.queryID),
@@ -251,10 +233,13 @@ func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer)
 
 		if err != nil {
 			slog.Error("While serializing output message", "err", err)
+			return
 		}
 
+		routingKey := fmt.Sprintf("shard-%d", f.hasher.ShardFor(clientID, bank, acc))
+
 		f.handlerMessages.AddForwardedMessagesAmountByClientId(clientID, 1)
-		if err := f.outputMiddlewares[outputIndex].Send(*msg); err != nil {
+		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
 	}

@@ -12,13 +12,14 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofmessage"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 )
 
 type FilterAccountSeenConfig struct {
 	Id int
 
-	ExpectedEOFs int //Cantidad de nodos del grupo anterior
+	ExpectedEOFs int
 
 	OutputMiddleware string
 
@@ -36,8 +37,8 @@ type FilterAccountSeen struct {
 
 	expectedEOFs int
 
-	inputMiddleware  middleware.Middleware
-	outputMiddleware middleware.Middleware
+	inputMiddleware  newmiddleware.Middleware
+	outputMiddleware newmiddleware.Middleware
 
 	clientsState map[int]*clientState
 
@@ -50,11 +51,11 @@ type clientState struct {
 }
 
 func NewFilterAccountSeen(config FilterAccountSeenConfig) (_ *FilterAccountSeen, err error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware  middleware.Middleware
-		outputMiddleware middleware.Middleware
+		inputMiddleware  newmiddleware.Middleware
+		outputMiddleware newmiddleware.Middleware
 	)
 
 	defer func() {
@@ -68,17 +69,17 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (_ *FilterAccountSeen,
 		}
 	}()
 
-	inputMiddleware, err = middleware.CreateQueueMiddleware(
-		config.InputMiddlewarePrefix+"_"+strconv.Itoa(config.Id),
-		connSettings,
-	)
+	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	shardKey := fmt.Sprintf("shard-%d", config.Id)
+
+	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
 	if err != nil {
-		return nil, fmt.Errorf("creating input exchange: %w", err)
+		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = middleware.CreateQueueMiddleware(config.OutputMiddleware, connSettings)
+	outputMiddleware, err = newmiddleware.NewQueueMiddleware(connSettings, config.OutputMiddleware)
 	if err != nil {
-		return nil, fmt.Errorf("declaring output queues: %w", err)
+		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
 	return &FilterAccountSeen{
@@ -94,7 +95,7 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (_ *FilterAccountSeen,
 func (f *FilterAccountSeen) Run() {
 	defer f.close()
 
-	if err := f.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, _ func()) {
+	if err := f.inputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
 		f.handleInput(msg, ack)
 	}); err != nil {
 		slog.Error("While consuming from input queue", "err", err)
@@ -115,9 +116,9 @@ func (f *FilterAccountSeen) close() {
 	f.outputMiddleware.Close()
 }
 
-func (f *FilterAccountSeen) handleInput(msg middleware.Message, ack func()) {
+func (f *FilterAccountSeen) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[account.AccountIdentifier](&msg)
+	m, err := inner.DeserializeData[account.AccountIdentifier](&middleware.Message{Body: msg.Body})
 
 	if err != nil {
 		slog.Error("While deserializing pipeline message", "err", err)
@@ -152,9 +153,10 @@ func (f *FilterAccountSeen) handleRecord(clientID int, record account.AccountIde
 
 	if err != nil {
 		slog.Error("While serializing output message", "err", err)
+		return
 	}
 
-	if err := f.outputMiddleware.Send(*msg); err != nil {
+	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body}); err != nil {
 		slog.Error("While sending output message", "err", err)
 	}
 }
@@ -164,7 +166,6 @@ func (f *FilterAccountSeen) handleEOF(data inner.DataMsg[account.AccountIdentifi
 	defer f.mu.Unlock()
 
 	state := f.stateFor(data.ClientID)
-
 	state.eofAmt++
 
 	if state.eofAmt < f.expectedEOFs {
@@ -174,9 +175,10 @@ func (f *FilterAccountSeen) handleEOF(data inner.DataMsg[account.AccountIdentifi
 	msg, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(f.queryID)})
 	if err != nil {
 		slog.Error("While serializing EOF message", "err", err)
+		return
 	}
 
-	if err := f.outputMiddleware.Send(*msg); err != nil {
+	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 
