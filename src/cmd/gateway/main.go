@@ -2,9 +2,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 
 	"tp-grupal-distribuidos/internal/common/splitter"
 	"tp-grupal-distribuidos/internal/gateway"
@@ -19,12 +21,6 @@ func loadConfig() (gateway.GatewayConfig, error) {
 	}
 
 	accountQueueList := splitter.Split(accountQueues, QUEUES_SEPARATOR)
-
-	transfersQueues := os.Getenv("TRANSFERS_QUEUES")
-	if transfersQueues == "" {
-		return gateway.GatewayConfig{}, errors.New("TRANSFERS_QUEUES environment variable is required")
-	}
-	transfersQueueList := splitter.Split(transfersQueues, QUEUES_SEPARATOR)
 
 	transfersExchange := os.Getenv("TRANSFERS_EXCHANGE")
 	if transfersExchange == "" {
@@ -71,9 +67,33 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		maxBatchSize = parsed
 	}
 
+	queryEOFsStr := os.Getenv("QUERY_EOFS_EXPECTED")
+	if queryEOFsStr == "" {
+		return gateway.GatewayConfig{}, errors.New("QUERY_EOFS_EXPECTED environment variable is required")
+	}
+	queryEOFsExpected := map[uint8]int{}
+	for pair := range strings.SplitSeq(queryEOFsStr, QUEUES_SEPARATOR) {
+		pair = strings.TrimSpace(pair)
+		parts := strings.SplitN(pair, ":", 2)
+		if len(parts) != 2 {
+			return gateway.GatewayConfig{}, fmt.Errorf("invalid QUERY_EOFS_EXPECTED entry: %q (expected format queryID:count)", pair)
+		}
+		qid, err := strconv.ParseUint(strings.TrimSpace(parts[0]), 10, 8)
+		if err != nil {
+			return gateway.GatewayConfig{}, fmt.Errorf("invalid query id in QUERY_EOFS_EXPECTED: %q", parts[0])
+		}
+		count, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil || count <= 0 {
+			return gateway.GatewayConfig{}, fmt.Errorf("invalid EOF count in QUERY_EOFS_EXPECTED (must be > 0): %q", parts[1])
+		}
+		queryEOFsExpected[uint8(qid)] = count
+	}
+	if len(queryEOFsExpected) == 0 {
+		return gateway.GatewayConfig{}, errors.New("QUERY_EOFS_EXPECTED must define at least one query")
+	}
+
 	return gateway.GatewayConfig{
 		AccountQueues:        accountQueueList,
-		TransfersQueues:      transfersQueueList,
 		TransfersExchange:    transfersExchange,
 		TransfersRoutingKeys: transfersRoutingKeys,
 		ResultsQueue:         resultsQueue,
@@ -82,6 +102,7 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		MomHost:              momHost,
 		MomPort:              momPort,
 		MaxBatchSize:         maxBatchSize,
+		QueryEOFsExpected:    queryEOFsExpected,
 	}, nil
 }
 

@@ -54,6 +54,9 @@ func loadConfig() (client.ClientConfig, error) {
 		if err != nil {
 			return client.ClientConfig{}, errors.New("CONNECTION_ATTEMPTS must be an integer")
 		}
+		if parsed <= 0 {
+			return client.ClientConfig{}, errors.New("CONNECTION_ATTEMPTS must be greater than 0")
+		}
 		connectionAttempts = parsed
 	}
 

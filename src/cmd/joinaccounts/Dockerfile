@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine3.23 AS builder
+FROM golang:1.25-alpine3.23 AS builder
 LABEL intermediateStageToBeDeleted=true
 RUN mkdir -p /build
 WORKDIR /build/

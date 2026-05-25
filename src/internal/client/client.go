@@ -152,8 +152,13 @@ func (client *Client) sendAccountRecords() error {
 			if err := builder.Flush(client.conn); err != nil {
 				return err
 			}
-			builder.TryAdd(acc)
+			if !builder.TryAdd(acc) {
+				return fmt.Errorf("account record too large to fit in empty batch")
+			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("while reading accounts file: %w", err)
 	}
 	if !builder.IsEmpty() {
 		if err := builder.Flush(client.conn); err != nil {
@@ -220,8 +225,13 @@ func (client *Client) sendTransRecords() error {
 			if err := builder.Flush(client.conn); err != nil {
 				return err
 			}
-			builder.TryAdd(t)
+			if !builder.TryAdd(t) {
+				return fmt.Errorf("transfer record too large to fit in empty batch")
+			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("while reading transfers file: %w", err)
 	}
 	if !builder.IsEmpty() {
 		if err := builder.Flush(client.conn); err != nil {
