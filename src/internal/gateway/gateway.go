@@ -31,6 +31,7 @@ type GatewayConfig struct {
 	MomHost              string
 	MomPort              int
 	MaxBatchSize         int
+	QueryEOFsExpected    map[uint8]int
 }
 
 type Gateway struct {
@@ -48,6 +49,7 @@ type Gateway struct {
 	resultBuilders    map[int]*external.ResultBatchBuilder
 	maxBatchSize      int
 	maxBatchBytes     int
+	queryEOFsExpected map[uint8]int
 }
 
 const (
@@ -124,6 +126,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		queryEOFsByClient: map[int]map[uint8]int{},
 		resultBuilders:    map[int]*external.ResultBatchBuilder{},
 		maxBatchSize:      config.MaxBatchSize,
+		queryEOFsExpected: config.QueryEOFsExpected,
 	}
 	gateway.running.Store(true)
 	return gateway, nil
@@ -359,28 +362,6 @@ func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.DataMsg
 	}
 }
 
-const totalQueries = 5
-
-// eofsPerQuery: cuántos EOFs internos manda cada query al gateway por cliente.
-// Cuando el último stage tiene N instancias sin coordinador, cada una manda 1 EOF → N total.
-// El gateway acumula hasta llegar a N y recién ahí reenvía 1 QueryEOF al cliente.
-//   - Q1 (filter_amount via eofring): el coordinator manda 1 EOF → 1 total.
-//   - Q2 (join_q2 x2, sin ring): 2 joins × 1 EOF → 2 total.
-//   - Q3: 1 (actualizar si se agregan más nodos al último stage).
-//   - Q4 (filteraccountseen x2): 2 instancias × 1 EOF → 2 total.
-//   - Q5: 1 (actualizar si se agregan más nodos al último stage).
-var eofsPerQuery = map[uint8]int{
-	1: 1,
-	2: 2,
-	3: 1,
-	4: 2,
-	5: 1,
-}
-
-// markQueryEOF incrementa el contador y devuelve (shouldWrite, shouldClose):
-//   - shouldWrite: true solo cuando se recibe el último EOF esperado para esta query
-//     (es decir, el gateway debe reenviar 1 QueryEOF al cliente).
-//   - shouldClose: true cuando todas las queries completaron para este cliente.
 func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite bool, shouldClose bool) {
 	gateway.countsMu.Lock()
 	defer gateway.countsMu.Unlock()
@@ -390,7 +371,7 @@ func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite b
 	}
 	gateway.queryEOFsByClient[clientID][queryID]++
 	count := gateway.queryEOFsByClient[clientID][queryID]
-	expected := eofsPerQuery[queryID]
+	expected := gateway.queryEOFsExpected[queryID]
 	if expected == 0 {
 		expected = 1
 	}
@@ -401,7 +382,7 @@ func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite b
 
 	completed := 0
 	for q, c := range gateway.queryEOFsByClient[clientID] {
-		exp := eofsPerQuery[q]
+		exp := gateway.queryEOFsExpected[q]
 		if exp == 0 {
 			exp = 1
 		}
@@ -409,7 +390,7 @@ func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite b
 			completed++
 		}
 	}
-	shouldClose = completed >= totalQueries
+	shouldClose = completed >= len(gateway.queryEOFsExpected)
 	return shouldWrite, shouldClose
 }
 

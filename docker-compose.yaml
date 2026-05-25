@@ -37,6 +37,7 @@ services:
       - MOM_PORT=5672
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
+      - QUERY_EOFS_EXPECTED=1:1,2:2,3:1,4:2,5:1
 
   client_0:
     build:
