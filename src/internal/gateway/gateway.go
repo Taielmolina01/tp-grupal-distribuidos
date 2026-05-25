@@ -265,11 +265,6 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 		return
 	}
 
-	if env.QueryID == 1 || env.QueryID == 2 {
-	} else {
-		slog.Info("Result message received", "env.payload", string(env.Payload), "env.query_id", env.QueryID, "env.client_id", env.ClientID, "env.eof", env.EOF)
-	}
-
 	client, ok := gateway.findClient(env.ClientID)
 	if !ok {
 		slog.Warn("Result for unknown client", "client_id", env.ClientID)
@@ -280,7 +275,6 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 	builder := gateway.getOrCreateBuilder(env.ClientID)
 
 	if env.IsEOF() {
-		slog.Info("eof received", "env", env)
 		shouldWrite, shouldClose := gateway.markQueryEOF(env.ClientID, env.QueryID)
 
 		if !builder.IsEmpty() {

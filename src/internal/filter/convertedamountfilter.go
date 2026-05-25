@@ -171,9 +171,8 @@ func (filter *ConvertedAmountFilter[T, S]) Run() {
 			return
 		}
 	}()
-	go func() {
-		filter.eofRing.Run()
-	}()
+	go filter.eofRing.Run()
+
 	if err := filter.rightInputQueue.StartConsuming(filter.consumeRight); err != nil {
 		slog.Error("while starting consuming from right input queue", "err", err)
 		return
