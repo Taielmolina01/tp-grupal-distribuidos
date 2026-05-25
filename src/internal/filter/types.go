@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"sync"
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/eofring"
@@ -82,10 +83,31 @@ type DistinctFilter[T comparable, S comparable] struct {
 }
 
 type AverageFilter struct {
-	id             uint32
-	inputExchange  middleware.Middleware
-	outputExchange middleware.Middleware
-	compareFunc    func(float32, float32) bool
+	id                  uint32
+	queryID             uint8
+	inputTransfersQueue middleware.Middleware
+	inputAvgsQueue      middleware.Middleware
+	outputQueue         middleware.Middleware
+
+	transfersRing    eofring.EofRingAlgorithm
+	transfersMonitor msgmonitor.MessageMonitor
+	transfersEofOut  middleware.Middleware
+
+	avgsExpectedEofs int
+
+	compareFunc func(float32, float32) bool
+
+	state map[int]*avgFilterClientState
+	lock  sync.Mutex
+}
+
+type avgFilterClientState struct {
+	avgs                map[string]float32
+	avgsReady           bool
+	avgsEofsReceived    int
+	bufferedTransfers   []transfer.Transfer
+	transfersEofPending bool
+	transfersEofRealAmt uint32
 }
 
 type ConvertedAmountFilter[T, S comparable] struct {

@@ -9,6 +9,7 @@ type MessageMonitor interface {
 	AddProcessedMessagesAmountByClientId(int, uint32)
 	GetForwardedMessagesAmountByClientId(int) uint32
 	AddForwardedMessagesAmountByClientId(int, uint32)
+	RemoveClient(int)
 	Close()
 }
 
@@ -63,6 +64,12 @@ func (monitor *messageMonitorImpl) AddForwardedMessagesAmountByClientId(clientID
 	actual := monitor.messagesByClient[clientID]
 	actual.forwardedMessages += amount
 	monitor.messagesByClient[clientID] = actual
+}
+
+func (monitor *messageMonitorImpl) RemoveClient(clientID int) {
+	monitor.processedMessagesMutex.Lock()
+	defer monitor.processedMessagesMutex.Unlock()
+	delete(monitor.messagesByClient, clientID)
 }
 
 func (monitor *messageMonitorImpl) Close() {

@@ -5,12 +5,26 @@ import (
 	"hash/fnv"
 )
 
-func convertToBytes(FromBank string, clientID int) []byte {
-	return []byte(fmt.Sprintf("%v%d", FromBank, clientID))
+type Hasher struct {
+	totalShards int
 }
 
-func CalculateIndexForShard(clientID int, FromBank string, amount int) int {
-	bytes := convertToBytes(FromBank, clientID)
+func New(totalShards int) Hasher {
+	return Hasher{totalShards: totalShards}
+}
+
+func (h Hasher) ShardFor(clientID int, keys ...string) int {
+	hash := fnv.New32a()
+	fmt.Fprintf(hash, "%d", clientID)
+	for _, k := range keys {
+		fmt.Fprintf(hash, "\x00%s", k)
+	}
+	return int(hash.Sum32() % uint32(h.totalShards))
+}
+
+// Esto dsps lo volamos, lo dejo para no romper las implementaciones actuales
+func CalculateIndexForShard(clientID int, fromBank string, amount int) int {
+	bytes := []byte(fmt.Sprintf("%v%d", fromBank, clientID))
 	hash := fnv.New64a()
 	hash.Write(bytes)
 	return int(hash.Sum64() % uint64(amount))
