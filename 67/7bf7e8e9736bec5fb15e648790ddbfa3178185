@@ -1,0 +1,25 @@
+src/internal/gateway/gateway.go
+  s_181ce8084b84fe::t_89f16fcc3a79ce 462,472-474
+  s_181ce8084b84fe::t_64313cb98fc796 532-533,538-539
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "677bf7e8e9736bec5fb15e648790ddbfa3178185",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_181ce8084b84fe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d743d69-e165-46e0-8da5-cb686eff60ae",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
