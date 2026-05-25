@@ -318,6 +318,8 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 }
 
 func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.DataMsg[json.RawMessage]) (bool, error) {
+	slog.Info("Adding result to batch", "client_id", env.ClientID, "query_id", env.QueryID)
+	slog.Info("Result payload size", "size_bytes", len(env.Payload))
 	switch env.QueryID {
 	case inner.Query1ID:
 		r, err := inner.Deserialize[queryresult.Query1Result](env.Payload)
@@ -379,6 +381,7 @@ var eofsPerQuery = map[uint8]int{
 func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite bool, shouldClose bool) {
 	gateway.countsMu.Lock()
 	defer gateway.countsMu.Unlock()
+
 	if gateway.queryEOFsByClient[clientID] == nil {
 		gateway.queryEOFsByClient[clientID] = map[uint8]int{}
 	}

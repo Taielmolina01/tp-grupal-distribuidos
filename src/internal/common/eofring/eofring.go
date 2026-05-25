@@ -12,6 +12,7 @@ import (
 
 type EofRingAlgorithm interface {
 	Run()
+	Close() error
 }
 
 type eofRingAlgorithmImpl struct {
@@ -52,6 +53,15 @@ func (eofring *eofRingAlgorithmImpl) Run() {
 	if err := eofring.inputQueue.StartConsuming(eofring.handleEofMessageFromQueue); err != nil {
 		slog.Error("While consuming from EOF ring queue", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "err", err)
 	}
+}
+
+func (eofring *eofRingAlgorithmImpl) Close() error {
+	if err := eofring.inputQueue.Close(); err != nil {
+		slog.Error("While closing EOF ring input queue", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "err", err)
+		return err
+	}
+	eofring.messagesMonitor.Close()
+	return nil
 }
 
 func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Message, ack, nack func()) {
@@ -97,12 +107,12 @@ func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Me
 			// es que un nodo no había terminado de procesar los mensajes de un cliente en particular. Como asumimos que no hay caida, eventualmente va a converger
 			// al primer caso.
 			eofRingMessage.ActualAmount = value
-			eofRingMessage.FilteredAmount = eofring.messagesMonitor.GetFilteredMessagesAmountByClientId(eofRingMessage.ClientId)
+			eofRingMessage.FilteredAmount = eofring.messagesMonitor.GetForwardedMessagesAmountByClientId(eofRingMessage.ClientId)
 			slog.Info("Restarting EOF ring because not all messages were processed", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
 		} else {
 			// Si no soy el líder simplemente sumo los mensajes que yo leí del cliente X y lo sumo al mensaje del ring y lo forwardeo.
 			eofRingMessage.ActualAmount += value
-			eofRingMessage.FilteredAmount += eofring.messagesMonitor.GetFilteredMessagesAmountByClientId(eofRingMessage.ClientId)
+			eofRingMessage.FilteredAmount += eofring.messagesMonitor.GetForwardedMessagesAmountByClientId(eofRingMessage.ClientId)
 			slog.Info("Forwarding EOF ring message with updated counts", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
 		}
 
@@ -155,6 +165,10 @@ func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *eofmessagetypes
 		Payload: nil,
 		QueryID: eofring.queryId,
 	})
+
+	if err != nil {
+		slog.Error("Error serializing message for finish callback", "client_id", msg.ClientID, "err", err)
+	}
 
 	if err := eofring.finishCallback(msg.ClientID, msgToOutput, msg.CoordinatorId == eofring.id); err != nil {
 		slog.Error("Error finishing callback", "err", err)

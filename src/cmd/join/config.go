@@ -4,27 +4,21 @@ import (
 	"errors"
 	"os"
 	"strconv"
-	"strings"
 
 	"tp-grupal-distribuidos/internal/join"
 )
 
-func splitKeys(raw string) []string {
-	if raw == "" {
-		return nil
-	}
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
 func loadConfig() (join.JoinConfig, error) {
+	id, err := strconv.Atoi(os.Getenv("ID"))
+	if err != nil {
+		return join.JoinConfig{}, errors.New("ID environment variable is required and must be a number")
+	}
+
+	joinAmount, err := strconv.Atoi(os.Getenv("JOIN_AMOUNT"))
+	if err != nil {
+		return join.JoinConfig{}, errors.New("JOIN_AMOUNT environment variable is required and must be a number")
+	}
+
 	momPort, err := strconv.Atoi(os.Getenv("MOM_PORT"))
 	if err != nil {
 		return join.JoinConfig{}, errors.New("MOM_PORT environment variable is required and must be a number")
@@ -40,37 +34,56 @@ func loadConfig() (join.JoinConfig, error) {
 		return join.JoinConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
 	}
 
-	leftEofs, _ := strconv.Atoi(os.Getenv("LEFT_EOFS_EXPECTED"))
-	rightEofs, _ := strconv.Atoi(os.Getenv("RIGHT_EOFS_EXPECTED"))
-
-	id, err := strconv.Atoi(os.Getenv("ID"))
+	leftEofs := os.Getenv("LEFT_EOFS_EXPECTED")
+	if leftEofs == "" {
+		return join.JoinConfig{}, errors.New("LEFT_EOFS_EXPECTED environment variable is required")
+	}
+	leftEofsNum, err := strconv.Atoi(leftEofs)
 	if err != nil {
-		return join.JoinConfig{}, errors.New("ID environment variable is required and must be a number")
+		return join.JoinConfig{}, errors.New("LEFT_EOFS_EXPECTED environment variable is required and must be a number")
 	}
 
-	joinAmount, err := strconv.Atoi(os.Getenv("JOIN_AMOUNT"))
+	if leftEofsNum < 1 {
+		return join.JoinConfig{}, errors.New("LEFT_EOFS_EXPECTED must be at least 1")
+	}
+
+	rightEofs := os.Getenv("RIGHT_EOFS_EXPECTED")
+	if rightEofs == "" {
+		return join.JoinConfig{}, errors.New("RIGHT_EOFS_EXPECTED environment variable is required")
+	}
+
+	rightEofsNum, err := strconv.Atoi(rightEofs)
 	if err != nil {
-		return join.JoinConfig{}, errors.New("JOIN_AMOUNT environment variable is required and must be a number")
+		return join.JoinConfig{}, errors.New("RIGHT_EOFS_EXPECTED environment variable is required and must be a number")
+	}
+
+	if rightEofsNum < 1 {
+		return join.JoinConfig{}, errors.New("RIGHT_EOFS_EXPECTED must be at least 1")
+	}
+	leftInputQueue := os.Getenv("LEFT_INPUT_QUEUE")
+	if leftInputQueue == "" {
+		return join.JoinConfig{}, errors.New("LEFT_INPUT_QUEUE environment variable is required")
+	}
+
+	rightInputQueue := os.Getenv("RIGHT_INPUT_QUEUE")
+	if rightInputQueue == "" {
+		return join.JoinConfig{}, errors.New("RIGHT_INPUT_QUEUE environment variable is required")
+	}
+
+	outputQueue := os.Getenv("OUTPUT_QUEUE")
+	if outputQueue == "" {
+		return join.JoinConfig{}, errors.New("OUTPUT_QUEUE environment variable is required")
 	}
 
 	return join.JoinConfig{
-		Id: 				id,
-		Amount: 			joinAmount,
-		MomHost:            momHost,
-		MomPort:            momPort,
-		InputExchange:      os.Getenv("INPUT_EXCHANGE"),
-		InputQueue:         os.Getenv("INPUT_QUEUE"),
-		InputRoutingKeys:   splitKeys(os.Getenv("INPUT_ROUTING_KEYS")),
-		LeftInputExchange:  os.Getenv("LEFT_INPUT_EXCHANGE"),
-		LeftInputQueue:     os.Getenv("LEFT_INPUT_QUEUE"),
-		LeftRoutingKeys:    splitKeys(os.Getenv("LEFT_INPUT_ROUTING_KEYS")),
-		RightInputExchange: os.Getenv("RIGHT_INPUT_EXCHANGE"),
-		RightInputQueue:    os.Getenv("RIGHT_INPUT_QUEUE"),
-		RightRoutingKeys:   splitKeys(os.Getenv("RIGHT_INPUT_ROUTING_KEYS")),
-		OutputExchange:     outputExchange,
-		OutputQueue:        os.Getenv("OUTPUT_QUEUE"),
-		OutputRoutingKeys:  splitKeys(os.Getenv("OUTPUT_ROUTING_KEYS")),
-		LeftEofsExpected:   leftEofs,
-		RightEofsExpected:  rightEofs,
+		Id:                id,
+		Amount:            joinAmount,
+		MomHost:           momHost,
+		MomPort:           momPort,
+		LeftInputQueue:    leftInputQueue,
+		RightInputQueue:   rightInputQueue,
+		OutputQueue:       outputQueue,
+		LeftEofsExpected:  leftEofsNum,
+		RightEofsExpected: rightEofsNum,
 	}, nil
 }

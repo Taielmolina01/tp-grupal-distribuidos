@@ -41,13 +41,14 @@ type FilterConfig struct {
 	AmountTreshold    int
 	FilterAmount      int
 	OutputQueues      []string
+	QueryId           uint8
 }
 
 type Filter[T comparable, O comparable] struct {
 	id              uint32
 	inputExchange   middleware.Middleware
 	outputExchange  middleware.Middleware
-	callback        func(T) bool
+	filterFunction  func(T) bool
 	eofHandler      eofring.EofRingAlgorithm
 	handlerMessages msgmonitor.MessageMonitor
 	outputQueueEof  middleware.Middleware

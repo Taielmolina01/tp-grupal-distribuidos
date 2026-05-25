@@ -114,6 +114,7 @@ services:
       - CURRENCIES=US Dollar
       - FILTER_TYPE=CURRENCY
       - FILTER_AMOUNT=2
+      - QUERY_ID=1
     logging:
       driver: json-file
       options:
@@ -141,6 +142,7 @@ services:
       - CURRENCIES=US Dollar
       - FILTER_TYPE=CURRENCY
       - FILTER_AMOUNT=2
+      - QUERY_ID=1
     logging:
       driver: json-file
       options:
@@ -168,6 +170,7 @@ services:
       - AMOUNT=50.0
       - FILTER_TYPE=AMOUNT
       - FILTER_AMOUNT=2
+      - QUERY_ID=1
     logging:
       driver: json-file
       options:
@@ -195,6 +198,7 @@ services:
       - AMOUNT=50.0
       - FILTER_TYPE=AMOUNT
       - FILTER_AMOUNT=2
+      - QUERY_ID=1
     logging:
       driver: json-file
       options:
@@ -221,7 +225,6 @@ services:
       - OUTPUT_ROUTING_KEYS=falopa
       - QUERY_ID=2
       - INPUT_EOFS_EXPECTED=2
-      - JOINS_AMOUNT=2
     logging:
       driver: json-file
       options:
@@ -248,7 +251,6 @@ services:
       - OUTPUT_ROUTING_KEYS=falopa
       - QUERY_ID=2
       - INPUT_EOFS_EXPECTED=2
-      - JOINS_AMOUNT=2
     logging:
       driver: json-file
       options:
@@ -271,6 +273,7 @@ services:
       - OUTPUT_QUEUES=join_q2_accounts_q_0,join_q2_accounts_q_1
       - FILTER_AMOUNT=2
       - FILTER_TYPE=BANK_DISTINCT
+      - QUERY_ID=2
 
   filter_account_id_already_seen_1:
     build:
@@ -288,6 +291,7 @@ services:
       - OUTPUT_QUEUES=join_q2_accounts_q_0,join_q2_accounts_q_1
       - FILTER_AMOUNT=2
       - FILTER_TYPE=BANK_DISTINCT
+      - QUERY_ID=2
 
   join_q2_0:
     build:
