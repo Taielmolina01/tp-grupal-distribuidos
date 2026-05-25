@@ -29,7 +29,6 @@ services:
         condition: service_healthy
     environment:
       - ACCOUNT_QUEUES=filter_account_id_0,filter_account_id_1
-      - TRANSFERS_QUEUES=transfers_queue
       - TRANSFERS_EXCHANGE=transfers_exchange
       - TRANSFERS_ROUTING_KEYS=TRANSFERS_Q5_KEY,TRANSFERS_Q1234_KEY
       - RESULTS_QUEUE=results_queue

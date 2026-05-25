@@ -22,7 +22,6 @@ import (
 
 type GatewayConfig struct {
 	AccountQueues        []string
-	TransfersQueues      []string
 	TransfersExchange    string
 	TransfersRoutingKeys []string
 	ResultsQueue         string
