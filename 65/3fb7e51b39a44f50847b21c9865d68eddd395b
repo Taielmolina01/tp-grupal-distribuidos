@@ -1,0 +1,27 @@
+src/internal/client/client.go
+  s_181ce8084b84fe::t_e1f89df7d81592 160-162
+  s_181ce8084b84fe::t_24f375132af5b4 228-230
+  s_181ce8084b84fe::t_9840cb808cec8e 155-157
+  s_181ce8084b84fe::t_0b794a319b29ea 233-235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "653fb7e51b39a44f50847b21c9865d68eddd395b",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_181ce8084b84fe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d743d69-e165-46e0-8da5-cb686eff60ae",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
