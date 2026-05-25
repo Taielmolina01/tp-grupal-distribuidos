@@ -2,7 +2,6 @@ package joinaccounts
 
 import (
 	"fmt"
-	"hash/fnv"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -13,6 +12,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofmessage"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
@@ -25,9 +25,8 @@ type JoinAccountsConfig struct {
 	MomHost string
 	MomPort int
 
-	InputMiddlewarePrefix string //Es el output prefix del nodo anterior
-
-	QueryID int
+	InputMiddlewarePrefix string
+	QueryID               int
 }
 
 type clientState struct {
@@ -38,80 +37,80 @@ type clientState struct {
 type JoinAccounts struct {
 	id int
 
-	outputMiddlewareAmount int
+	hasher shard.Hasher
 
-	inputQueue   middleware.Middleware
-	outputQueues []middleware.Middleware
+	inputMiddleware   middleware.Middleware
+	outputMiddlewares []middleware.Middleware
 
 	mu           sync.Mutex
 	clientsState map[int]*clientState
 	queryID      int
 }
 
-func declareOutputQueues(config JoinAccountsConfig, connSettings middleware.ConnSettings) ([]middleware.Middleware, error) {
-	outputQueues := make([]middleware.Middleware, 0, config.OutputMiddlewareAmount)
+func declareOutputMiddlewares(config JoinAccountsConfig, connSettings middleware.ConnSettings) ([]middleware.Middleware, error) {
+	outputMiddlewares := make([]middleware.Middleware, 0, config.OutputMiddlewareAmount)
 	for i := range config.OutputMiddlewareAmount {
 		q, err := middleware.CreateQueueMiddleware(fmt.Sprintf("%s_%d", config.OutputMiddlewarePrefix, i), connSettings)
 		if err != nil {
-			for _, opened := range outputQueues {
+			for _, opened := range outputMiddlewares {
 				opened.Close()
 			}
-			return nil, fmt.Errorf("creating output queue %d: %w", i, err)
+			return nil, fmt.Errorf("creating output middleware %d: %w", i, err)
 		}
-		outputQueues = append(outputQueues, q)
+		outputMiddlewares = append(outputMiddlewares, q)
 	}
-	return outputQueues, nil
+	return outputMiddlewares, nil
 }
 
 func NewJoinAccounts(config JoinAccountsConfig) (_ *JoinAccounts, err error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputQueue   middleware.Middleware
-		outputQueues []middleware.Middleware
+		inputMiddleware   middleware.Middleware
+		outputMiddlewares []middleware.Middleware
 	)
 
 	defer func() {
 		if err != nil {
-			for _, q := range outputQueues {
+			for _, q := range outputMiddlewares {
 				q.Close()
 			}
-			if inputQueue != nil {
-				inputQueue.Close()
+			if inputMiddleware != nil {
+				inputMiddleware.Close()
 			}
 		}
 	}()
 
-	inputQueue, err = middleware.CreateQueueMiddleware(
-		config.InputMiddlewarePrefix+strconv.Itoa(config.Id),
+	inputMiddleware, err = middleware.CreateQueueMiddleware(
+		config.InputMiddlewarePrefix+"_"+strconv.Itoa(config.Id),
 		connSettings,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("creating input exchange: %w", err)
+		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputQueues, err = declareOutputQueues(config, connSettings)
+	outputMiddlewares, err = declareOutputMiddlewares(config, connSettings)
 	if err != nil {
-		return nil, fmt.Errorf("declaring output queues: %w", err)
+		return nil, fmt.Errorf("declaring output middlewares: %w", err)
 	}
 
 	return &JoinAccounts{
-		id:                     config.Id,
-		outputMiddlewareAmount: config.OutputMiddlewareAmount,
-		queryID:                config.QueryID,
-		inputQueue:             inputQueue,
-		outputQueues:           outputQueues,
-		clientsState:           map[int]*clientState{},
+		id:                config.Id,
+		hasher:            shard.New(config.OutputMiddlewareAmount),
+		queryID:           config.QueryID,
+		inputMiddleware:   inputMiddleware,
+		outputMiddlewares: outputMiddlewares,
+		clientsState:      map[int]*clientState{},
 	}, nil
 }
 
 func (j *JoinAccounts) Run() {
 	defer j.close()
 
-	if err := j.inputQueue.StartConsuming(func(msg middleware.Message, ack, _ func()) {
+	if err := j.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, _ func()) {
 		j.handleInput(msg, ack)
 	}); err != nil {
-		slog.Error("While consuming from input queue", "err", err)
+		slog.Error("While consuming from input middleware", "err", err)
 	}
 }
 
@@ -121,14 +120,14 @@ func (j *JoinAccounts) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	j.inputQueue.StopConsuming()
+	j.inputMiddleware.StopConsuming()
 }
 
 func (j *JoinAccounts) close() {
-	j.inputQueue.Close()
+	j.inputMiddleware.Close()
 
-	for _, queue := range j.outputQueues {
-		queue.Close()
+	for _, mw := range j.outputMiddlewares {
+		mw.Close()
 	}
 }
 
@@ -199,7 +198,6 @@ func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.Splitt
 	}
 
 	for _, v := range accMapRight {
-
 		msg, err := inner.SerializeData(inner.DataMsg[account.AccountChain]{
 			ClientID: clientID,
 			QueryID:  uint8(j.queryID),
@@ -214,12 +212,13 @@ func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.Splitt
 			slog.Error("While serializing output message", "err", err)
 		}
 
-		output_index := j.shardFor(clientID, v.Left.GetKey(), rightIdentifierKey)
-		if err := j.outputQueues[output_index].Send(*msg); err != nil {
+		outputIndex := j.hasher.ShardFor(clientID, v.Left.GetKey(), rightIdentifierKey)
+		if err := j.outputMiddlewares[outputIndex].Send(*msg); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
 	}
 }
+
 func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.SplittedTransfer) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -262,7 +261,6 @@ func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.Split
 	}
 
 	for _, v := range accMapRight {
-
 		msg, err := inner.SerializeData(inner.DataMsg[account.AccountChain]{
 			ClientID: clientID,
 			QueryID:  uint8(j.queryID),
@@ -277,17 +275,11 @@ func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.Split
 			slog.Error("While serializing output message", "err", err)
 		}
 
-		output_index := j.shardFor(clientID, leftIdentifierKey, v.Right.GetKey())
-		if err := j.outputQueues[output_index].Send(*msg); err != nil {
+		outputIndex := j.hasher.ShardFor(clientID, leftIdentifierKey, v.Right.GetKey())
+		if err := j.outputMiddlewares[outputIndex].Send(*msg); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
 	}
-}
-
-func (j *JoinAccounts) shardFor(clientID int, key1, key2 string) int {
-	h := fnv.New32a()
-	fmt.Fprintf(h, "%d\x00%s\x00%s", clientID, key1, key2)
-	return int(h.Sum32() % uint32(j.outputMiddlewareAmount))
 }
 
 func (j *JoinAccounts) handleEOF(data inner.DataMsg[transfer.SplittedTransfer]) {
@@ -299,8 +291,8 @@ func (j *JoinAccounts) handleEOF(data inner.DataMsg[transfer.SplittedTransfer]) 
 		slog.Error("While serializing EOF message", "err", err)
 	}
 
-	for _, q := range j.outputQueues {
-		if err := q.Send(*msg); err != nil {
+	for _, mw := range j.outputMiddlewares {
+		if err := mw.Send(*msg); err != nil {
 			slog.Error("While sending EOF message", "err", err)
 		}
 	}

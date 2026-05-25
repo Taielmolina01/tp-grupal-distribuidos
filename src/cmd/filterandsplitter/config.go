@@ -39,9 +39,9 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("OUTPUT_AMOUNT environment variable is required and must be a number")
 	}
 
-	outputPrefix := os.Getenv("OUTPUT_QUEUE_PREFIX")
+	outputPrefix := os.Getenv("OUTPUT_MIDDLEWARE_PREFIX")
 	if outputPrefix == "" {
-		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("OUTPUT_QUEUE_PREFIX environment variable is required")
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
 	queryID, err := strconv.Atoi(os.Getenv("QUERY_ID"))
@@ -68,8 +68,8 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		FilterAndSpliterAmount: filterAmount,
 		MomHost:                momHost,
 		MomPort:                momPort,
-		InputExchange:          os.Getenv("INPUT_EXCHANGE"),
-		InputQueue:             os.Getenv("INPUT_QUEUE"),
+		InputMiddlewareName:    os.Getenv("INPUT_EXCHANGE"),
+		InputMiddlewareQueue:   os.Getenv("INPUT_QUEUE"),
 		InputRoutingKeys:       inputRoutingKeys,
 		QueryID:                queryID,
 	}, nil

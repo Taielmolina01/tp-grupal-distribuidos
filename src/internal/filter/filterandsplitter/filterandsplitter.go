@@ -2,7 +2,6 @@ package filterandsplitter
 
 import (
 	"fmt"
-	"hash/fnv"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -14,6 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
@@ -30,9 +30,9 @@ type FilterAndSplitterConfig struct {
 	MomHost string
 	MomPort int
 
-	InputExchange    string
-	InputQueue       string
-	InputRoutingKeys []string
+	InputMiddlewareName  string
+	InputMiddlewareQueue string
+	InputRoutingKeys     []string
 
 	QueryID int
 }
@@ -42,32 +42,32 @@ type FilterAndSplitter struct {
 	startDate time.Time
 	endDate   time.Time
 
-	outputMiddlewareAmount int
+	hasher shard.Hasher
 
-	inputExchange middleware.Middleware
-	outputQueues  []middleware.Middleware
-	eofInput      middleware.Middleware
-	eofOutput     middleware.Middleware
-	eofHandler    eofring.EofRingAlgorithm
+	inputMiddleware   middleware.Middleware
+	outputMiddlewares []middleware.Middleware
+	eofInput          middleware.Middleware
+	eofOutput         middleware.Middleware
+	eofHandler        eofring.EofRingAlgorithm
 
 	handlerMessages msgmonitor.MessageMonitor
 
 	queryID int
 }
 
-func declareOutputQueues(config FilterAndSplitterConfig, connSettings middleware.ConnSettings) ([]middleware.Middleware, error) {
-	outputQueues := make([]middleware.Middleware, 0, config.OutputMiddlewareAmount)
+func declareOutputMiddlewares(config FilterAndSplitterConfig, connSettings middleware.ConnSettings) ([]middleware.Middleware, error) {
+	outputMiddlewares := make([]middleware.Middleware, 0, config.OutputMiddlewareAmount)
 	for i := range config.OutputMiddlewareAmount {
 		q, err := middleware.CreateQueueMiddleware(fmt.Sprintf("%s_%d", config.OutputMiddlewarePrefix, i), connSettings)
 		if err != nil {
-			for _, opened := range outputQueues {
+			for _, opened := range outputMiddlewares {
 				opened.Close()
 			}
-			return nil, fmt.Errorf("creating output queue %d: %w", i, err)
+			return nil, fmt.Errorf("creating output middleware %d: %w", i, err)
 		}
-		outputQueues = append(outputQueues, q)
+		outputMiddlewares = append(outputMiddlewares, q)
 	}
-	return outputQueues, nil
+	return outputMiddlewares, nil
 }
 
 func getRingNextIndex(config FilterAndSplitterConfig) int {
@@ -83,10 +83,10 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
 	var (
-		inputExchange middleware.Middleware
-		outputQueues  []middleware.Middleware
-		eofInput      middleware.Middleware
-		eofOutput     middleware.Middleware
+		inputMiddleware   middleware.Middleware
+		outputMiddlewares []middleware.Middleware
+		eofInput          middleware.Middleware
+		eofOutput         middleware.Middleware
 	)
 
 	defer func() {
@@ -97,28 +97,28 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 			if eofInput != nil {
 				eofInput.Close()
 			}
-			for _, q := range outputQueues {
+			for _, q := range outputMiddlewares {
 				q.Close()
 			}
-			if inputExchange != nil {
-				inputExchange.Close()
+			if inputMiddleware != nil {
+				inputMiddleware.Close()
 			}
 		}
 	}()
 
-	inputExchange, err = middleware.CreateExchangeMiddleware(
-		config.InputExchange,
-		config.InputQueue,
+	inputMiddleware, err = middleware.CreateExchangeMiddleware(
+		config.InputMiddlewareName,
+		config.InputMiddlewareQueue,
 		config.InputRoutingKeys,
 		connSettings,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("creating input exchange: %w", err)
+		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputQueues, err = declareOutputQueues(config, connSettings)
+	outputMiddlewares, err = declareOutputMiddlewares(config, connSettings)
 	if err != nil {
-		return nil, fmt.Errorf("declaring output queues: %w", err)
+		return nil, fmt.Errorf("declaring output middlewares: %w", err)
 	}
 
 	eofInput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(config.Id), connSettings)
@@ -141,7 +141,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 			handlerMessages.RemoveClient(clientID)
 
 			if isCoordinator {
-				for _, q := range outputQueues {
+				for _, q := range outputMiddlewares {
 					if err := q.Send(*msg); err != nil {
 						return err
 					}
@@ -153,17 +153,17 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 	)
 
 	return &FilterAndSplitter{
-		id:                     config.Id,
-		startDate:              config.StartDate,
-		endDate:                config.EndDate,
-		outputMiddlewareAmount: config.OutputMiddlewareAmount,
-		queryID:                config.QueryID,
-		handlerMessages:        handlerMessages,
-		inputExchange:          inputExchange,
-		outputQueues:           outputQueues,
-		eofInput:               eofInput,
-		eofOutput:              eofOutput,
-		eofHandler:             eofHandler,
+		id:                config.Id,
+		startDate:         config.StartDate,
+		endDate:           config.EndDate,
+		hasher:            shard.New(config.OutputMiddlewareAmount),
+		queryID:           config.QueryID,
+		handlerMessages:   handlerMessages,
+		inputMiddleware:   inputMiddleware,
+		outputMiddlewares: outputMiddlewares,
+		eofInput:          eofInput,
+		eofOutput:         eofOutput,
+		eofHandler:        eofHandler,
 	}, nil
 }
 
@@ -171,10 +171,10 @@ func (f *FilterAndSplitter) Run() {
 	defer f.close()
 	go f.eofHandler.Run()
 
-	if err := f.inputExchange.StartConsuming(func(msg middleware.Message, ack, _ func()) {
+	if err := f.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, _ func()) {
 		f.handleInput(msg, ack)
 	}); err != nil {
-		slog.Error("While consuming from input queue", "err", err)
+		slog.Error("While consuming from input middleware", "err", err)
 	}
 }
 
@@ -184,17 +184,17 @@ func (f *FilterAndSplitter) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	f.inputExchange.StopConsuming()
+	f.inputMiddleware.StopConsuming()
 	f.eofInput.StopConsuming()
 }
 
 func (f *FilterAndSplitter) close() {
-	f.inputExchange.Close()
+	f.inputMiddleware.Close()
 	f.eofInput.Close()
 	f.eofOutput.Close()
 
-	for _, queue := range f.outputQueues {
-		queue.Close()
+	for _, mw := range f.outputMiddlewares {
+		mw.Close()
 	}
 }
 
@@ -241,7 +241,7 @@ func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer)
 			acc = o.Transfer.ToBankAccount
 		}
 
-		output_index := f.shardFor(clientID, bank, acc)
+		outputIndex := f.hasher.ShardFor(clientID, bank, acc)
 
 		msg, err := inner.SerializeData(inner.DataMsg[transfer.SplittedTransfer]{
 			ClientID: clientID,
@@ -254,16 +254,10 @@ func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer)
 		}
 
 		f.handlerMessages.AddForwardedMessagesAmountByClientId(clientID, 1)
-		if err := f.outputQueues[output_index].Send(*msg); err != nil {
+		if err := f.outputMiddlewares[outputIndex].Send(*msg); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
 	}
-}
-
-func (f *FilterAndSplitter) shardFor(clientID int, bank, acc string) int {
-	h := fnv.New32a()
-	fmt.Fprintf(h, "%d\x00%s\x00%s", clientID, bank, acc)
-	return int(h.Sum32() % uint32(f.outputMiddlewareAmount))
 }
 
 func (f *FilterAndSplitter) handleEOF(data inner.DataMsg[transfer.Transfer]) {
@@ -279,11 +273,8 @@ func (f *FilterAndSplitter) handleEOF(data inner.DataMsg[transfer.Transfer]) {
 		slog.Error("While serializing EOF ring message", "err", err)
 		return
 	}
-	if err := f.eofOutput.Send(
-		*serializedEofRingMessage,
-	); err != nil {
+	if err := f.eofOutput.Send(*serializedEofRingMessage); err != nil {
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 	}
 	slog.Info("EOF message sent to EOF ring", "filter_id", f.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
-	slog.Info("Total messages processed by filter", "filter_id", f.id, "client_id", f.id, "processed_messages", f.handlerMessages.GetProcessedMessagesAmountByClientId(int(f.id)))
 }

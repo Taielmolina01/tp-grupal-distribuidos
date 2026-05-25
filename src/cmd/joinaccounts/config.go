@@ -29,14 +29,14 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		return joinaccounts.JoinAccountsConfig{}, errors.New("OUTPUT_AMOUNT environment variable is required and must be a number")
 	}
 
-	outputPrefix := os.Getenv("OUTPUT_QUEUE_PREFIX")
+	outputPrefix := os.Getenv("OUTPUT_MIDDLEWARE_PREFIX")
 	if outputPrefix == "" {
-		return joinaccounts.JoinAccountsConfig{}, errors.New("OUTPUT_QUEUE_PREFIX environment variable is required")
+		return joinaccounts.JoinAccountsConfig{}, errors.New("OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	inputPrefix := os.Getenv("INPUT_QUEUE_PREFIX")
+	inputPrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
 	if inputPrefix == "" {
-		return joinaccounts.JoinAccountsConfig{}, errors.New("INPUT_QUEUE_PREFIX environment variable is required")
+		return joinaccounts.JoinAccountsConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
 	queryID, err := strconv.Atoi(os.Getenv("QUERY_ID"))

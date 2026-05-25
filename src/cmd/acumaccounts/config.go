@@ -29,9 +29,9 @@ func loadConfig() (acumaccounts.AcumAccountsConfig, error) {
 		return acumaccounts.AcumAccountsConfig{}, errors.New("OUTPUT_AMOUNT environment variable is required and must be a number")
 	}
 
-	outputPrefix := os.Getenv("OUTPUT_QUEUE_PREFIX")
+	outputPrefix := os.Getenv("OUTPUT_MIDDLEWARE_PREFIX")
 	if outputPrefix == "" {
-		return acumaccounts.AcumAccountsConfig{}, errors.New("OUTPUT_QUEUE_PREFIX environment variable is required")
+		return acumaccounts.AcumAccountsConfig{}, errors.New("OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
 	expectedEOFs, err := strconv.Atoi(os.Getenv("EXPECTED_EOFS"))
@@ -39,9 +39,9 @@ func loadConfig() (acumaccounts.AcumAccountsConfig, error) {
 		return acumaccounts.AcumAccountsConfig{}, errors.New("EXPECTED_EOFS environment variable is required and must be a number")
 	}
 
-	inputPrefix := os.Getenv("INPUT_QUEUE_PREFIX")
+	inputPrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
 	if inputPrefix == "" {
-		return acumaccounts.AcumAccountsConfig{}, errors.New("INPUT_QUEUE_PREFIX environment variable is required")
+		return acumaccounts.AcumAccountsConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
 	queryID, err := strconv.Atoi(os.Getenv("QUERY_ID"))

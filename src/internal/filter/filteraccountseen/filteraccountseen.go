@@ -69,7 +69,7 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (_ *FilterAccountSeen,
 	}()
 
 	inputMiddleware, err = middleware.CreateQueueMiddleware(
-		config.InputMiddlewarePrefix+strconv.Itoa(config.Id),
+		config.InputMiddlewarePrefix+"_"+strconv.Itoa(config.Id),
 		connSettings,
 	)
 	if err != nil {
