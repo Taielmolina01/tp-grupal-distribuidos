@@ -49,6 +49,8 @@ type FilterConfig struct {
 	OutputQueues          []string
 	QueryId               uint8
 	PaymentFormats        []string
+	AvgInputQueue         string
+	AvgExpectedEofs       int
 }
 
 type Filter[T comparable, O comparable] struct {
