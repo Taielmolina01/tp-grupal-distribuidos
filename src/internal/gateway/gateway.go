@@ -191,6 +191,14 @@ func (gateway *Gateway) handleSignals() {
 }
 
 func (gateway *Gateway) handleClientRequest(client clientregistry.ClientState) {
+	completed := false
+	defer func() {
+		if !completed {
+			slog.Info("Client disconnected before completing ingest", "client_id", client.ID)
+			gateway.closeClient(client.ID)
+		}
+	}()
+
 accountsLoop:
 	for {
 		msgType, err := external.ReadMsgType(client.Conn)
@@ -246,6 +254,8 @@ transfersLoop:
 			return
 		}
 	}
+
+	completed = true
 }
 
 func (gateway *Gateway) getOrCreateBuilder(clientID int) *external.ResultBatchBuilder {
@@ -394,21 +404,24 @@ func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite b
 }
 
 func (gateway *Gateway) closeClient(clientID int) {
-	client, ok := gateway.findClient(clientID)
-	if !ok {
-		return
-	}
-	if err := client.Conn.Close(); err != nil {
-		slog.Error("While closing client connection", "client_id", clientID, "err", err)
+	if client, ok := gateway.findClient(clientID); ok {
+		if err := client.Conn.Close(); err != nil {
+			slog.Error("While closing client connection", "client_id", clientID, "err", err)
+		}
 	}
 	gateway.registry.RemoveByID(clientID)
+
 	gateway.countsMu.Lock()
+	delete(gateway.accountsCount, clientID)
+	delete(gateway.transfersCount, clientID)
 	delete(gateway.queryEOFsByClient, clientID)
 	gateway.countsMu.Unlock()
+
 	gateway.buildersMu.Lock()
 	delete(gateway.resultBuilders, clientID)
 	gateway.buildersMu.Unlock()
-	slog.Info("Client finished, connection closed", "client_id", clientID)
+
+	slog.Info("Client closed", "client_id", clientID)
 }
 
 func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bool) {
