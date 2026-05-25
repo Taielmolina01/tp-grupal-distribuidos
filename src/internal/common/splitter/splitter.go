@@ -2,11 +2,11 @@ package splitter
 
 import "strings"
 
-func Split(str string) []string {
+func Split(str string, separator string) []string {
 	if str == "" {
 		return nil
 	}
-	parts := strings.Split(str, ",")
+	parts := strings.Split(str, separator)
 	output := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)

@@ -6,6 +6,13 @@ import (
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 )
 
+type ReducerType string
+
+const (
+	MAX_AMOUNT_FROM_BANK = "MAX_AMOUNT_FROM_BANK"
+	COUNT                = "COUNT"
+)
+
 type ReducerConfig struct {
 	Id                int
 	ReducerAmount     int
@@ -18,6 +25,7 @@ type ReducerConfig struct {
 	InputRoutingKeys  []string
 	InputEofsExpected int
 	JoinsAmount       int
+	ReducerType       ReducerType
 }
 
 type Reducer[T comparable] struct {
@@ -34,4 +42,11 @@ type Reducer[T comparable] struct {
 	inputEofsExpected int
 	inputEofCount     map[int]int
 	totalRealAmount   map[int]uint32
+}
+
+type CountReducer struct {
+	countByClient map[int]uint32
+	inputQueue    middleware.Middleware
+	outputQueue   middleware.Middleware
+	queryId       uint8
 }

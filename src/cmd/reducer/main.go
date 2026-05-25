@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"tp-grupal-distribuidos/internal/common/worker"
 	"tp-grupal-distribuidos/internal/reducer"
 )
 
@@ -23,9 +24,6 @@ func loadConfig() (reducer.ReducerConfig, error) {
 	}
 
 	inputExchange := os.Getenv("INPUT_EXCHANGE")
-	if inputExchange == "" {
-		return reducer.ReducerConfig{}, errors.New("INPUT_EXCHANGE environment variable is required")
-	}
 
 	queryId, err := strconv.Atoi(os.Getenv("QUERY_ID"))
 	if err != nil {
@@ -64,6 +62,12 @@ func loadConfig() (reducer.ReducerConfig, error) {
 	}
 	outputQueuesStr := strings.Split(outputQueues, ",")
 
+	reducerTypeStr := os.Getenv("REDUCER_TYPE")
+	if reducerTypeStr == "" {
+		return reducer.ReducerConfig{}, errors.New("REDUCER_TYPE environment variable is required")
+	}
+	reducerType := reducer.ReducerType(reducerTypeStr)
+
 	return reducer.ReducerConfig{
 		Id:                id,
 		ReducerAmount:     reducerAmount,
@@ -75,6 +79,7 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		InputRoutingKeys:  inputRoutingKeys,
 		OutputQueues:      outputQueuesStr,
 		InputEofsExpected: inputEofsExpected,
+		ReducerType:       reducerType,
 	}, nil
 }
 
@@ -85,7 +90,16 @@ func run() int {
 		return 1
 	}
 
-	server, err := reducer.CreateReducerMaxAmountFromBank(config)
+	var server worker.Worker
+	switch config.ReducerType {
+	case reducer.MAX_AMOUNT_FROM_BANK:
+		server, err = reducer.CreateReducerMaxAmountFromBank(config)
+	case reducer.COUNT:
+		server, err = reducer.CreateReducerCount(config)
+	default:
+		slog.Error("Invalid reducer type", "type", config.ReducerType)
+		return 1
+	}
 	if err != nil {
 		slog.Error("While initializing join", "err", err)
 		return 1

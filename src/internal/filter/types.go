@@ -21,27 +21,33 @@ const (
 	TRANSFER_DISTINCT       FilterType = "TRANSFER_DISTINCT"
 	BANK_DISTINCT           FilterType = "BANK_DISTINCT"
 	AVERAGE_FILTER          FilterType = "AVERAGE_FILTER"
+	CONVERTED_AMOUNT_FILTER FilterType = "CONVERTED_AMOUNT_FILTER"
 )
 
 type FilterConfig struct {
-	Type              FilterType
-	Id                int
-	MomHost           string
-	MomPort           int
-	InputExchange     string
-	InputQueue        string
-	InputRoutingKeys  []string
-	OutputExchange    string
-	OutputQueue       string
-	OutputRoutingKeys []string
-	Amount            float32
-	StartDateRange    time.Time
-	EndDateRange      time.Time
-	Currencies        []string
-	AmountTreshold    int
-	FilterAmount      int
-	OutputQueues      []string
-	QueryId           uint8
+	Type                  FilterType
+	Id                    int
+	MomHost               string
+	MomPort               int
+	InputExchange         string
+	InputQueue            string
+	InputRoutingKeys      []string
+	OutputExchange        string
+	OutputQueue           string
+	OutputRoutingKeys     []string
+	LeftInputQueue        string
+	RightInputQueue       string
+	RightInputExchange    string
+	RightInputRoutingKeys []string
+	Amount                float32
+	StartDateRange        time.Time
+	EndDateRange          time.Time
+	Currencies            []string
+	AmountTreshold        int
+	FilterAmount          int
+	OutputQueues          []string
+	QueryId               uint8
+	PaymentFormats        []string
 }
 
 type Filter[T comparable, O comparable] struct {
@@ -80,4 +86,22 @@ type AverageFilter struct {
 	inputExchange  middleware.Middleware
 	outputExchange middleware.Middleware
 	compareFunc    func(float32, float32) bool
+}
+
+type ConvertedAmountFilter[T, S comparable] struct {
+	leftInputQueue     middleware.Middleware
+	rightInputQueue    middleware.Middleware
+	outputQueue        middleware.Middleware
+	compareFunc        func(t T, s S) bool
+	queryId            uint8
+	leftKeyFunc        func(S) string
+	leftSecondKeyFunc  func(S) string
+	leftValueFunc      func(S) float32
+	rightKeyFunc       func(T) string
+	rightsecondKeyFunc func(T) string
+	rightValueFunc     func(T) float32
+	conversionFunc     func(T, float32) S
+	conversionsByDay   map[string]map[string]float32
+	toSaveFunc         func(T, int) string
+	fromSaveFunc       func(string) (T, int, error)
 }

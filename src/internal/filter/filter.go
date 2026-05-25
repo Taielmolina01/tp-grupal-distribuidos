@@ -34,7 +34,21 @@ func newFilter[T comparable, O comparable](
 		return nil, err
 	}
 
-	outputExchange, err := middleware.CreateExchangeMiddleware(config.OutputExchange, config.OutputQueue, config.OutputRoutingKeys, connSettings)
+	slog.Info("Initializing filter",
+		"config.OutputExchange",
+		config.OutputExchange,
+		"config.OutputQueue",
+		config.OutputQueue,
+		"config.outputroutingkeys",
+		config.OutputRoutingKeys,
+	)
+
+	outputExchange, err := middleware.CreateExchangeMiddleware(
+		config.OutputExchange,
+		config.OutputQueue,
+		config.OutputRoutingKeys,
+		connSettings,
+	)
 	if err != nil {
 		if err := inputExchange.Close(); err != nil {
 			slog.Error("While closing input exchange after output exchange creation failure", "err", err)
@@ -131,6 +145,7 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func
 	}
 
 	if result.IsEOF() {
+		slog.Info("RECEIVED EOF", "real_amount", result.EOF.TotalMessages)
 		eofRingMessage := eofmessagetypes.EofRingMessage{
 			RealAmount:     result.EOF.TotalMessages,
 			ActualAmount:   filter.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
@@ -152,8 +167,8 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func
 		slog.Info("Total messages processed by filter", "filter_id", filter.id, "client_id", filter.id, "processed_messages", filter.handlerMessages.GetProcessedMessagesAmountByClientId(int(filter.id)))
 	} else {
 		filter.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
-
 		if filter.filterFunction(result.Payload) {
+			slog.Info("filtered msg", "msg", result.Payload)
 			filter.handlerMessages.AddForwardedMessagesAmountByClientId(result.ClientID, 1)
 			payload := filter.outputTransform(result.Payload)
 			msgOutput, err := inner.SerializeData(

@@ -21,14 +21,16 @@ import (
 )
 
 type GatewayConfig struct {
-	AccountQueues     []string
-	TransfersExchange string
-	ResultsQueue      string
-	ServerHost        string
-	ServerPort        string
-	MomHost           string
-	MomPort           int
-	MaxBatchSize      int
+	AccountQueues        []string
+	TransfersQueues      []string
+	TransfersExchange    string
+	TransfersRoutingKeys []string
+	ResultsQueue         string
+	ServerHost           string
+	ServerPort           string
+	MomHost              string
+	MomPort              int
+	MaxBatchSize         int
 }
 
 type Gateway struct {
@@ -49,10 +51,7 @@ type Gateway struct {
 }
 
 const (
-	TRANSFERS_Q5_KEY    = "TRANSFERS_Q5_KEY"
-	TRANSFERS_Q1234_KEY = "TRANSFERS_Q1234_KEY"
-	ACCOUNTS_KEY        = "ACCOUNTS_KEY"
-	TRANSFER_QUEUE      = "transfers_queue"
+	ACCOUNTS_KEY = "ACCOUNTS_KEY"
 )
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
@@ -70,7 +69,13 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 
 	// Las keys acá vienen x config xq son dinámicas
 	// Se requiere sharding
-	transfersExchange, err := middleware.CreateExchangeMiddleware(config.TransfersExchange, TRANSFER_QUEUE, []string{TRANSFERS_Q1234_KEY}, connSettings)
+
+	transfersExchange, err := middleware.CreateExchangeMiddleware(
+		config.TransfersExchange,
+		"",
+		config.TransfersRoutingKeys,
+		connSettings,
+	)
 	if err != nil {
 		for _, q := range accountQueues {
 			if err := q.Close(); err != nil {
@@ -318,8 +323,6 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 }
 
 func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.DataMsg[json.RawMessage]) (bool, error) {
-	slog.Info("Adding result to batch", "client_id", env.ClientID, "query_id", env.QueryID)
-	slog.Info("Result payload size", "size_bytes", len(env.Payload))
 	switch env.QueryID {
 	case inner.Query1ID:
 		r, err := inner.Deserialize[queryresult.Query1Result](env.Payload)
@@ -460,7 +463,6 @@ func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
 }
 
 func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind string, total uint32, exchange middleware.Middleware) error {
-	slog.Info("Received EOF message", "kind", kind, "client_id", client.ID, "total", total)
 	msg, err := inner.SerializeData(inner.DataMsg[any]{
 		ClientID: client.ID,
 		EOF:      &inner.EOFInfo{Kind: kind, TotalMessages: total},
@@ -552,5 +554,9 @@ func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState) e
 
 func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState) error {
 	total := gateway.takeCount(gateway.transfersCount, client.ID)
-	return gateway.forwardEOF(client, "transfers", total, gateway.transfersExchange)
+	slog.Info("eof transfers", "total", total)
+	if err := gateway.forwardEOF(client, "transfers", total, gateway.transfersExchange); err != nil {
+		return err
+	}
+	return nil
 }

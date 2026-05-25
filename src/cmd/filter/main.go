@@ -27,6 +27,8 @@ func run() int {
 		server, err = filter.CreateDateRangeAndPaymentMethod(config)
 	case filter.BANK_DISTINCT:
 		server, err = filter.CreateBankDistinctFilter(config)
+	case filter.CONVERTED_AMOUNT_FILTER:
+		server, err = filter.CreateConvertedAmountFilter(config)
 	default:
 		slog.Error("While loading filter type", "err", errors.New("invalid filter type"))
 		return 1
@@ -40,7 +42,6 @@ func run() int {
 	go server.HandleSignals()
 
 	server.Run()
-	slog.Info("FUME FUME FUME FUMETEO")
 	return 0
 }
 

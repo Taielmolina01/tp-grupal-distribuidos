@@ -5,10 +5,12 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
-	"strings"
 
+	"tp-grupal-distribuidos/internal/common/splitter"
 	"tp-grupal-distribuidos/internal/gateway"
 )
+
+const QUEUES_SEPARATOR = ","
 
 func loadConfig() (gateway.GatewayConfig, error) {
 	accountQueues := os.Getenv("ACCOUNT_QUEUES")
@@ -16,11 +18,23 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		return gateway.GatewayConfig{}, errors.New("ACCOUNT_QUEUES environment variable is required")
 	}
 
-	accountQueueList := strings.Split(accountQueues, ",")
+	accountQueueList := splitter.Split(accountQueues, QUEUES_SEPARATOR)
+
+	transfersQueues := os.Getenv("TRANSFERS_QUEUES")
+	if transfersQueues == "" {
+		return gateway.GatewayConfig{}, errors.New("TRANSFERS_QUEUES environment variable is required")
+	}
+	transfersQueueList := splitter.Split(transfersQueues, QUEUES_SEPARATOR)
 
 	transfersExchange := os.Getenv("TRANSFERS_EXCHANGE")
 	if transfersExchange == "" {
 		return gateway.GatewayConfig{}, errors.New("TRANSFERS_EXCHANGE environment variable is required")
+	}
+
+	transfersRoutingKeysStr := os.Getenv("TRANSFERS_ROUTING_KEYS")
+	transfersRoutingKeys := []string{}
+	if transfersRoutingKeysStr != "" {
+		transfersRoutingKeys = splitter.Split(transfersRoutingKeysStr, QUEUES_SEPARATOR)
 	}
 
 	resultsQueue := os.Getenv("RESULTS_QUEUE")
@@ -58,14 +72,16 @@ func loadConfig() (gateway.GatewayConfig, error) {
 	}
 
 	return gateway.GatewayConfig{
-		AccountQueues:     accountQueueList,
-		TransfersExchange: transfersExchange,
-		ResultsQueue:      resultsQueue,
-		ServerHost:        serverHost,
-		ServerPort:        serverPort,
-		MomHost:           momHost,
-		MomPort:           momPort,
-		MaxBatchSize:      maxBatchSize,
+		AccountQueues:        accountQueueList,
+		TransfersQueues:      transfersQueueList,
+		TransfersExchange:    transfersExchange,
+		TransfersRoutingKeys: transfersRoutingKeys,
+		ResultsQueue:         resultsQueue,
+		ServerHost:           serverHost,
+		ServerPort:           serverPort,
+		MomHost:              momHost,
+		MomPort:              momPort,
+		MaxBatchSize:         maxBatchSize,
 	}, nil
 }
 
