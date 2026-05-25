@@ -459,24 +459,7 @@ func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
 	return total
 }
 
-func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind string, total uint32, exchange middleware.Middleware) error {
-	msg, err := inner.SerializeData(inner.DataMsg[any]{
-		ClientID: client.ID,
-		EOF:      &inner.EOFInfo{Kind: kind, TotalMessages: total},
-	})
-	if err != nil {
-		slog.Debug("While serializing EOF", "kind", kind, "err", err)
-		return err
-	}
-	if err := exchange.Send(*msg); err != nil {
-		slog.Debug("While sending EOF", "kind", kind, "err", err)
-		return err
-	}
-	return nil
-}
-
-func (gateway *Gateway) broadcastEOF(client clientregistry.ClientState, kind string, total uint32) error {
-	slog.Info("Received EOF message", "kind", kind, "client_id", client.ID, "total", total)
+func (gateway *Gateway) sendEOF(client clientregistry.ClientState, kind string, total uint32, targets ...middleware.Middleware) error {
 	msg, err := inner.SerializeData(inner.DataMsg[any]{
 		ClientID: client.ID,
 		EOF:      &inner.EOFInfo{Kind: kind, TotalMessages: total},
@@ -486,9 +469,9 @@ func (gateway *Gateway) broadcastEOF(client clientregistry.ClientState, kind str
 		return err
 	}
 	var errs []error
-	for _, q := range gateway.accountQueues {
-		if err := q.Send(*msg); err != nil {
-			slog.Error("While sending EOF to accounts queue", "kind", kind, "err", err)
+	for _, t := range targets {
+		if err := t.Send(*msg); err != nil {
+			slog.Error("While sending EOF", "kind", kind, "err", err)
 			errs = append(errs, err)
 		}
 	}
@@ -546,14 +529,12 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState) erro
 
 func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState) error {
 	total := gateway.takeCount(gateway.accountsCount, client.ID)
-	return gateway.broadcastEOF(client, "accounts", total)
+	slog.Info("Received EOF message", "kind", "accounts", "client_id", client.ID, "total", total)
+	return gateway.sendEOF(client, "accounts", total, gateway.accountQueues...)
 }
 
 func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState) error {
 	total := gateway.takeCount(gateway.transfersCount, client.ID)
-	slog.Info("eof transfers", "total", total)
-	if err := gateway.forwardEOF(client, "transfers", total, gateway.transfersExchange); err != nil {
-		return err
-	}
-	return nil
+	slog.Info("Received EOF message", "kind", "transfers", "client_id", client.ID, "total", total)
+	return gateway.sendEOF(client, "transfers", total, gateway.transfersExchange)
 }
