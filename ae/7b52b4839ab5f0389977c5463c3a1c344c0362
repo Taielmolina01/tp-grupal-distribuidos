@@ -1,0 +1,42 @@
+src/internal/common/middleware/newmiddleware/fanout_middleware.go
+  s_998c528cbda4f7::t_b2b90f643952aa 1-65
+src/internal/common/middleware/newmiddleware/middleware.go
+  s_998c528cbda4f7::t_b2d147c8a7baee 1-28
+src/internal/common/middleware/newmiddleware/base.go
+  h_3c9b41718876fe 101
+  s_998c528cbda4f7::t_b18640932e85b6 1-100,102-128
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_998c528cbda4f7::t_6e19f07d289a33 15,48-52,68-71,75-78,89-90,102,108,110,113,118,132-135,143-153,182,228,236,239-240,242
+src/internal/joinaccounts/joinaccounts.go
+  s_998c528cbda4f7::t_48626cf7438e56 15,43-44,52,55-56,61-62,70-73,78,80,84-89,96,114,117,119,181,193,196-197,242,254,257-258,268,271,274-275
+src/internal/acumaccounts/acumaccounts.go
+  s_998c528cbda4f7::t_1e8c4dd2d46916 15,46-48,57,60-61,66-67,75-78,83,85,89-96,103,121,124,126,165,173,176-177,194,197,200-201
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_998c528cbda4f7::t_70fcf2662e317b 15,22,40-41,54,57-58,72-75,77,80,82,98,119,121,148,156,159,175,178,181
+src/internal/common/middleware/newmiddleware/queue_middleware.go
+  s_998c528cbda4f7::t_a95641f560e9c1 1-46
+src/internal/common/middleware/newmiddleware/sharded_middleware.go
+  h_3c9b41718876fe 6
+  s_998c528cbda4f7::t_b982e48eec737e 1-5,7-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "ae7b52b4839ab5f0389977c5463c3a1c344c0362",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_998c528cbda4f7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b41f4349-a807-48d9-b1b9-d75e41e56ed4",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
