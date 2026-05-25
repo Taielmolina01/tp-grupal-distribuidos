@@ -175,7 +175,7 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 			if len(columns) < 11 {
 				return transfer.Transfer{}, -1, fmt.Errorf("invalid line format")
 			}
-			timestamp, err := time.Parse(DATE_LAYOUT_WITH_HOUR, columns[0])
+			timestamp, err := time.Parse(DATE_LAYOUT, columns[0])
 			if err != nil {
 				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing timestamp: %w", err)
 			}
@@ -187,7 +187,7 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 			if err != nil {
 				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing amount paid: %w", err)
 			}
-			clientId, err := strconv.Atoi(columns[12])
+			clientId, err := strconv.Atoi(columns[11])
 			if err != nil {
 				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing client ID: %w", err)
 			}
