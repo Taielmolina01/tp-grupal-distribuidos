@@ -168,7 +168,6 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func
 	} else {
 		filter.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
 		if filter.filterFunction(result.Payload) {
-			slog.Info("filtered msg", "msg", result.Payload)
 			filter.handlerMessages.AddForwardedMessagesAmountByClientId(result.ClientID, 1)
 			payload := filter.outputTransform(result.Payload)
 			msgOutput, err := inner.SerializeData(
