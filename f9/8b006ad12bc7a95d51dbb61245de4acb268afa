@@ -1,0 +1,24 @@
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_35cf4058036fe3::t_d125c1d1e67534 145-147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "f98b006ad12bc7a95d51dbb61245de4acb268afa",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_35cf4058036fe3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5eeb6ebf-d341-4e07-8556-6ede1fe9a6ef",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
