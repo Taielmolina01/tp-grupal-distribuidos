@@ -1,0 +1,34 @@
+src/cmd/gateway/main.go
+  s_181ce8084b84fe::t_60ebb692f28e8b 76-80,82-100
+  s_181ce8084b84fe::t_a2a83c4362199f 5,9
+  s_181ce8084b84fe::t_cc803b3e05ebbb 112
+  s_181ce8084b84fe::t_381014ae2d5017 81
+src/internal/gateway/gateway.go
+  s_181ce8084b84fe::t_db5068bad05e56 34
+  s_181ce8084b84fe::t_3f610ff1e78c70 52
+  s_181ce8084b84fe::t_97447ebc888358 129
+  s_181ce8084b84fe::t_e22793d89f1f3a 374,385,393
+docker-compose.yaml
+  s_181ce8084b84fe::t_8be0da5f25e704 40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "0690ded9c7719840069d40474c5e67e9184f869c",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_181ce8084b84fe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d743d69-e165-46e0-8da5-cb686eff60ae",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
