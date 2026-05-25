@@ -356,7 +356,7 @@ services:
       - MOM_PORT=5672
       - FILTER_AMOUNT=2
       - OUTPUT_AMOUNT=2
-      - OUTPUT_QUEUE_PREFIX=join_accounts_q4
+      - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
       - INPUT_EXCHANGE=transfers_exchange
       - INPUT_QUEUE=transfers_q4_queue
       - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
@@ -382,7 +382,7 @@ services:
       - MOM_PORT=5672
       - FILTER_AMOUNT=2
       - OUTPUT_AMOUNT=2
-      - OUTPUT_QUEUE_PREFIX=join_accounts_q4
+      - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
       - INPUT_EXCHANGE=transfers_exchange
       - INPUT_QUEUE=transfers_q4_queue
       - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
@@ -407,9 +407,8 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - OUTPUT_AMOUNT=1
-      - OUTPUT_QUEUE_PREFIX=join_accounts_result_q4
-      - EXPECTED_EOFS=1
-      - INPUT_QUEUE_PREFIX=join_accounts_q4_
+      - OUTPUT_MIDDLEWARE_PREFIX=join_accounts_q4
+      - INPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
       - QUERY_ID=4
     logging:
       driver: json-file
@@ -430,9 +429,8 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - OUTPUT_AMOUNT=1
-      - OUTPUT_QUEUE_PREFIX=join_accounts_result_q4
-      - EXPECTED_EOFS=1
-      - INPUT_QUEUE_PREFIX=join_accounts_q4_
+      - OUTPUT_MIDDLEWARE_PREFIX=join_accounts_q4
+      - INPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
       - QUERY_ID=4
     logging:
       driver: json-file

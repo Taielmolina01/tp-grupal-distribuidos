@@ -2,7 +2,6 @@ package acumaccounts
 
 import (
 	"fmt"
-	"hash/fnv"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -13,6 +12,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofmessage"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/shard"
 )
 
 type AcumAccountsConfig struct {
@@ -24,8 +24,8 @@ type AcumAccountsConfig struct {
 	MomHost string
 	MomPort int
 
-	ExpectedEOFs          int    //Cantidad de nodos del grupo anterior
-	InputMiddlewarePrefix string //Es el output prefix del nodo anterior
+	ExpectedEOFs          int
+	InputMiddlewarePrefix string
 
 	QueryID int
 
@@ -40,11 +40,11 @@ type clientState struct {
 type AcumAccounts struct {
 	id int
 
-	outputMiddlewareAmount int
+	hasher shard.Hasher
 
-	expectedEOFs int
-	inputQueue   middleware.Middleware
-	outputQueues []middleware.Middleware
+	expectedEOFs      int
+	inputMiddleware   middleware.Middleware
+	outputMiddlewares []middleware.Middleware
 
 	requiredAmt  int
 	mu           sync.Mutex
@@ -52,72 +52,72 @@ type AcumAccounts struct {
 	queryID      int
 }
 
-func declareOutputQueues(config AcumAccountsConfig, connSettings middleware.ConnSettings) ([]middleware.Middleware, error) {
-	outputQueues := make([]middleware.Middleware, 0, config.OutputMiddlewareAmount)
+func declareOutputMiddlewares(config AcumAccountsConfig, connSettings middleware.ConnSettings) ([]middleware.Middleware, error) {
+	outputMiddlewares := make([]middleware.Middleware, 0, config.OutputMiddlewareAmount)
 	for i := range config.OutputMiddlewareAmount {
 		q, err := middleware.CreateQueueMiddleware(fmt.Sprintf("%s_%d", config.OutputMiddlewarePrefix, i), connSettings)
 		if err != nil {
-			for _, opened := range outputQueues {
+			for _, opened := range outputMiddlewares {
 				opened.Close()
 			}
-			return nil, fmt.Errorf("creating output queue %d: %w", i, err)
+			return nil, fmt.Errorf("creating output middleware %d: %w", i, err)
 		}
-		outputQueues = append(outputQueues, q)
+		outputMiddlewares = append(outputMiddlewares, q)
 	}
-	return outputQueues, nil
+	return outputMiddlewares, nil
 }
 
 func NewAcumAccounts(config AcumAccountsConfig) (_ *AcumAccounts, err error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputQueue   middleware.Middleware
-		outputQueues []middleware.Middleware
+		inputMiddleware   middleware.Middleware
+		outputMiddlewares []middleware.Middleware
 	)
 
 	defer func() {
 		if err != nil {
-			for _, q := range outputQueues {
+			for _, q := range outputMiddlewares {
 				q.Close()
 			}
-			if inputQueue != nil {
-				inputQueue.Close()
+			if inputMiddleware != nil {
+				inputMiddleware.Close()
 			}
 		}
 	}()
 
-	inputQueue, err = middleware.CreateQueueMiddleware(
-		config.InputMiddlewarePrefix+strconv.Itoa(config.Id),
+	inputMiddleware, err = middleware.CreateQueueMiddleware(
+		config.InputMiddlewarePrefix+"_"+strconv.Itoa(config.Id),
 		connSettings,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("creating input exchange: %w", err)
+		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputQueues, err = declareOutputQueues(config, connSettings)
+	outputMiddlewares, err = declareOutputMiddlewares(config, connSettings)
 	if err != nil {
-		return nil, fmt.Errorf("declaring output queues: %w", err)
+		return nil, fmt.Errorf("declaring output middlewares: %w", err)
 	}
 
 	return &AcumAccounts{
-		id:                     config.Id,
-		outputMiddlewareAmount: config.OutputMiddlewareAmount,
-		queryID:                config.QueryID,
-		inputQueue:             inputQueue,
-		outputQueues:           outputQueues,
-		expectedEOFs:           config.ExpectedEOFs,
-		clientsState:           map[int]*clientState{},
-		requiredAmt:            config.RequiredAmt,
+		id:                config.Id,
+		hasher:            shard.New(config.OutputMiddlewareAmount),
+		expectedEOFs:      config.ExpectedEOFs,
+		inputMiddleware:   inputMiddleware,
+		outputMiddlewares: outputMiddlewares,
+		queryID:           config.QueryID,
+		clientsState:      map[int]*clientState{},
+		requiredAmt:       config.RequiredAmt,
 	}, nil
 }
 
 func (a *AcumAccounts) Run() {
 	defer a.close()
 
-	if err := a.inputQueue.StartConsuming(func(msg middleware.Message, ack, _ func()) {
+	if err := a.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, _ func()) {
 		a.handleInput(msg, ack)
 	}); err != nil {
-		slog.Error("While consuming from input queue", "err", err)
+		slog.Error("While consuming from input middleware", "err", err)
 	}
 }
 
@@ -127,14 +127,14 @@ func (a *AcumAccounts) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	a.inputQueue.StopConsuming()
+	a.inputMiddleware.StopConsuming()
 }
 
 func (a *AcumAccounts) close() {
-	a.inputQueue.Close()
+	a.inputMiddleware.Close()
 
-	for _, queue := range a.outputQueues {
-		queue.Close()
+	for _, mw := range a.outputMiddlewares {
+		mw.Close()
 	}
 }
 
@@ -179,7 +179,7 @@ func (a *AcumAccounts) handleRecord(clientID int, record account.AccountChain) {
 	}
 
 	for _, o := range output {
-		output_index := a.shardFor(clientID, o.BankID, o.AccountNumber)
+		outputIndex := a.hasher.ShardFor(clientID, o.BankID, o.AccountNumber)
 
 		msg, err := inner.SerializeData(inner.DataMsg[account.AccountIdentifier]{
 			ClientID: clientID,
@@ -191,16 +191,10 @@ func (a *AcumAccounts) handleRecord(clientID int, record account.AccountChain) {
 			slog.Error("While serializing output message", "err", err)
 		}
 
-		if err := a.outputQueues[output_index].Send(*msg); err != nil {
+		if err := a.outputMiddlewares[outputIndex].Send(*msg); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
 	}
-}
-
-func (a *AcumAccounts) shardFor(clientID int, key1, key2 string) int {
-	h := fnv.New32a()
-	fmt.Fprintf(h, "%d\x00%s\x00%s", clientID, key1, key2)
-	return int(h.Sum32() % uint32(a.outputMiddlewareAmount))
 }
 
 func (a *AcumAccounts) handleEOF(data inner.DataMsg[account.AccountChain]) {
@@ -208,7 +202,6 @@ func (a *AcumAccounts) handleEOF(data inner.DataMsg[account.AccountChain]) {
 	defer a.mu.Unlock()
 
 	state := a.stateFor(data.ClientID)
-
 	state.eofAmt++
 
 	if state.eofAmt < a.expectedEOFs {
@@ -220,11 +213,12 @@ func (a *AcumAccounts) handleEOF(data inner.DataMsg[account.AccountChain]) {
 		slog.Error("While serializing EOF message", "err", err)
 	}
 
-	for _, q := range a.outputQueues {
-		if err := q.Send(*msg); err != nil {
+	for _, mw := range a.outputMiddlewares {
+		if err := mw.Send(*msg); err != nil {
 			slog.Error("While sending EOF message", "err", err)
 		}
 	}
+
 	delete(a.clientsState, data.ClientID)
 }
 
