@@ -1,0 +1,48 @@
+src/internal/common/clientstate/backup.go
+  s_48794cf75e1268::t_947868624414cb 1-146
+src/internal/common/clientstate/disk.go
+  s_48794cf75e1268::t_c14f0949a5c0e0 12,14,18-72,74-75,78,80,101,121,125-126,134
+  s_48794cf75e1268::t_96df56ebbb5513 16-17,76-77,81,86,88,93,96,100,102-114,117,122,127-133,135
+  s_48794cf75e1268::t_893c979a5f5b0e 1-11,13,15,73,79,82-85,87,89-92,94-95,97-99,115-116,118-120,123-124,136-137
+src/internal/joinaccounts/joinaccounts.go
+  s_48794cf75e1268::t_a34996c9d23455 28,32-34,39-40,98-99,159,163,171-174,178,181-182,185,190,196,212,216,224-227,231,234-235,238,243,249,276-277
+  s_48794cf75e1268::t_cb38d6b1f92348 11,38,45
+src/internal/common/clientstate/store.go
+  s_48794cf75e1268::t_644f59a0edf0cc 5-8,11-12,15-21,23-24,27,30-31,33,36
+  s_48794cf75e1268::t_d82707157cd5ed 1-4,9-10,13-14,22,25-26,28-29,32,34-35,37-40
+src/internal/common/clientstate/kv.go
+  s_48794cf75e1268::t_6e3f54a315f927 1-23
+src/internal/acumaccounts/acumaccounts.go
+  s_48794cf75e1268::t_c5ce02e6a825c2 41-46,51-53
+  s_48794cf75e1268::t_280669c7bfb3e8 35-40,114,171-172,176-177,179,225
+  s_48794cf75e1268::t_2be72e9cac7628 207-210,226
+  s_48794cf75e1268::t_93024652ee80ec 11,27-28,55-56,61,117
+  s_48794cf75e1268::t_5ad4b92f5d699e 115
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_48794cf75e1268::t_addaaf9ce3d041 91
+  s_48794cf75e1268::t_1ab8131dd57949 11,80,85,92,95,105
+  s_48794cf75e1268::t_b5187670e14e4d 162-165,179
+  s_48794cf75e1268::t_dd66cd223dbf2d 32-34,36,90,141,145,178
+  s_48794cf75e1268::t_8f6c4034698c2e 35,37-41,45-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "bcb150ee473b649a6f6f6477531f57d001b83eae",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_48794cf75e1268": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75162357-3479-4909-ab56-949859a95449",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
