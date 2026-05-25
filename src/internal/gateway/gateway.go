@@ -21,14 +21,16 @@ import (
 )
 
 type GatewayConfig struct {
-	AccountQueues     []string
-	TransfersExchange string
-	ResultsQueue      string
-	ServerHost        string
-	ServerPort        string
-	MomHost           string
-	MomPort           int
-	MaxBatchSize      int
+	AccountQueues        []string
+	TransfersQueues      []string
+	TransfersExchange    string
+	TransfersRoutingKeys []string
+	ResultsQueue         string
+	ServerHost           string
+	ServerPort           string
+	MomHost              string
+	MomPort              int
+	MaxBatchSize         int
 }
 
 type Gateway struct {
@@ -49,10 +51,7 @@ type Gateway struct {
 }
 
 const (
-	TRANSFERS_Q5_KEY    = "TRANSFERS_Q5_KEY"
-	TRANSFERS_Q1234_KEY = "TRANSFERS_Q1234_KEY"
-	ACCOUNTS_KEY        = "ACCOUNTS_KEY"
-	TRANSFER_QUEUE      = "transfers_queue"
+	ACCOUNTS_KEY = "ACCOUNTS_KEY"
 )
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
@@ -70,7 +69,13 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 
 	// Las keys acá vienen x config xq son dinámicas
 	// Se requiere sharding
-	transfersExchange, err := middleware.CreateExchangeMiddleware(config.TransfersExchange, TRANSFER_QUEUE, []string{TRANSFERS_Q1234_KEY}, connSettings)
+
+	transfersExchange, err := middleware.CreateExchangeMiddleware(
+		config.TransfersExchange,
+		"",
+		config.TransfersRoutingKeys,
+		connSettings,
+	)
 	if err != nil {
 		for _, q := range accountQueues {
 			if err := q.Close(); err != nil {
@@ -271,10 +276,7 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 
 	if env.IsEOF() {
 		shouldWrite, shouldClose := gateway.markQueryEOF(env.ClientID, env.QueryID)
-		if !shouldWrite {
-			ack()
-			return
-		}
+
 		if !builder.IsEmpty() {
 			if err := builder.Flush(client.Conn); err != nil {
 				slog.Error("While flushing batch before QueryEOF", "client_id", env.ClientID, "err", err)
@@ -282,6 +284,12 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 				return
 			}
 		}
+
+		if !shouldWrite {
+			ack()
+			return
+		}
+
 		if err := external.WriteQueryEOF(client.Conn, env.QueryID); err != nil {
 			slog.Error("While writing QueryEOF", "client_id", env.ClientID, "query_id", env.QueryID, "err", err)
 			nack()
@@ -351,36 +359,45 @@ func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.DataMsg
 	}
 }
 
-// TODO: subir totalQueries cuando se implementen Q4/Q5.
-const totalQueries = 3
+const totalQueries = 5
 
-// eofsPerQuery: cuántos EOFs manda cada query por cliente al gateway.
-// Depende de cómo emite el último stage de cada pipeline:
-//   - Q1 (filter_amount): isCoordinator pattern → 1 EOF por cliente (solo el coordinator manda).
-//   - Q2 (join sin ring): 2 joins, cada uno manda 1 EOF → 2 EOFs por cliente.
-//   - Q3 (average_filter): isCoordinator pattern → 1 EOF por cliente.
+// eofsPerQuery: cuántos EOFs internos manda cada query al gateway por cliente.
+// Cuando el último stage tiene N instancias sin coordinador, cada una manda 1 EOF → N total.
+// El gateway acumula hasta llegar a N y recién ahí reenvía 1 QueryEOF al cliente.
+//   - Q1 (filter_amount via eofring): el coordinator manda 1 EOF → 1 total.
+//   - Q2 (join_q2 x2, sin ring): 2 joins × 1 EOF → 2 total.
+//   - Q3: 1 (actualizar si se agregan más nodos al último stage).
+//   - Q4 (filteraccountseen x2): 2 instancias × 1 EOF → 2 total.
+//   - Q5: 1 (actualizar si se agregan más nodos al último stage).
 var eofsPerQuery = map[uint8]int{
 	1: 1,
 	2: 2,
 	3: 1,
+	4: 2,
+	5: 1,
 }
 
 // markQueryEOF incrementa el contador y devuelve (shouldWrite, shouldClose):
-//   - shouldWrite: true en el EOF que completa la query (contador alcanza el esperado).
-//   - shouldClose: true cuando todas las queries completaron.
-func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (bool, bool) {
+//   - shouldWrite: true solo cuando se recibe el último EOF esperado para esta query
+//     (es decir, el gateway debe reenviar 1 QueryEOF al cliente).
+//   - shouldClose: true cuando todas las queries completaron para este cliente.
+func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite bool, shouldClose bool) {
 	gateway.countsMu.Lock()
 	defer gateway.countsMu.Unlock()
+
 	if gateway.queryEOFsByClient[clientID] == nil {
 		gateway.queryEOFsByClient[clientID] = map[uint8]int{}
 	}
-	slog.Info("Received QueryEOF", "client_id", clientID, "query_id", queryID, "current_count", gateway.queryEOFsByClient[clientID][queryID]+1)
 	gateway.queryEOFsByClient[clientID][queryID]++
+	count := gateway.queryEOFsByClient[clientID][queryID]
 	expected := eofsPerQuery[queryID]
 	if expected == 0 {
 		expected = 1
 	}
-	shouldWrite := gateway.queryEOFsByClient[clientID][queryID] == expected
+	slog.Info("Received QueryEOF", "client_id", clientID, "query_id", queryID,
+		"count", count, "expected", expected)
+
+	shouldWrite = count == expected
 
 	completed := 0
 	for q, c := range gateway.queryEOFsByClient[clientID] {
@@ -392,7 +409,7 @@ func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (bool, bool) {
 			completed++
 		}
 	}
-	shouldClose := completed >= totalQueries
+	shouldClose = completed >= totalQueries
 	return shouldWrite, shouldClose
 }
 
@@ -446,7 +463,6 @@ func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
 }
 
 func (gateway *Gateway) forwardEOF(client clientregistry.ClientState, kind string, total uint32, exchange middleware.Middleware) error {
-	slog.Info("Received EOF message", "kind", kind, "client_id", client.ID, "total", total)
 	msg, err := inner.SerializeData(inner.DataMsg[any]{
 		ClientID: client.ID,
 		EOF:      &inner.EOFInfo{Kind: kind, TotalMessages: total},
@@ -501,8 +517,6 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) er
 			len(gateway.accountQueues),
 		)
 
-		slog.Info("Sending account to accounts exchange", "client_id", client.ID, "bank_id", acc.BankId, "shard_idx", idx)
-
 		if err := gateway.accountQueues[idx].Send(*msg); err != nil {
 			slog.Debug("While sending account to accounts exchange", "err", err)
 			return err
@@ -540,5 +554,9 @@ func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState) e
 
 func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState) error {
 	total := gateway.takeCount(gateway.transfersCount, client.ID)
-	return gateway.forwardEOF(client, "transfers", total, gateway.transfersExchange)
+	slog.Info("eof transfers", "total", total)
+	if err := gateway.forwardEOF(client, "transfers", total, gateway.transfersExchange); err != nil {
+		return err
+	}
+	return nil
 }

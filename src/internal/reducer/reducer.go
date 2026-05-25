@@ -4,8 +4,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strconv"
-	"sync"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
@@ -17,41 +15,11 @@ import (
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-type ReducerConfig struct {
-	Id                int
-	ReducerAmount     int
-	MomHost           string
-	MomPort           int
-	InputExchange     string
-	QueryId           uint8
-	InputQueue        string
-	OutputQueues      []string
-	InputRoutingKeys  []string
-	InputEofsExpected int
-	JoinsAmount       int
-}
-
-type Reducer[T comparable] struct {
-	id                int
-	inputExchange     middleware.Middleware
-	outputQueues      []middleware.Middleware
-	actualValues      map[int]map[string]T
-	callback          func(T, T) T
-	keyFunc           func(T) string
-	eofHandler        eofring.EofRingAlgorithm
-	handlerMessages   msgmonitor.MessageMonitor
-	outputQueueEof    middleware.Middleware
-	queryId           uint8
-	inputEofsExpected int
-	inputEofCount     map[int]int
-	totalRealAmount   map[int]uint32
-	lock              sync.Mutex
-	joinsAmount       int
-}
+const eofRingQueuePrefix = "REDUCE"
 
 func newReducer[T comparable](
 	config ReducerConfig,
-	callback func(T, T) T,
+	reducerFunction func(T, T) T,
 	keyFunc func(T) string,
 	queryId uint8,
 ) (worker.Worker, error) {
@@ -66,46 +34,68 @@ func newReducer[T comparable](
 	for _, outputQueue := range config.OutputQueues {
 		m, err := middleware.CreateQueueMiddleware(outputQueue, connSettings)
 		if err != nil {
+			if err := inputExchange.Close(); err != nil {
+				slog.Error("While closing input exchange", "err", err)
+			}
 			return nil, err
 		}
 		outputQueues = append(outputQueues, m)
 	}
 
-	next := config.Id + 1
-	if config.Id == config.ReducerAmount-1 {
-		next = 0
-	}
-
-	eofInput, err := middleware.CreateQueueMiddleware(
-		"REDUCE_"+strconv.Itoa(config.Id),
-		connSettings,
+	eofInputName, eofOutputName := eofring.GetInputAndOutputQueueNames(
+		config.Id,
+		config.ReducerAmount,
+		eofRingQueuePrefix,
+		eofRingQueuePrefix,
 	)
 
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		"REDUCE_"+strconv.Itoa(next),
+	eofInput, err := middleware.CreateQueueMiddleware(
+		eofInputName,
 		connSettings,
 	)
 
 	if err != nil {
-		eofInput.Close()
+		for _, outputQueue := range outputQueues {
+			if err := outputQueue.Close(); err != nil {
+				slog.Error("While closing output queue", "err", err)
+			}
+		}
+		if err := inputExchange.Close(); err != nil {
+			slog.Error("While closing input exchange", "err", err)
+		}
+		return nil, err
+	}
+
+	eofOutput, err := middleware.CreateQueueMiddleware(
+		eofOutputName,
+		connSettings,
+	)
+
+	if err != nil {
+		for _, outputQueue := range outputQueues {
+			if err := outputQueue.Close(); err != nil {
+				slog.Error("While closing output queue", "err", err)
+			}
+		}
+		if err := inputExchange.Close(); err != nil {
+			slog.Error("While closing input exchange", "err", err)
+		}
+		if err := eofInput.Close(); err != nil {
+			slog.Error("While closing EOF input queue", "err", err)
+		}
 		return nil, err
 	}
 
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
-	expectedEofs := config.InputEofsExpected
-	if expectedEofs <= 0 {
-		expectedEofs = 1
-	}
-
 	reducer := &Reducer[T]{
 		id:                config.Id,
 		inputExchange:     inputExchange,
 		outputQueues:      outputQueues,
-		actualValues:      map[int]map[string]T{},
-		callback:          callback,
+		reducerMonitor:    NewReducerMonitor[T](handlerMessages),
+		reducerFunction:   reducerFunction,
 		keyFunc:           keyFunc,
-		inputEofsExpected: expectedEofs,
+		inputEofsExpected: config.InputEofsExpected,
 		inputEofCount:     map[int]int{},
 		totalRealAmount:   map[int]uint32{},
 	}
@@ -117,11 +107,7 @@ func newReducer[T comparable](
 		uint32(config.Id),
 		handlerMessages,
 		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
-			reducer.lock.Lock()
-			values := reducer.actualValues[clientID]
-			delete(reducer.actualValues, clientID)
-			reducer.lock.Unlock()
-
+			values := reducer.reducerMonitor.GetValuesCopyByClientIdAndDelete(clientID)
 			for _, v := range values {
 				msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
 					Payload:  v,
@@ -188,7 +174,7 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 			ActualAmount:   reducer.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
 			ClientId:       result.ClientID,
 			CoordinatorId:  uint32(reducer.id),
-			FilteredAmount: reducer.handlerMessages.GetFilteredMessagesAmountByClientId(result.ClientID),
+			FilteredAmount: reducer.handlerMessages.GetForwardedMessagesAmountByClientId(result.ClientID),
 		}
 		delete(reducer.inputEofCount, result.ClientID)
 		delete(reducer.totalRealAmount, result.ClientID)
@@ -208,19 +194,13 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 		// slog.Info("EOF message sent to EOF ring", "reducer_id", reducer.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
 	} else {
 		key := reducer.keyFunc(result.Payload)
-		reducer.lock.Lock()
-		if reducer.actualValues[result.ClientID] == nil {
-			reducer.actualValues[result.ClientID] = map[string]T{}
-		}
-		existing, ok := reducer.actualValues[result.ClientID][key]
-		if !ok {
-			reducer.actualValues[result.ClientID][key] = result.Payload
-			reducer.handlerMessages.AddFilteredMessagesAmountByClientId(result.ClientID, 1)
-		} else {
-			reducer.actualValues[result.ClientID][key] = reducer.callback(existing, result.Payload)
-		}
-		reducer.lock.Unlock()
-		reducer.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
+
+		reducer.reducerMonitor.AddValue(
+			result.ClientID,
+			key,
+			result.Payload,
+			reducer.reducerFunction,
+		)
 	}
 
 }

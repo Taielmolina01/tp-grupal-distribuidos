@@ -34,3 +34,4 @@ go.work.sum
 datasets/*
 output/*
 input/*
+pruebas/*

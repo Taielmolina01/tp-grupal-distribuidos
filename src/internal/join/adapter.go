@@ -50,7 +50,7 @@ func newTwoInputJoin[L, R, O any](
 		return nil, err
 	}
 
-	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, config.OutputQueue, config.OutputRoutingKeys, connSettings)
+	output, err := middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
 	if err != nil {
 		if err := leftInput.Close(); err != nil {
 			slog.Error("while closing left input", "err", err)
@@ -64,7 +64,7 @@ func newTwoInputJoin[L, R, O any](
 	slog.Info("join started",
 		"left_queue", config.LeftInputQueue,
 		"right_queue", config.RightInputQueue,
-		"output_exchange", config.OutputExchange, "output_keys", config.OutputRoutingKeys,
+		"output_queue", config.OutputQueue,
 	)
 
 	leftEofs := config.LeftEofsExpected
@@ -107,9 +107,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 			if data.IsEOF() {
 				a.lock.Lock()
 				a.leftEofCount[data.ClientID]++
-				count := a.leftEofCount[data.ClientID]
 				a.lock.Unlock()
-				slog.Info("join got LEFT EOF", "join_id", a.id, "client_id", data.ClientID, "left_count", count, "left_expected", a.leftEofsExpected)
 				a.handleEOF(data.ClientID)
 				return
 			}
@@ -130,9 +128,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 		if data.IsEOF() {
 			a.lock.Lock()
 			a.rightEofCount[data.ClientID]++
-			count := a.rightEofCount[data.ClientID]
 			a.lock.Unlock()
-			slog.Info("join got RIGHT EOF", "join_id", a.id, "client_id", data.ClientID, "right_count", count, "right_expected", a.rightEofsExpected)
 			a.handleEOF(data.ClientID)
 			return
 		}
@@ -159,7 +155,6 @@ func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
 	delete(a.rightEofCount, clientID)
 	a.lock.Unlock()
 
-	slog.Info("join finishing", "join_id", a.id, "client_id", clientID)
 	a.join.HandleQueryEOF(clientID)
 
 	msgOut, err := inner.SerializeData(inner.DataMsg[any]{
@@ -174,7 +169,6 @@ func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
 	if err := a.output.Send(*msgOut); err != nil {
 		slog.Error("while sending join EOF downstream", "err", err)
 	}
-	slog.Info("join sent EOF downstream", "join_id", a.id, "client_id", clientID)
 }
 
 type SingleInputAdapter[T, O any] struct {
@@ -192,12 +186,12 @@ func newSingleInputJoin[T, O any](
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	input, err := middleware.CreateExchangeMiddleware(config.InputExchange, config.InputQueue, config.InputRoutingKeys, connSettings)
+	input, err := middleware.CreateQueueMiddleware(config.LeftInputQueue, connSettings)
 	if err != nil {
 		return nil, err
 	}
 
-	output, err := middleware.CreateExchangeMiddleware(config.OutputExchange, config.OutputQueue, config.OutputRoutingKeys, connSettings)
+	output, err := middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
 	if err != nil {
 		if err := input.Close(); err != nil {
 			slog.Error("while closing input", "err", err)
@@ -238,7 +232,6 @@ func (a *SingleInputAdapter[T, O]) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
-	slog.Info("SIGTERM signal received")
 	if err := a.input.StopConsuming(); err != nil {
 		slog.Error("while stopping input", "err", err)
 	}
@@ -254,7 +247,6 @@ func (a *TwoInputAdapter[L, R, O]) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
-	slog.Info("SIGTERM signal received")
 	if err := a.leftInput.StopConsuming(); err != nil {
 		slog.Error("while stopping left input", "err", err)
 	}

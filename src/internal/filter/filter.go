@@ -1,8 +1,11 @@
 package filter
 
 import (
+	"fmt"
 	"log/slog"
-	"strconv"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
@@ -12,16 +15,15 @@ import (
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
+const eofRingQueueNamePrefix = "FILTER_%s_"
+
 func newFilter[T comparable, O comparable](
 	config FilterConfig,
-	callback func(T) bool,
+	filterFunction func(T) bool,
 	inputToOutput func(T) O,
-	queryId uint8,
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	// Named shared queue bound to the transfers exchange with the Q1234 routing key.
-	// Multiple filter instances using this same queue compete for messages (BBB buffer).
 	inputExchange, err := middleware.CreateExchangeMiddleware(
 		config.InputExchange,
 		config.InputQueue,
@@ -32,32 +34,65 @@ func newFilter[T comparable, O comparable](
 		return nil, err
 	}
 
-	outputExchange, err := middleware.CreateExchangeMiddleware(config.OutputExchange, config.OutputQueue, config.OutputRoutingKeys, connSettings)
+	slog.Info("Initializing filter",
+		"config.OutputExchange",
+		config.OutputExchange,
+		"config.OutputQueue",
+		config.OutputQueue,
+		"config.outputroutingkeys",
+		config.OutputRoutingKeys,
+	)
+
+	outputExchange, err := middleware.CreateExchangeMiddleware(
+		config.OutputExchange,
+		config.OutputQueue,
+		config.OutputRoutingKeys,
+		connSettings,
+	)
 	if err != nil {
 		if err := inputExchange.Close(); err != nil {
-			slog.Error("while closing input exchange", "err", err)
+			slog.Error("While closing input exchange after output exchange creation failure", "err", err)
 		}
 		return nil, err
 	}
 
-	next := config.Id + 1
-
-	if config.Id == config.FilterAmount-1 {
-		next = 0
-	}
-
-	eofInput, err := middleware.CreateQueueMiddleware(
-		"FILTER_"+string(config.Type)+"_"+strconv.Itoa(config.Id),
-		connSettings,
+	eofInputQueueName, eofOutputQueueName := eofring.GetInputAndOutputQueueNames(
+		config.Id,
+		config.FilterAmount,
+		fmt.Sprintf(eofRingQueueNamePrefix, config.Type),
+		fmt.Sprintf(eofRingQueueNamePrefix, config.Type),
 	)
 
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		"FILTER_"+string(config.Type)+"_"+strconv.Itoa(next),
+	eofInput, err := middleware.CreateQueueMiddleware(
+		eofInputQueueName,
 		connSettings,
 	)
 
 	if err != nil {
-		eofInput.Close()
+		if err := inputExchange.Close(); err != nil {
+			slog.Error("While closing input exchange after EOF input queue creation failure", "err", err)
+		}
+		if err := outputExchange.Close(); err != nil {
+			slog.Error("While closing output exchange after EOF input queue creation failure", "err", err)
+		}
+		return nil, err
+	}
+
+	eofOutput, err := middleware.CreateQueueMiddleware(
+		eofOutputQueueName,
+		connSettings,
+	)
+
+	if err != nil {
+		if err := inputExchange.Close(); err != nil {
+			slog.Error("While closing input exchange after EOF input queue creation failure", "err", err)
+		}
+		if err := outputExchange.Close(); err != nil {
+			slog.Error("While closing output exchange after EOF input queue creation failure", "err", err)
+		}
+		if err := eofInput.Close(); err != nil {
+			slog.Error("While closing EOF input queue after EOF output queue creation failure", "err", err)
+		}
 		return nil, err
 	}
 
@@ -67,7 +102,7 @@ func newFilter[T comparable, O comparable](
 		id:             uint32(config.Id),
 		inputExchange:  inputExchange,
 		outputExchange: outputExchange,
-		callback:       callback,
+		filterFunction: filterFunction,
 		eofHandler: eofring.CreateEofRingAlgorithm(
 			eofInput,
 			eofOutput,
@@ -80,13 +115,13 @@ func newFilter[T comparable, O comparable](
 				}
 				return nil
 			},
-			queryId,
+			config.QueryId,
 		),
 		handlerMessages: handlerMessages,
 		outputQueueEof:  eofOutput,
 		filterType:      config.Type,
 		outputTransform: inputToOutput,
-		queryId:         queryId,
+		queryId:         config.QueryId,
 	}, nil
 }
 
@@ -110,12 +145,13 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func
 	}
 
 	if result.IsEOF() {
+		slog.Info("RECEIVED EOF", "real_amount", result.EOF.TotalMessages)
 		eofRingMessage := eofmessagetypes.EofRingMessage{
 			RealAmount:     result.EOF.TotalMessages,
 			ActualAmount:   filter.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
 			ClientId:       result.ClientID,
 			CoordinatorId:  uint32(filter.id),
-			FilteredAmount: filter.handlerMessages.GetFilteredMessagesAmountByClientId(result.ClientID),
+			FilteredAmount: filter.handlerMessages.GetForwardedMessagesAmountByClientId(result.ClientID),
 		}
 		serializedEofRingMessage, err := inner.SerializeEofFromQueueMsg(eofRingMessage)
 		if err != nil {
@@ -131,10 +167,9 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func
 		slog.Info("Total messages processed by filter", "filter_id", filter.id, "client_id", filter.id, "processed_messages", filter.handlerMessages.GetProcessedMessagesAmountByClientId(int(filter.id)))
 	} else {
 		filter.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
-
-		slog.Info("Message processed by filter", "filter_id", filter.id, "client_id", result.ClientID, "processed_messages", filter.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID))
-		if filter.callback(result.Payload) {
-			filter.handlerMessages.AddFilteredMessagesAmountByClientId(result.ClientID, 1)
+		if filter.filterFunction(result.Payload) {
+			slog.Info("filtered msg", "msg", result.Payload)
+			filter.handlerMessages.AddForwardedMessagesAmountByClientId(result.ClientID, 1)
 			payload := filter.outputTransform(result.Payload)
 			msgOutput, err := inner.SerializeData(
 				inner.DataMsg[O]{
@@ -146,17 +181,48 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func
 				slog.Error("While serializing output message", "err", err)
 				return
 			}
-			filter.outputExchange.Send(*msgOutput)
+			if err := filter.outputExchange.Send(*msgOutput); err != nil {
+				slog.Error("While sending message to output exchange", "err", err)
+			}
 		}
 	}
 }
 
 func (filter *Filter[T, O]) HandleSignals() {
-
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	<-signals
+	slog.Info("SIGTERM signal received")
+	if err := filter.close(); err != nil {
+		slog.Error("While closing filter node", "err", err)
+	}
 }
 
-func (filter *Filter[T, O]) Close() {
+func (filter *Filter[T, O]) close() error {
 
+	if err := filter.inputExchange.StopConsuming(); err != nil {
+		slog.Error("while stop consuming from input exchange", "err", err)
+		return err
+	}
+
+	if err := filter.inputExchange.Close(); err != nil {
+		slog.Error("while closing input exchange", "err", err)
+		return err
+	}
+
+	if err := filter.eofHandler.Close(); err != nil {
+		slog.Error("while closing EOF handler", "err", err)
+		return err
+	}
+
+	// no estoy seguro si aca deberia closear siendo que no es ni mi exchange ni mi queue
+	if err := filter.outputExchange.Close(); err != nil {
+		slog.Error("while closing output exchange", "err", err)
+		return err
+	}
+	if err := filter.outputQueueEof.Close(); err != nil {
+		slog.Error("while closing EOF output queue", "err", err)
+		return err
+	}
+	return nil
 }
-
-// Handler para la working queue que comparten las distintas intancias de sum.
