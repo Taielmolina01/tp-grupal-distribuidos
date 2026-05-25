@@ -12,6 +12,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofmessage"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/shard"
 )
 
@@ -42,9 +43,9 @@ type AcumAccounts struct {
 
 	hasher shard.Hasher
 
-	expectedEOFs      int
-	inputMiddleware   middleware.Middleware
-	outputMiddlewares []middleware.Middleware
+	expectedEOFs     int
+	inputMiddleware  newmiddleware.Middleware
+	outputMiddleware newmiddleware.Middleware
 
 	requiredAmt  int
 	mu           sync.Mutex
@@ -52,33 +53,18 @@ type AcumAccounts struct {
 	queryID      int
 }
 
-func declareOutputMiddlewares(config AcumAccountsConfig, connSettings middleware.ConnSettings) ([]middleware.Middleware, error) {
-	outputMiddlewares := make([]middleware.Middleware, 0, config.OutputMiddlewareAmount)
-	for i := range config.OutputMiddlewareAmount {
-		q, err := middleware.CreateQueueMiddleware(fmt.Sprintf("%s_%d", config.OutputMiddlewarePrefix, i), connSettings)
-		if err != nil {
-			for _, opened := range outputMiddlewares {
-				opened.Close()
-			}
-			return nil, fmt.Errorf("creating output middleware %d: %w", i, err)
-		}
-		outputMiddlewares = append(outputMiddlewares, q)
-	}
-	return outputMiddlewares, nil
-}
-
 func NewAcumAccounts(config AcumAccountsConfig) (_ *AcumAccounts, err error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware   middleware.Middleware
-		outputMiddlewares []middleware.Middleware
+		inputMiddleware  newmiddleware.Middleware
+		outputMiddleware newmiddleware.Middleware
 	)
 
 	defer func() {
 		if err != nil {
-			for _, q := range outputMiddlewares {
-				q.Close()
+			if outputMiddleware != nil {
+				outputMiddleware.Close()
 			}
 			if inputMiddleware != nil {
 				inputMiddleware.Close()
@@ -86,35 +72,35 @@ func NewAcumAccounts(config AcumAccountsConfig) (_ *AcumAccounts, err error) {
 		}
 	}()
 
-	inputMiddleware, err = middleware.CreateQueueMiddleware(
-		config.InputMiddlewarePrefix+"_"+strconv.Itoa(config.Id),
-		connSettings,
-	)
+	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	shardKey := fmt.Sprintf("shard-%d", config.Id)
+
+	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddlewares, err = declareOutputMiddlewares(config, connSettings)
+	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
 	if err != nil {
-		return nil, fmt.Errorf("declaring output middlewares: %w", err)
+		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
 	return &AcumAccounts{
-		id:                config.Id,
-		hasher:            shard.New(config.OutputMiddlewareAmount),
-		expectedEOFs:      config.ExpectedEOFs,
-		inputMiddleware:   inputMiddleware,
-		outputMiddlewares: outputMiddlewares,
-		queryID:           config.QueryID,
-		clientsState:      map[int]*clientState{},
-		requiredAmt:       config.RequiredAmt,
+		id:               config.Id,
+		hasher:           shard.New(config.OutputMiddlewareAmount),
+		expectedEOFs:     config.ExpectedEOFs,
+		inputMiddleware:  inputMiddleware,
+		outputMiddleware: outputMiddleware,
+		queryID:          config.QueryID,
+		clientsState:     map[int]*clientState{},
+		requiredAmt:      config.RequiredAmt,
 	}, nil
 }
 
 func (a *AcumAccounts) Run() {
 	defer a.close()
 
-	if err := a.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, _ func()) {
+	if err := a.inputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
 		a.handleInput(msg, ack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
@@ -132,15 +118,12 @@ func (a *AcumAccounts) HandleSignals() {
 
 func (a *AcumAccounts) close() {
 	a.inputMiddleware.Close()
-
-	for _, mw := range a.outputMiddlewares {
-		mw.Close()
-	}
+	a.outputMiddleware.Close()
 }
 
-func (a *AcumAccounts) handleInput(msg middleware.Message, ack func()) {
+func (a *AcumAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[account.AccountChain](&msg)
+	m, err := inner.DeserializeData[account.AccountChain](&middleware.Message{Body: msg.Body})
 
 	if err != nil {
 		slog.Error("While deserializing pipeline message", "err", err)
@@ -179,9 +162,7 @@ func (a *AcumAccounts) handleRecord(clientID int, record account.AccountChain) {
 	}
 
 	for _, o := range output {
-		outputIndex := a.hasher.ShardFor(clientID, o.BankID, o.AccountNumber)
-
-		msg, err := inner.SerializeData(inner.DataMsg[account.AccountIdentifier]{
+		serialized, err := inner.SerializeData(inner.DataMsg[account.AccountIdentifier]{
 			ClientID: clientID,
 			QueryID:  uint8(a.queryID),
 			Payload:  o,
@@ -189,9 +170,11 @@ func (a *AcumAccounts) handleRecord(clientID int, record account.AccountChain) {
 
 		if err != nil {
 			slog.Error("While serializing output message", "err", err)
+			continue
 		}
 
-		if err := a.outputMiddlewares[outputIndex].Send(*msg); err != nil {
+		routingKey := fmt.Sprintf("shard-%d", a.hasher.ShardFor(clientID, o.BankID, o.AccountNumber))
+		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: serialized.Body, RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
 	}
@@ -208,15 +191,14 @@ func (a *AcumAccounts) handleEOF(data inner.DataMsg[account.AccountChain]) {
 		return
 	}
 
-	msg, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(a.queryID)})
+	serialized, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(a.queryID)})
 	if err != nil {
 		slog.Error("While serializing EOF message", "err", err)
+		return
 	}
 
-	for _, mw := range a.outputMiddlewares {
-		if err := mw.Send(*msg); err != nil {
-			slog.Error("While sending EOF message", "err", err)
-		}
+	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: serialized.Body, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
+		slog.Error("While sending EOF message", "err", err)
 	}
 
 	delete(a.clientsState, data.ClientID)
