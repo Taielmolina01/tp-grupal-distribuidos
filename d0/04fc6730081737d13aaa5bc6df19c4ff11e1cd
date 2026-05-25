@@ -1,0 +1,22 @@
+src/internal/common/messageprotocol/external/external.go
+  h_3c9b41718876fe 398,435
+src/internal/client/client.go
+  h_3c9b41718876fe 320
+src/internal/join/constructors.go
+  h_3c9b41718876fe 22
+src/internal/common/queryresult/queryresult.go
+  h_3c9b41718876fe 28
+src/internal/gateway/gateway.go
+  h_3c9b41718876fe 274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "d004fc6730081737d13aaa5bc6df19c4ff11e1cd",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
