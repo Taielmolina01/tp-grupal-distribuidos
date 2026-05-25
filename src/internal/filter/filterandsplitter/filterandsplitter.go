@@ -45,11 +45,11 @@ type FilterAndSplitter struct {
 
 	hasher shard.Hasher
 
-	inputMiddleware middleware.Middleware
+	inputMiddleware  middleware.Middleware
 	outputMiddleware newmiddleware.Middleware
-	eofInput        middleware.Middleware
-	eofOutput       middleware.Middleware
-	eofHandler      eofring.EofRingAlgorithm
+	eofInput         middleware.Middleware
+	eofOutput        middleware.Middleware
+	eofHandler       eofring.EofRingAlgorithm
 
 	handlerMessages msgmonitor.MessageMonitor
 
@@ -225,7 +225,7 @@ func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer)
 			acc = o.Transfer.ToBankAccount
 		}
 
-		serialized, err := inner.SerializeData(inner.DataMsg[transfer.SplittedTransfer]{
+		msg, err := inner.SerializeData(inner.DataMsg[transfer.SplittedTransfer]{
 			ClientID: clientID,
 			QueryID:  uint8(f.queryID),
 			Payload:  o,
@@ -239,7 +239,7 @@ func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer)
 		routingKey := fmt.Sprintf("shard-%d", f.hasher.ShardFor(clientID, bank, acc))
 
 		f.handlerMessages.AddForwardedMessagesAmountByClientId(clientID, 1)
-		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: serialized.Body, RoutingKey: routingKey}); err != nil {
+		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
 	}

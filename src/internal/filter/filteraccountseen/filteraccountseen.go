@@ -145,7 +145,7 @@ func (f *FilterAccountSeen) handleRecord(clientID int, record account.AccountIde
 
 	state.seenAccounts[record.GetKey()] = true
 
-	serialized, err := inner.SerializeData(inner.DataMsg[queryresult.Query4Result]{
+	msg, err := inner.SerializeData(inner.DataMsg[queryresult.Query4Result]{
 		ClientID: clientID,
 		QueryID:  uint8(f.queryID),
 		Payload:  queryresult.Query4Result{BankId: record.BankID, AccountNumber: record.AccountNumber},
@@ -156,7 +156,7 @@ func (f *FilterAccountSeen) handleRecord(clientID int, record account.AccountIde
 		return
 	}
 
-	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: serialized.Body}); err != nil {
+	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body}); err != nil {
 		slog.Error("While sending output message", "err", err)
 	}
 }
@@ -172,13 +172,13 @@ func (f *FilterAccountSeen) handleEOF(data inner.DataMsg[account.AccountIdentifi
 		return
 	}
 
-	serialized, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(f.queryID)})
+	msg, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(f.queryID)})
 	if err != nil {
 		slog.Error("While serializing EOF message", "err", err)
 		return
 	}
 
-	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: serialized.Body}); err != nil {
+	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 

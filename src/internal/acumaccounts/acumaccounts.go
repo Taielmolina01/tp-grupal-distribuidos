@@ -162,7 +162,7 @@ func (a *AcumAccounts) handleRecord(clientID int, record account.AccountChain) {
 	}
 
 	for _, o := range output {
-		serialized, err := inner.SerializeData(inner.DataMsg[account.AccountIdentifier]{
+		msg, err := inner.SerializeData(inner.DataMsg[account.AccountIdentifier]{
 			ClientID: clientID,
 			QueryID:  uint8(a.queryID),
 			Payload:  o,
@@ -174,7 +174,7 @@ func (a *AcumAccounts) handleRecord(clientID int, record account.AccountChain) {
 		}
 
 		routingKey := fmt.Sprintf("shard-%d", a.hasher.ShardFor(clientID, o.BankID, o.AccountNumber))
-		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: serialized.Body, RoutingKey: routingKey}); err != nil {
+		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
 	}
@@ -191,13 +191,13 @@ func (a *AcumAccounts) handleEOF(data inner.DataMsg[account.AccountChain]) {
 		return
 	}
 
-	serialized, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(a.queryID)})
+	msg, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(a.queryID)})
 	if err != nil {
 		slog.Error("While serializing EOF message", "err", err)
 		return
 	}
 
-	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: serialized.Body, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
+	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 

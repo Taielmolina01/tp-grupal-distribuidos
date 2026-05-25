@@ -178,7 +178,7 @@ func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.Splitt
 	}
 
 	for _, v := range accMapRight {
-		serialized, err := inner.SerializeData(inner.DataMsg[account.AccountChain]{
+		msg, err := inner.SerializeData(inner.DataMsg[account.AccountChain]{
 			ClientID: clientID,
 			QueryID:  uint8(j.queryID),
 			Payload: account.AccountChain{
@@ -194,7 +194,7 @@ func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.Splitt
 		}
 
 		routingKey := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, v.Left.GetKey(), rightIdentifierKey))
-		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: serialized.Body, RoutingKey: routingKey}); err != nil {
+		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
 	}
@@ -239,7 +239,7 @@ func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.Split
 	}
 
 	for _, v := range accMapRight {
-		serialized, err := inner.SerializeData(inner.DataMsg[account.AccountChain]{
+		msg, err := inner.SerializeData(inner.DataMsg[account.AccountChain]{
 			ClientID: clientID,
 			QueryID:  uint8(j.queryID),
 			Payload: account.AccountChain{
@@ -255,7 +255,7 @@ func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.Split
 		}
 
 		routingKey := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, leftIdentifierKey, v.Right.GetKey()))
-		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: serialized.Body, RoutingKey: routingKey}); err != nil {
+		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output message", "err", err)
 		}
 	}
@@ -265,13 +265,13 @@ func (j *JoinAccounts) handleEOF(data inner.DataMsg[transfer.SplittedTransfer]) 
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
-	serialized, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(j.queryID)})
+	msg, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(j.queryID)})
 	if err != nil {
 		slog.Error("While serializing EOF message", "err", err)
 		return
 	}
 
-	if err := j.outputMiddleware.Send(newmiddleware.Message{Body: serialized.Body, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
+	if err := j.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 
