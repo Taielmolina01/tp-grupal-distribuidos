@@ -49,6 +49,8 @@ type FilterConfig struct {
 	OutputQueues          []string
 	QueryId               uint8
 	PaymentFormats        []string
+	AvgInputQueue         string
+	AvgExpectedEofs       int
 }
 
 type Filter[T comparable, O comparable] struct {
@@ -126,4 +128,8 @@ type ConvertedAmountFilter[T, S comparable] struct {
 	conversionsByDay   map[string]map[string]float32
 	toSaveFunc         func(T, int) string
 	fromSaveFunc       func(string) (T, int, error)
+	eofRing            eofring.EofRingAlgorithm
+	eofOutputQueue     middleware.Middleware
+	handlerMessages    msgmonitor.MessageMonitor
+	id                 uint32
 }

@@ -26,7 +26,6 @@ type SumConfig struct {
 	InputEofsExpected int
 }
 
-
 type SumByPaymentFormat struct {
 	id              int
 	inputQueue      middleware.Middleware
@@ -160,7 +159,7 @@ func (s *SumByPaymentFormat) handleMessage(msg middleware.Message, ack, nack fun
 			ActualAmount:   s.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
 			ClientId:       result.ClientID,
 			CoordinatorId:  uint32(s.id),
-			FilteredAmount: s.handlerMessages.GetFilteredMessagesAmountByClientId(result.ClientID),
+			FilteredAmount: s.handlerMessages.GetForwardedMessagesAmountByClientId(result.ClientID),
 		}
 		serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
 		if err != nil {
@@ -188,7 +187,7 @@ func (s *SumByPaymentFormat) handleMessage(msg middleware.Message, ack, nack fun
 			Amount: 1,
 			Method: method,
 		}
-		s.handlerMessages.AddFilteredMessagesAmountByClientId(result.ClientID, 1)
+		s.handlerMessages.AddForwardedMessagesAmountByClientId(result.ClientID, 1)
 	} else {
 		s.acumuladores[result.ClientID][method] = transfer.SumByMethod{
 			Sum:    existing.Sum + t.AmountPaid,

@@ -263,7 +263,7 @@ func (af *AverageFilter) processTransferLocked(clientID int, t transfer.Transfer
 		slog.Error("While sending Query3Result to output queue", "err", err)
 		return
 	}
-	af.transfersMonitor.AddFilteredMessagesAmountByClientId(clientID, 1)
+	af.transfersMonitor.AddForwardedMessagesAmountByClientId(clientID, 1)
 }
 
 // fireTransfersRingLocked debe llamarse con af.lock tomado.
@@ -273,7 +273,7 @@ func (af *AverageFilter) fireTransfersRingLocked(clientID int, realAmount uint32
 		ActualAmount:   af.transfersMonitor.GetProcessedMessagesAmountByClientId(clientID),
 		ClientId:       clientID,
 		CoordinatorId:  uint32(af.id),
-		FilteredAmount: af.transfersMonitor.GetFilteredMessagesAmountByClientId(clientID),
+		FilteredAmount: af.transfersMonitor.GetForwardedMessagesAmountByClientId(clientID),
 	}
 	serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
 	if err != nil {
