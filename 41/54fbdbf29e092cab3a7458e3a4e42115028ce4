@@ -1,0 +1,14 @@
+src/internal/filter/convertedamountfilter.go
+  h_3c9b41718876fe 174-175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "4154fbdbf29e092cab3a7458e3a4e42115028ce4",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
