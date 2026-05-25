@@ -49,13 +49,8 @@ type Gateway struct {
 	buildersMu        sync.Mutex
 	resultBuilders    map[int]*external.ResultBatchBuilder
 	maxBatchSize      int
-	maxBatchBytes     int
 	queryEOFsExpected map[uint8]int
 }
-
-const (
-	ACCOUNTS_KEY = "ACCOUNTS_KEY"
-)
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
@@ -265,7 +260,7 @@ func (gateway *Gateway) getOrCreateBuilder(clientID int) *external.ResultBatchBu
 	if b, ok := gateway.resultBuilders[clientID]; ok {
 		return b
 	}
-	b := external.NewResultBatchBuilder(gateway.maxBatchSize, gateway.maxBatchBytes)
+	b := external.NewResultBatchBuilder(gateway.maxBatchSize)
 	gateway.resultBuilders[clientID] = b
 	return b
 }

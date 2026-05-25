@@ -58,12 +58,11 @@ func NewTransBatchBuilder(maxCount int) *BatchBuilder[transfer.Transfer] {
 type ResultBatchBuilder struct {
 	batch    queryresult.BatchResults
 	byteSize int
-	maxBytes int
 	maxCount int
 }
 
-func NewResultBatchBuilder(maxCount, maxBytes int) *ResultBatchBuilder {
-	return &ResultBatchBuilder{maxCount: maxCount, maxBytes: maxBytes}
+func NewResultBatchBuilder(maxCount int) *ResultBatchBuilder {
+	return &ResultBatchBuilder{maxCount: maxCount}
 }
 
 func (b *ResultBatchBuilder) count() int {
