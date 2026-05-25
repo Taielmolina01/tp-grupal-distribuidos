@@ -307,7 +307,7 @@ func (j *JoinAccounts) handleEOF(data inner.DataMsg[transfer.SplittedTransfer]) 
 		return
 	}
 
-	msg, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID})
+	msg, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(j.queryID)})
 	if err != nil {
 		slog.Error("While serializing EOF message", "err", err)
 	}
