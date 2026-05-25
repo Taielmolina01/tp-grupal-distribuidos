@@ -1,0 +1,20 @@
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 228,242
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  h_3c9b41718876fe 148,159,175,181
+src/internal/joinaccounts/joinaccounts.go
+  h_3c9b41718876fe 181,197,242,258,268,274
+src/internal/acumaccounts/acumaccounts.go
+  h_3c9b41718876fe 165,177,194,200
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "2105d8e4679db0ff995429e5465cf81600752d37",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
