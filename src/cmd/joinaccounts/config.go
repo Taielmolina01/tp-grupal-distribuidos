@@ -34,11 +34,6 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		return joinaccounts.JoinAccountsConfig{}, errors.New("OUTPUT_QUEUE_PREFIX environment variable is required")
 	}
 
-	expectedEOFs, err := strconv.Atoi(os.Getenv("EXPECTED_EOFS"))
-	if err != nil {
-		return joinaccounts.JoinAccountsConfig{}, errors.New("EXPECTED_EOFS environment variable is required and must be a number")
-	}
-
 	inputPrefix := os.Getenv("INPUT_QUEUE_PREFIX")
 	if inputPrefix == "" {
 		return joinaccounts.JoinAccountsConfig{}, errors.New("INPUT_QUEUE_PREFIX environment variable is required")
@@ -55,7 +50,6 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		OutputMiddlewarePrefix: outputPrefix,
 		MomHost:                momHost,
 		MomPort:                momPort,
-		ExpectedEOFs:           expectedEOFs,
 		InputMiddlewarePrefix:  inputPrefix,
 		QueryID:                queryID,
 	}, nil

@@ -25,15 +25,12 @@ type JoinAccountsConfig struct {
 	MomHost string
 	MomPort int
 
-	ExpectedEOFs          int    //Cantidad de nodos del grupo anterior
 	InputMiddlewarePrefix string //Es el output prefix del nodo anterior
 
 	QueryID int
 }
 
 type clientState struct {
-	eofAmt int
-
 	left  map[string]map[string]account.AccountPair
 	right map[string]map[string]account.AccountPair
 }
@@ -43,7 +40,6 @@ type JoinAccounts struct {
 
 	outputMiddlewareAmount int
 
-	expectedEOFs int
 	inputQueue   middleware.Middleware
 	outputQueues []middleware.Middleware
 
@@ -105,7 +101,6 @@ func NewJoinAccounts(config JoinAccountsConfig) (_ *JoinAccounts, err error) {
 		queryID:                config.QueryID,
 		inputQueue:             inputQueue,
 		outputQueues:           outputQueues,
-		expectedEOFs:           config.ExpectedEOFs,
 		clientsState:           map[int]*clientState{},
 	}, nil
 }
@@ -298,14 +293,6 @@ func (j *JoinAccounts) shardFor(clientID int, key1, key2 string) int {
 func (j *JoinAccounts) handleEOF(data inner.DataMsg[transfer.SplittedTransfer]) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-
-	state := j.stateFor(data.ClientID)
-
-	state.eofAmt++
-
-	if state.eofAmt < j.expectedEOFs {
-		return
-	}
 
 	msg, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(j.queryID)})
 	if err != nil {

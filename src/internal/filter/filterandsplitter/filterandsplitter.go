@@ -142,7 +142,9 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 
 			if isCoordinator {
 				for _, q := range outputQueues {
-					return q.Send(*msg)
+					if err := q.Send(*msg); err != nil {
+						return err
+					}
 				}
 			}
 			return nil
