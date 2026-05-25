@@ -132,12 +132,6 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 }
 
 func (gateway *Gateway) Run() error {
-	defer func() {
-		if err := gateway.listener.Close(); err != nil {
-			slog.Error("While closing gateway's acceptor socket", "err", err)
-		}
-	}()
-
 	go func() {
 		if err := gateway.resultsQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 			gateway.handleClientResponse(msg, ack, nack)
@@ -154,6 +148,9 @@ func (gateway *Gateway) Run() error {
 		if err != nil {
 			if !gateway.running.Load() {
 				break
+			}
+			if closeErr := gateway.listener.Close(); closeErr != nil {
+				slog.Error("While closing acceptor socket after accept error", "err", closeErr)
 			}
 			return err
 		}
