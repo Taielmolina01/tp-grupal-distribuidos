@@ -45,6 +45,7 @@ type Gateway struct {
 	accountsCount     map[int]uint32
 	transfersCount    map[int]uint32
 	queryEOFsByClient map[int]map[uint8]int
+	buildersMu        sync.Mutex
 	resultBuilders    map[int]*external.ResultBatchBuilder
 	maxBatchSize      int
 	maxBatchBytes     int
@@ -248,6 +249,8 @@ transfersLoop:
 }
 
 func (gateway *Gateway) getOrCreateBuilder(clientID int) *external.ResultBatchBuilder {
+	gateway.buildersMu.Lock()
+	defer gateway.buildersMu.Unlock()
 	if b, ok := gateway.resultBuilders[clientID]; ok {
 		return b
 	}
@@ -402,7 +405,9 @@ func (gateway *Gateway) closeClient(clientID int) {
 	gateway.countsMu.Lock()
 	delete(gateway.queryEOFsByClient, clientID)
 	gateway.countsMu.Unlock()
+	gateway.buildersMu.Lock()
 	delete(gateway.resultBuilders, clientID)
+	gateway.buildersMu.Unlock()
 	slog.Info("Client finished, connection closed", "client_id", clientID)
 }
 
