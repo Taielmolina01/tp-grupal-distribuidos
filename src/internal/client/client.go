@@ -250,6 +250,14 @@ func (client *Client) recvResults() error {
 		}
 	}()
 
+	headers := [][]string{
+		queryresult.Query1Result{}.GetHeaders(),
+		queryresult.Query2Result{}.GetHeaders(),
+		queryresult.Query3Result{}.GetHeaders(),
+		queryresult.Query4Result{}.GetHeaders(),
+		queryresult.Query5Result{}.GetHeaders(),
+	}
+
 	for i := range numQueries {
 		path := fmt.Sprintf("%s_%d.csv", client.config.OutputFilePrefix, i+1)
 		f, err := os.Create(path)
@@ -259,6 +267,10 @@ func (client *Client) recvResults() error {
 		}
 		files[i] = f
 		writers[i] = csv.NewWriter(f)
+		if err := writers[i].Write(headers[i]); err != nil {
+			slog.Error("While writing header to output file", "query", i+1, "err", err)
+			return err
+		}
 	}
 
 	doneCount := 0
