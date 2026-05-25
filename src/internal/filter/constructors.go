@@ -114,7 +114,6 @@ func CreateBankDistinctFilter(config FilterConfig) (worker.Worker, error) {
 }
 
 func CreateAverageFilter(config FilterConfig) (worker.Worker, error) {
-	// Q3: amount de la transferencia < 1 centésimo del avg del método.
 	return newAverageFilter(
 		config,
 		func(transferAmount float32, avg float32) bool {

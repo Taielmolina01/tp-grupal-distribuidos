@@ -29,11 +29,7 @@ type partial struct {
 	totalCount int
 }
 
-// AvgAggregator: lee SumByMethod parciales (sharded por method desde varios
-// Sums), acumula por (clientID, method) y al EOF emite AvgByMethod por cada
-// método a TODAS las output queues (fanout manual — una queue por réplica
-// downstream de Filter fase 2). El coordinator del ring también emite el EOF
-// a todas las output queues.
+
 type AvgAggregator struct {
 	id              int
 	inputQueue      middleware.Middleware
