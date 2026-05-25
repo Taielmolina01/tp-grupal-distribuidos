@@ -109,12 +109,13 @@ func CreateBankDistinctFilter(config FilterConfig) (worker.Worker, error) {
 }
 
 func CreateAverageFilter(config FilterConfig) (worker.Worker, error) {
-	// Precondiciones:
-	// - Primer número: monto de la transferencia cruda
-	// - Segundo número: monto promedio de las transferencias
-	return newAverageFilter(config, func(n1 float32, n2 float32) bool {
-		return n1 <= n2+config.Amount && n1 >= n2-config.Amount
-	})
+	return newAverageFilter(
+		config,
+		func(transferAmount float32, avg float32) bool {
+			return transferAmount < avg/100
+		},
+		3,
+	)
 }
 
 func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
