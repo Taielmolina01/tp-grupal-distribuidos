@@ -132,7 +132,6 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func
 	} else {
 		filter.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
 
-		slog.Info("Message processed by filter", "filter_id", filter.id, "client_id", result.ClientID, "processed_messages", filter.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID))
 		if filter.callback(result.Payload) {
 			filter.handlerMessages.AddFilteredMessagesAmountByClientId(result.ClientID, 1)
 			payload := filter.outputTransform(result.Payload)
