@@ -129,6 +129,8 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 }
 
 func (gateway *Gateway) Run() error {
+	defer gateway.close()
+
 	go func() {
 		if err := gateway.resultsQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 			gateway.handleClientResponse(msg, ack, nack)
@@ -165,6 +167,7 @@ func (gateway *Gateway) Run() error {
 	if err := gateway.resultsQueue.StopConsuming(); err != nil {
 		slog.Error("While stopping results queue consumer", "err", err)
 	}
+
 	gateway.registry.WithLock(func(clients []clientregistry.ClientState) {
 		for _, client := range clients {
 			if err := client.Conn.Close(); err != nil {
@@ -172,7 +175,22 @@ func (gateway *Gateway) Run() error {
 			}
 		}
 	})
+
 	return nil
+}
+
+func (gateway *Gateway) close() {
+	for _, q := range gateway.accountQueues {
+		if err := q.Close(); err != nil {
+			slog.Error("While closing account queue", "err", err)
+		}
+	}
+	if err := gateway.transfersExchange.Close(); err != nil {
+		slog.Error("While closing transfers exchange", "err", err)
+	}
+	if err := gateway.resultsQueue.Close(); err != nil {
+		slog.Error("While closing results queue", "err", err)
+	}
 }
 
 func (gateway *Gateway) handleSignals() {
