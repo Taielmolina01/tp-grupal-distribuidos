@@ -11,7 +11,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/eofmessage"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 )
@@ -118,7 +117,7 @@ func (f *FilterAccountSeen) close() {
 
 func (f *FilterAccountSeen) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[account.AccountIdentifier](&middleware.Message{Body: msg.Body})
+	m, err := inner.DeserializeData[account.AccountIdentifier](&msg)
 
 	if err != nil {
 		slog.Error("While deserializing pipeline message", "err", err)

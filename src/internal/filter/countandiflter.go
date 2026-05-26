@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
@@ -56,14 +57,14 @@ func newCountAndFilter[T comparable](config CountAndFilterConfig) (worker.Worker
 
 func (cf *CountAndFilter[T]) Run() {
 	slog.Info("Starting count and filter consumers", "filter_id", cf.id)
-	if err := cf.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := cf.inputExchange.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 		cf.handleMessage(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
 	}
 }
 
-func (cf *CountAndFilter[T]) handleMessage(msg middleware.Message, ack, nack func()) {
+func (cf *CountAndFilter[T]) handleMessage(msg newmiddleware.Message, ack, nack func()) {
 	defer ack()
 
 	// data := inner.DesarializeMessage(msg)

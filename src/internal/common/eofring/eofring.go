@@ -6,7 +6,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 )
 
@@ -16,24 +16,24 @@ type EofRingAlgorithm interface {
 }
 
 type eofRingAlgorithmImpl struct {
-	inputQueue      middleware.Middleware
-	outputQueue     middleware.Middleware
+	inputQueue      newmiddleware.Middleware
+	outputQueue     newmiddleware.Middleware
 	amountReplicas  int
 	id              uint32
 	messagesMonitor msgmonitor.MessageMonitor
 	// typeOfNode should be an enum defined somewhere in common, but for simplicity I just left it as a string
 	typeOfNode     string
 	totalMessages  *uint32
-	finishCallback func(clientID int, msg *middleware.Message, isCoordinator bool) error
+	finishCallback func(clientID int, msg *newmiddleware.Message, isCoordinator bool) error
 	queryId        uint8
 }
 
 func CreateEofRingAlgorithm(
-	inputQueue, outputQueue middleware.Middleware,
+	inputQueue, outputQueue newmiddleware.Middleware,
 	amountReplicas int,
 	id uint32,
 	messageMonitor msgmonitor.MessageMonitor,
-	finishCallback func(clientID int, msg *middleware.Message, isCoordinator bool) error,
+	finishCallback func(clientID int, msg *newmiddleware.Message, isCoordinator bool) error,
 	queryId uint8,
 ) EofRingAlgorithm {
 	return &eofRingAlgorithmImpl{
@@ -67,7 +67,7 @@ func (eofring *eofRingAlgorithmImpl) Close() error {
 var hola = false
 var hola2 = false
 
-func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Message, ack, nack func()) {
+func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg newmiddleware.Message, ack, nack func()) {
 	eofRingMessage, eofRingCommitMessage, err := inner.DeserializeRingMessage(&msg)
 	if err != nil {
 		slog.Error("Error deserializing EOF ring message", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "err", err)

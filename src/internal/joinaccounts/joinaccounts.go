@@ -11,7 +11,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/eofmessage"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -116,7 +115,7 @@ func (j *JoinAccounts) close() {
 
 func (j *JoinAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[transfer.SplittedTransfer](&middleware.Message{Body: msg.Body})
+	m, err := inner.DeserializeData[transfer.SplittedTransfer](&msg)
 
 	if err != nil {
 		slog.Error("While deserializing pipeline message", "err", err)

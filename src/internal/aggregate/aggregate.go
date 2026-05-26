@@ -9,6 +9,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -148,14 +149,14 @@ func CreateAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 func (a *AvgAggregator) Run() {
 	slog.Info("Starting avg-aggregator consumers", "aggregate_id", a.id)
 	go a.eofHandler.Run()
-	if err := a.inputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := a.inputQueue.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 		a.handleMessage(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input queue", "err", err)
 	}
 }
 
-func (a *AvgAggregator) handleMessage(msg middleware.Message, ack, nack func()) {
+func (a *AvgAggregator) handleMessage(msg newmiddleware.Message, ack, nack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[transfer.SumByMethod](&msg)

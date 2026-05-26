@@ -9,6 +9,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -137,14 +138,14 @@ func CreateSumByPaymentFormat(config SumConfig) (worker.Worker, error) {
 func (s *SumByPaymentFormat) Run() {
 	slog.Info("Starting sum-by-payment-format consumers", "sum_id", s.id)
 	go s.eofHandler.Run()
-	if err := s.inputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := s.inputQueue.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 		s.handleMessage(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input queue", "err", err)
 	}
 }
 
-func (s *SumByPaymentFormat) handleMessage(msg middleware.Message, ack, nack func()) {
+func (s *SumByPaymentFormat) handleMessage(msg newmiddleware.Message, ack, nack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[transfer.Transfer](&msg)

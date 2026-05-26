@@ -11,7 +11,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/shard"
@@ -46,8 +45,8 @@ type FilterAndSplitter struct {
 
 	inputMiddleware  newmiddleware.Middleware
 	outputMiddleware newmiddleware.Middleware
-	eofInput         middleware.Middleware
-	eofOutput        middleware.Middleware
+	eofInput         newmiddleware.Middleware
+	eofOutput        newmiddleware.Middleware
 	eofHandler       eofring.EofRingAlgorithm
 
 	handlerMessages msgmonitor.MessageMonitor
@@ -66,15 +65,14 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 	const ring_prefix = "FILTER_AND_SPLIITER_EOF_"
 
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-	oldConnSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
 	var (
 		inputMiddleware  newmiddleware.Middleware
 		outputMiddleware newmiddleware.Middleware
-		eofInput         middleware.Middleware
-		eofOutput        middleware.Middleware
+		eofInput         newmiddleware.Middleware
+		eofOutput        newmiddleware.Middleware
 	)
 
 	defer func() {
@@ -104,12 +102,12 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
-	eofInput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(config.Id), oldConnSettings)
+	eofInput, err = newmiddleware.NewQueueMiddleware(connSettings, ring_prefix+strconv.Itoa(config.Id))
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF input queue: %w", err)
 	}
 
-	eofOutput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(getRingNextIndex(config)), oldConnSettings)
+	eofOutput, err = newmiddleware.NewQueueMiddleware(connSettings, ring_prefix+strconv.Itoa(getRingNextIndex(config)))
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF output queue: %w", err)
 	}
@@ -120,7 +118,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		config.FilterAndSpliterAmount,
 		uint32(config.Id),
 		handlerMessages,
-		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+		func(clientID int, msg *newmiddleware.Message, isCoordinator bool) error {
 			handlerMessages.RemoveClient(clientID)
 			if isCoordinator {
 				return outputMiddleware.Send(newmiddleware.Message{
@@ -178,7 +176,7 @@ func (f *FilterAndSplitter) close() {
 
 func (f *FilterAndSplitter) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[transfer.Transfer](&middleware.Message{Body: msg.Body})
+	m, err := inner.DeserializeData[transfer.Transfer](&msg)
 
 	if err != nil {
 		slog.Error("While deserializing pipeline message", "err", err)

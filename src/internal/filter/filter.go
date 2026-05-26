@@ -10,7 +10,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -22,13 +22,12 @@ func newFilter[T comparable, O comparable](
 	filterFunction func(T) bool,
 	inputToOutput func(T) O,
 ) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := middleware.CreateExchangeMiddleware(
+	inputExchange, err := newmiddleware.NewFanoutMiddleware(
+		connSettings,
 		config.InputExchange,
 		config.InputQueue,
-		config.InputRoutingKeys,
-		connSettings,
 	)
 	if err != nil {
 		return nil, err
@@ -43,11 +42,10 @@ func newFilter[T comparable, O comparable](
 		config.OutputRoutingKeys,
 	)
 
-	outputExchange, err := middleware.CreateExchangeMiddleware(
-		config.OutputExchange,
-		config.OutputQueue,
-		config.OutputRoutingKeys,
+	outputExchange, err := newmiddleware.NewFanoutMiddleware(
 		connSettings,
+		config.OutputExchange,
+		"",
 	)
 	if err != nil {
 		if err := inputExchange.Close(); err != nil {
@@ -63,9 +61,9 @@ func newFilter[T comparable, O comparable](
 		fmt.Sprintf(eofRingQueueNamePrefix, config.Type),
 	)
 
-	eofInput, err := middleware.CreateQueueMiddleware(
-		eofInputQueueName,
+	eofInput, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		eofInputQueueName,
 	)
 
 	if err != nil {
@@ -78,9 +76,9 @@ func newFilter[T comparable, O comparable](
 		return nil, err
 	}
 
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		eofOutputQueueName,
+	eofOutput, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		eofOutputQueueName,
 	)
 
 	if err != nil {
@@ -109,7 +107,7 @@ func newFilter[T comparable, O comparable](
 			config.FilterAmount,
 			uint32(config.Id),
 			handlerMessages,
-			func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+			func(clientID int, msg *newmiddleware.Message, isCoordinator bool) error {
 				if isCoordinator {
 					return outputExchange.Send(*msg)
 				}
@@ -128,14 +126,14 @@ func newFilter[T comparable, O comparable](
 func (filter *Filter[T, O]) Run() {
 	slog.Info("Starting filter consumers", "filter_id", filter.id)
 	go filter.eofHandler.Run()
-	if err := filter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := filter.inputExchange.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 		filter.handleMessage(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
 	}
 }
 
-func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func()) {
+func (filter *Filter[T, O]) handleMessage(msg newmiddleware.Message, ack, nack func()) {
 	ack()
 
 	result, err := inner.DeserializeData[T](&msg)

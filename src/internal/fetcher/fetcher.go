@@ -11,6 +11,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
@@ -78,7 +79,7 @@ func (fetcher *Fetcher) Run() {
 	}
 }
 
-func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
+func (fetcher *Fetcher) consume(msg newmiddleware.Message, ack, nack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[transfer.Transfer](&msg)

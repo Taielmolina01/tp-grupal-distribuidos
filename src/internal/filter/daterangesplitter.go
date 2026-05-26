@@ -9,6 +9,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -139,14 +140,14 @@ func (s *DateRangeSplitter) Run() {
 	for _, h := range s.eofHandlers {
 		go h.Run()
 	}
-	if err := s.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := s.inputExchange.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 		s.handleMessage(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
 	}
 }
 
-func (s *DateRangeSplitter) handleMessage(msg middleware.Message, ack, nack func()) {
+func (s *DateRangeSplitter) handleMessage(msg newmiddleware.Message, ack, nack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[transfer.Transfer](&msg)

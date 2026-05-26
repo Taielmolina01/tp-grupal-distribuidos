@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -57,7 +58,7 @@ func (count *CountReducer) Run() {
 	}
 }
 
-func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func()) {
+func (count *CountReducer) handleMessage(msg newmiddleware.Message, ack, nack func()) {
 	defer ack()
 	deserialized, err := inner.DeserializeData[transfer.Transfer](&msg) // no está el generic aca
 	if err != nil {

@@ -15,7 +15,7 @@ import (
 	"tp-grupal-distribuidos/internal/clientregistry"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/external"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/normalizer"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/shard"
@@ -36,9 +36,9 @@ type GatewayConfig struct {
 
 type Gateway struct {
 	registry          clientregistry.ClientRegistry
-	accountQueues     []middleware.Middleware
-	transfersExchange middleware.Middleware
-	resultsQueue      middleware.Middleware
+	accountQueues     []newmiddleware.Middleware
+	transfersExchange newmiddleware.Middleware
+	resultsQueue      newmiddleware.Middleware
 	listener          net.Listener
 	running           atomic.Bool
 	nextClientID      atomic.Int32
@@ -53,12 +53,11 @@ type Gateway struct {
 }
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	//Quiza las keys deberían ser config, quizá no. Quien sabe
-	accountQueues := make([]middleware.Middleware, 0, len(config.AccountQueues))
+	accountQueues := make([]newmiddleware.Middleware, 0, len(config.AccountQueues))
 	for _, queue := range config.AccountQueues {
-		accountQueue, err := middleware.CreateQueueMiddleware(queue, connSettings)
+		accountQueue, err := newmiddleware.NewQueueMiddleware(connSettings, queue)
 		if err != nil {
 			return nil, err
 		}
@@ -68,11 +67,10 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 	// Las keys acá vienen x config xq son dinámicas
 	// Se requiere sharding
 
-	transfersExchange, err := middleware.CreateExchangeMiddleware(
+	transfersExchange, err := newmiddleware.NewFanoutMiddleware(
+		connSettings,
 		config.TransfersExchange,
 		"",
-		config.TransfersRoutingKeys,
-		connSettings,
 	)
 	if err != nil {
 		for _, q := range accountQueues {
@@ -83,7 +81,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		return nil, err
 	}
 
-	resultsQueue, err := middleware.CreateQueueMiddleware(config.ResultsQueue, connSettings)
+	resultsQueue, err := newmiddleware.NewQueueMiddleware(connSettings, config.ResultsQueue)
 	if err != nil {
 		for _, q := range accountQueues {
 			if err := q.Close(); err != nil {
@@ -132,7 +130,7 @@ func (gateway *Gateway) Run() error {
 	defer gateway.close()
 
 	go func() {
-		if err := gateway.resultsQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+		if err := gateway.resultsQueue.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 			gateway.handleClientResponse(msg, ack, nack)
 		}); err != nil {
 			slog.Error("While consuming results queue", "err", err)
@@ -283,7 +281,7 @@ func (gateway *Gateway) getOrCreateBuilder(clientID int) *external.ResultBatchBu
 	return b
 }
 
-func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
+func (gateway *Gateway) handleClientResponse(msg newmiddleware.Message, ack func(), nack func()) {
 	env, err := inner.DeserializeData[json.RawMessage](&msg)
 	if err != nil {
 		slog.Error("While deserializing result envelope", "err", err)
@@ -459,7 +457,7 @@ func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bo
 	return found, ok
 }
 
-func wrapForClient[T any](clientID int, record T) (*middleware.Message, error) {
+func wrapForClient[T any](clientID int, record T) (*newmiddleware.Message, error) {
 	return inner.SerializeData(inner.DataMsg[T]{ClientID: clientID, Payload: record})
 }
 
@@ -477,7 +475,7 @@ func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
 	return total
 }
 
-func (gateway *Gateway) sendEOF(client clientregistry.ClientState, kind string, total uint32, targets ...middleware.Middleware) error {
+func (gateway *Gateway) sendEOF(client clientregistry.ClientState, kind string, total uint32, targets ...newmiddleware.Middleware) error {
 	msg, err := inner.SerializeData(inner.DataMsg[any]{
 		ClientID: client.ID,
 		EOF:      &inner.EOFInfo{Kind: kind, TotalMessages: total},

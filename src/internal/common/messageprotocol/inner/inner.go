@@ -7,7 +7,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/eofmessage"
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 )
 
 const _AGGREGATION_ID = "agg"
@@ -85,7 +85,7 @@ func DeserializeEofCommitRingMessage(data []interface{}) (*eofmessagetypes.EofMe
 	return &eofmessagetypes.EofMessageCommit{ClientID: parsedClientID, Hops: int(hopsAsFloat), FilteredAmount: uint32(filteredAmountAsFloat)}, nil
 }
 
-func DeserializeRingMessage(message *middleware.Message) (*eofmessagetypes.EofRingMessage, *eofmessagetypes.EofMessageCommit, error) {
+func DeserializeRingMessage(message *newmiddleware.Message) (*eofmessagetypes.EofRingMessage, *eofmessagetypes.EofMessageCommit, error) {
 	data, err := deserializeJson([]byte(message.Body))
 	if err != nil {
 		return nil, nil, err
@@ -105,17 +105,17 @@ func DeserializeRingMessage(message *middleware.Message) (*eofmessagetypes.EofRi
 
 }
 
-func SerializeEofFromQueueMsg(msg eofmessagetypes.EofRingMessage) (*middleware.Message, error) {
+func SerializeEofFromQueueMsg(msg eofmessagetypes.EofRingMessage) (*newmiddleware.Message, error) {
 	data, err := serializeJson([]interface{}{msg.CoordinatorId, msg.ActualAmount, msg.RealAmount, msg.ClientId, msg.FilteredAmount})
 	if err != nil {
 		return nil, err
 	}
-	return &middleware.Message{
+	return &newmiddleware.Message{
 		Body: string(data),
 	}, nil
 }
 
-func SerializeEofMessage(msg eofmessage.EofMessage) (*middleware.Message, error) {
+func SerializeEofMessage(msg eofmessage.EofMessage) (*newmiddleware.Message, error) {
 	return SerializeData(DataMsg[struct{}]{
 		ClientID: msg.ClientID,
 		QueryID:  msg.QueryID,
@@ -123,27 +123,27 @@ func SerializeEofMessage(msg eofmessage.EofMessage) (*middleware.Message, error)
 	})
 }
 
-func SerializeEofMessageCommit(msg eofmessagetypes.EofMessageCommit) (*middleware.Message, error) {
+func SerializeEofMessageCommit(msg eofmessagetypes.EofMessageCommit) (*newmiddleware.Message, error) {
 	data, err := serializeJson([]interface{}{msg.ClientID, msg.Hops, msg.FilteredAmount})
 	if err != nil {
 		return nil, err
 	}
-	return &middleware.Message{
+	return &newmiddleware.Message{
 		Body: string(data),
 	}, nil
 }
 
-func SerializeAggregationEofMessage(msg eofmessage.AggregationEofMessage) (*middleware.Message, error) {
+func SerializeAggregationEofMessage(msg eofmessage.AggregationEofMessage) (*newmiddleware.Message, error) {
 	data, err := serializeJson([]interface{}{_AGGREGATION_ID, msg.ClientID, msg.AggregationID})
 	if err != nil {
 		return nil, err
 	}
-	return &middleware.Message{
+	return &newmiddleware.Message{
 		Body: string(data),
 	}, nil
 }
 
-func DeserializeAggregationEofMessage(message *middleware.Message) (*eofmessage.AggregationEofMessage, bool, error) {
+func DeserializeAggregationEofMessage(message *newmiddleware.Message) (*eofmessage.AggregationEofMessage, bool, error) {
 	data, err := deserializeJson([]byte(message.Body))
 	if err != nil {
 		return nil, false, err

@@ -9,6 +9,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
@@ -97,7 +98,7 @@ func newTwoInputJoin[L, R, O any](
 func (a *TwoInputAdapter[L, R, O]) Run() {
 	done := make(chan struct{})
 	go func() {
-		if err := a.leftInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+		if err := a.leftInput.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 			defer ack()
 			data, err := inner.DeserializeData[L](&msg)
 			if err != nil {
@@ -118,7 +119,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 		close(done)
 	}()
 
-	if err := a.rightInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := a.rightInput.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 		defer ack()
 		data, err := inner.DeserializeData[R](&msg)
 		if err != nil {
@@ -207,7 +208,7 @@ func newSingleInputJoin[T, O any](
 }
 
 func (a *SingleInputAdapter[T, O]) Run() {
-	if err := a.input.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := a.input.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 		defer ack()
 		data, err := inner.DeserializeData[T](&msg)
 		if err != nil {

@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
@@ -55,12 +55,12 @@ type FilterConfig struct {
 
 type Filter[T comparable, O comparable] struct {
 	id              uint32
-	inputExchange   middleware.Middleware
-	outputExchange  middleware.Middleware
+	inputExchange   newmiddleware.Middleware
+	outputExchange  newmiddleware.Middleware
 	filterFunction  func(T) bool
 	eofHandler      eofring.EofRingAlgorithm
 	handlerMessages msgmonitor.MessageMonitor
-	outputQueueEof  middleware.Middleware
+	outputQueueEof  newmiddleware.Middleware
 	filterType      FilterType
 	outputTransform func(T) O
 	queryId         uint8
@@ -68,16 +68,16 @@ type Filter[T comparable, O comparable] struct {
 
 type FilterAndSplitter struct {
 	id             uint32
-	inputExchange  middleware.Middleware
-	outputExchange middleware.Middleware
+	inputExchange  newmiddleware.Middleware
+	outputExchange newmiddleware.Middleware
 	filterFunction func(transfer.Transfer) bool
 	splitFunction  func(transfer.Transfer) (transfer.SplittedTransfer, transfer.SplittedTransfer)
 }
 
 type DistinctFilter[T comparable, S comparable] struct {
 	id            uint32
-	inputQueue    middleware.Middleware
-	outputQueues  []middleware.Middleware
+	inputQueue    newmiddleware.Middleware
+	outputQueues  []newmiddleware.Middleware
 	alreadySeen   map[int]map[S]bool
 	compareFunc   func(T, T) bool
 	keyFunc       func(T) S
@@ -87,13 +87,13 @@ type DistinctFilter[T comparable, S comparable] struct {
 type AverageFilter struct {
 	id                  uint32
 	queryID             uint8
-	inputTransfersQueue middleware.Middleware
-	inputAvgsQueue      middleware.Middleware
-	outputQueue         middleware.Middleware
+	inputTransfersQueue newmiddleware.Middleware
+	inputAvgsQueue      newmiddleware.Middleware
+	outputQueue         newmiddleware.Middleware
 
 	transfersRing    eofring.EofRingAlgorithm
 	transfersMonitor msgmonitor.MessageMonitor
-	transfersEofOut  middleware.Middleware
+	transfersEofOut  newmiddleware.Middleware
 
 	avgsExpectedEofs int
 
@@ -113,9 +113,9 @@ type avgFilterClientState struct {
 }
 
 type ConvertedAmountFilter[T, S comparable] struct {
-	leftInputQueue     middleware.Middleware
-	rightInputQueue    middleware.Middleware
-	outputQueue        middleware.Middleware
+	leftInputQueue     newmiddleware.Middleware
+	rightInputQueue    newmiddleware.Middleware
+	outputQueue        newmiddleware.Middleware
 	compareFunc        func(t T, s S) bool
 	queryId            uint8
 	leftKeyFunc        func(S) string
@@ -129,7 +129,7 @@ type ConvertedAmountFilter[T, S comparable] struct {
 	toSaveFunc         func(T, int) string
 	fromSaveFunc       func(string) (T, int, error)
 	eofRing            eofring.EofRingAlgorithm
-	eofOutputQueue     middleware.Middleware
+	eofOutputQueue     newmiddleware.Middleware
 	handlerMessages    msgmonitor.MessageMonitor
 	id                 uint32
 }

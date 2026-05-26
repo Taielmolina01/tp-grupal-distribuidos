@@ -11,6 +11,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -179,7 +180,7 @@ func (filter *ConvertedAmountFilter[T, S]) Run() {
 	}
 }
 
-func (filter *ConvertedAmountFilter[T, S]) consumeLeft(msg middleware.Message, ack, nack func()) {
+func (filter *ConvertedAmountFilter[T, S]) consumeLeft(msg newmiddleware.Message, ack, nack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[S](&msg)
@@ -213,7 +214,7 @@ func (filter *ConvertedAmountFilter[T, S]) consumeLeft(msg middleware.Message, a
 	filter.CheckTransfersWithoutConversion(result.Payload)
 }
 
-func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, ack, nack func()) {
+func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg newmiddleware.Message, ack, nack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[T](&msg)

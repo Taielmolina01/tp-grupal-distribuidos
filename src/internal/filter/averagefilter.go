@@ -8,6 +8,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -110,7 +111,7 @@ func (af *AverageFilter) Run() {
 	slog.Info("Starting average-filter consumers", "filter_id", af.id)
 	go af.transfersRing.Run()
 	go af.consumeAvgs()
-	if err := af.inputTransfersQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := af.inputTransfersQueue.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 		af.handleTransferMessage(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming transfers", "err", err)
@@ -118,7 +119,7 @@ func (af *AverageFilter) Run() {
 }
 
 func (af *AverageFilter) consumeAvgs() {
-	if err := af.inputAvgsQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := af.inputAvgsQueue.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 		af.handleAvgMessage(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming avgs", "err", err)
@@ -136,7 +137,7 @@ func (af *AverageFilter) getOrInitState(clientID int) *avgFilterClientState {
 	return s
 }
 
-func (af *AverageFilter) handleAvgMessage(msg middleware.Message, ack, nack func()) {
+func (af *AverageFilter) handleAvgMessage(msg newmiddleware.Message, ack, nack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[transfer.AvgByMethod](&msg)
@@ -193,7 +194,7 @@ func (af *AverageFilter) handleAvgMessage(msg middleware.Message, ack, nack func
 	}
 }
 
-func (af *AverageFilter) handleTransferMessage(msg middleware.Message, ack, nack func()) {
+func (af *AverageFilter) handleTransferMessage(msg newmiddleware.Message, ack, nack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[transfer.Transfer](&msg)

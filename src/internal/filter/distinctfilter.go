@@ -5,6 +5,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -47,14 +48,14 @@ func newDistinctFilter[T comparable, S comparable](
 
 func (distinctfilter *DistinctFilter[T, S]) Run() {
 	slog.Info("Starting filter consumers", "filter_id", distinctfilter.id)
-	if err := distinctfilter.inputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := distinctfilter.inputQueue.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 		distinctfilter.handleMessage(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
 	}
 }
 
-func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message, ack, nack func()) {
+func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg newmiddleware.Message, ack, nack func()) {
 	defer ack()
 
 	deserializedMsg, err := inner.DeserializeData[T](&msg)

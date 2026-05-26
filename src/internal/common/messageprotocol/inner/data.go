@@ -2,8 +2,7 @@ package inner
 
 import (
 	"encoding/json"
-
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 )
 
 const (
@@ -26,15 +25,15 @@ type EOFInfo struct {
 	TotalMessages uint32 `json:"total_messages"`
 }
 
-func SerializeData[T any](d DataMsg[T]) (*middleware.Message, error) {
+func SerializeData[T any](d DataMsg[T]) (*newmiddleware.Message, error) {
 	body, err := json.Marshal(d)
 	if err != nil {
 		return nil, err
 	}
-	return &middleware.Message{Body: string(body)}, nil
+	return &newmiddleware.Message{Body: string(body)}, nil
 }
 
-func DeserializeData[T any](msg *middleware.Message) (*DataMsg[T], error) {
+func DeserializeData[T any](msg *newmiddleware.Message) (*DataMsg[T], error) {
 	d := &DataMsg[T]{}
 	if err := json.Unmarshal([]byte(msg.Body), d); err != nil {
 		return nil, err
