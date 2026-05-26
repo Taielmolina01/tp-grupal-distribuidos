@@ -1,0 +1,68 @@
+src/internal/join/adapter.go
+  s_ada489c98716d7::t_7e5a1748b6699c 4,8
+  s_ada489c98716d7::t_0d845667201c3f 47-49
+  s_ada489c98716d7::t_7844a15e342042 70
+src/cmd/filterbankidseen/main.go
+  s_ada489c98716d7::t_9a46a9d519fcd6 1-30
+src/cmd/gateway/main.go
+  s_ada489c98716d7::t_520f3938418469 103-104
+  s_ada489c98716d7::t_2787ed8a2c32d9 18-20,23-30
+src/internal/filterbankidseen/filterbankidseen.go
+  s_ada489c98716d7::t_36a7304550d56f 141-144,149-151
+  s_ada489c98716d7::t_07b3e62b7a3351 99
+  s_ada489c98716d7::t_a6cf6db91440e4 41-42,47-48,56-58,63-65,69-74
+  s_ada489c98716d7::t_1db89035633d78 1-18,26-28,35-40,43-46,49-55,59-62,66-68,75-98,100-140,145-148,152-153
+  s_ada489c98716d7::t_ac5fbedea9154a 19-25,29-34
+src/cmd/join/config.go
+  s_ada489c98716d7::t_1a6fbce4d9b4db 69-71,80-89
+scripts/compose-gen/generator.go
+  s_ada489c98716d7::t_cdc019ff17c6b9 260
+  s_ada489c98716d7::t_689629030e2422 267
+  s_ada489c98716d7::t_7df7b94c01b593 96-97
+  s_ada489c98716d7::t_4602f8b7ad6bc6 288,293
+  s_ada489c98716d7::t_f4d2ee4902e373 268-269
+src/cmd/filterbankidseen/Dockerfile
+  s_ada489c98716d7::t_787d405d1ac8a9 1-15
+docker-compose.yaml
+  s_ada489c98716d7::t_f09c42411b10d7 260,277
+  s_ada489c98716d7::t_4700e3a4746bef 31-32
+  s_ada489c98716d7::t_0b9b2ba181fd55 261-262,278-279
+  s_ada489c98716d7::t_c4c8050a35d537 295,322
+  s_ada489c98716d7::t_59a56c045fae7e 251,268
+src/internal/filter/distinctfilter.go
+  s_ada489c98716d7::t_26970fb864d982 49-50,56
+src/internal/gateway/gateway.go
+  s_ada489c98716d7::t_3992dd51f19574 538-553
+  s_ada489c98716d7::t_b7a1a681be1d20 40-41
+  s_ada489c98716d7::t_4c4be2eff2c86e 25-26
+  s_ada489c98716d7::t_6ab1aa3482f69a 60-62,71-72,79-80,82-83,90-91,93-94,96-97,103-104
+  s_ada489c98716d7::t_c8b4c2c1e74ae3 171-172
+  s_ada489c98716d7::t_c108897d9ef34e 501,503,505
+src/cmd/filterbankidseen/config.go
+  s_ada489c98716d7::t_9e6bce3a8b79cf 32-34,37-41,48-54
+  s_ada489c98716d7::t_26c5466f696166 1-31,35-36,42-47,55-56
+src/internal/join/types.go
+  s_ada489c98716d7::t_9acd79a10dade2 17-22,24-27
+  h_3c9b41718876fe 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "48e6410e68d5b7ee0df3af68f288a6ce250fec6e",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_ada489c98716d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fa449662-4802-43d6-be6d-cf6e6e04d3f1",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
