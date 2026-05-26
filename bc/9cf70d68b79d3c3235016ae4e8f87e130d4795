@@ -1,0 +1,54 @@
+src/internal/filter/averagefilter.go
+  h_3c9b41718876fe 11,114,122,140,197
+src/internal/filter/daterangesplitter.go
+  h_3c9b41718876fe 12,143,150
+src/internal/filter/convertedamountfilter.go
+  h_3c9b41718876fe 14,183,217
+src/internal/reducer/count.go
+  h_3c9b41718876fe 10,61
+src/internal/common/messageprotocol/inner/data.go
+  h_3c9b41718876fe 5,28,33,36
+src/internal/gateway/gateway.go
+  h_3c9b41718876fe 18,39-41,56,58,60,70-71,84,133,284,460,478
+src/internal/acumaccounts/acumaccounts.go
+  h_3c9b41718876fe 125
+src/internal/join/adapter.go
+  h_3c9b41718876fe 12,101,122,211
+src/internal/reducer/reducer.go
+  h_3c9b41718876fe 13,150,157
+src/internal/joinaccounts/joinaccounts.go
+  h_3c9b41718876fe 118
+src/internal/common/messageprotocol/inner/inner.go
+  h_3c9b41718876fe 10,88,108,113,118,126,131,136,141,146
+src/internal/aggregate/aggregate.go
+  h_3c9b41718876fe 12,152,159
+src/internal/filter/types.go
+  h_3c9b41718876fe 8,58-59,63,71-72,79-80,90-92,96,116-118,132
+src/internal/filter/countandiflter.go
+  h_3c9b41718876fe 10,60,67
+src/internal/common/eofring/eofring.go
+  h_3c9b41718876fe 9,19-20,27,32,36,70
+src/internal/filter/filter.go
+  h_3c9b41718876fe 13,25,27-28,45,47-48,64,79,81,110,129,136
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 48-49,74-75,105,110,121
+src/internal/fetcher/fetcher.go
+  h_3c9b41718876fe 14,82
+src/internal/filter/distinctfilter.go
+  h_3c9b41718876fe 8,51,58
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  h_3c9b41718876fe 120
+src/internal/sum/sum.go
+  h_3c9b41718876fe 12,141,148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "bc9cf70d68b79d3c3235016ae4e8f87e130d4795",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
