@@ -28,7 +28,7 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ACCOUNT_QUEUES=filter_account_id_0,filter_account_id_1
+      - ACCOUNT_QUEUES=accounts_0,accounts_1
       - TRANSFERS_EXCHANGE=transfers_exchange
       - TRANSFERS_ROUTING_KEYS=TRANSFERS_Q5_KEY,TRANSFERS_Q1234_KEY
       - RESULTS_QUEUE=results_queue
@@ -36,7 +36,7 @@ services:
       - MOM_PORT=5672
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - QUERY_EOFS_EXPECTED=1:1,2:2,3:1,4:2,5:1
+      - QUERY_EOFS_EXPECTED=1:1,2:2,3:1,4:1,5:1
 
   client_0:
     build:
@@ -52,7 +52,6 @@ services:
       - INPUT_FILE_TRANS=/input/transactions_0.csv
       - OUTPUT_FILE_PREFIX=/output/output_0
       - MAX_BATCH_SIZE=1000
-      - LOG_LEVEL=DEBUG
     volumes:
       - ./input:/input
       - ./output:/output
@@ -71,7 +70,6 @@ services:
       - INPUT_FILE_TRANS=/input/transactions_1.csv
       - OUTPUT_FILE_PREFIX=/output/output_1
       - MAX_BATCH_SIZE=1000
-      - LOG_LEVEL=DEBUG
     volumes:
       - ./input:/input
       - ./output:/output
@@ -213,7 +211,6 @@ services:
       - OUTPUT_QUEUES=reduced_transfers_q2_0,reduced_transfers_q2_1
       - OUTPUT_ROUTING_KEYS=falopa
       - QUERY_ID=2
-      - INPUT_EOFS_EXPECTED=2
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
       driver: json-file
@@ -240,7 +237,6 @@ services:
       - OUTPUT_QUEUES=reduced_transfers_q2_0,reduced_transfers_q2_1
       - OUTPUT_ROUTING_KEYS=falopa
       - QUERY_ID=2
-      - INPUT_EOFS_EXPECTED=2
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
       driver: json-file
@@ -248,11 +244,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  filter_account_id_already_seen_0:
+  filter_bank_id_already_seen_0:
     build:
       context: ./src/
       dockerfile: cmd/filter/Dockerfile
-    container_name: filter_account_id_already_seen_0
+    container_name: filter_bank_id_already_seen_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -260,17 +256,17 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - ID=0
-      - INPUT_QUEUE=filter_account_id_0
+      - INPUT_QUEUE=accounts_0
       - OUTPUT_QUEUES=join_q2_accounts_q_0,join_q2_accounts_q_1
       - FILTER_AMOUNT=2
       - FILTER_TYPE=BANK_DISTINCT
       - QUERY_ID=2
 
-  filter_account_id_already_seen_1:
+  filter_bank_id_already_seen_1:
     build:
       context: ./src/
       dockerfile: cmd/filter/Dockerfile
-    container_name: filter_account_id_already_seen_1
+    container_name: filter_bank_id_already_seen_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -278,7 +274,7 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - ID=1
-      - INPUT_QUEUE=filter_account_id_1
+      - INPUT_QUEUE=accounts_1
       - OUTPUT_QUEUES=join_q2_accounts_q_0,join_q2_accounts_q_1
       - FILTER_AMOUNT=2
       - FILTER_TYPE=BANK_DISTINCT
@@ -353,8 +349,8 @@ services:
       - ID=0
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - FILTER_AMOUNT=2
-      - OUTPUT_AMOUNT=2
+      - FILTER_AMOUNT=5
+      - OUTPUT_AMOUNT=4
       - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
       - INPUT_EXCHANGE=transfers_exchange
       - INPUT_QUEUE=transfers_q4_queue
@@ -379,8 +375,86 @@ services:
       - ID=1
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - FILTER_AMOUNT=2
-      - OUTPUT_AMOUNT=2
+      - FILTER_AMOUNT=5
+      - OUTPUT_AMOUNT=4
+      - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
+      - INPUT_EXCHANGE=transfers_exchange
+      - INPUT_QUEUE=transfers_q4_queue
+      - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
+      - "DATE_RANGE=2000-01-01 00:00:00,2030-01-01 00:00:00"
+      - QUERY_ID=4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  filter_and_splitter_q4_2:
+    build:
+      context: ./src/
+      dockerfile: cmd/filterandsplitter/Dockerfile
+    container_name: filter_and_splitter_q4_2
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=2
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - FILTER_AMOUNT=5
+      - OUTPUT_AMOUNT=4
+      - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
+      - INPUT_EXCHANGE=transfers_exchange
+      - INPUT_QUEUE=transfers_q4_queue
+      - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
+      - "DATE_RANGE=2000-01-01 00:00:00,2030-01-01 00:00:00"
+      - QUERY_ID=4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  filter_and_splitter_q4_3:
+    build:
+      context: ./src/
+      dockerfile: cmd/filterandsplitter/Dockerfile
+    container_name: filter_and_splitter_q4_3
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=3
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - FILTER_AMOUNT=5
+      - OUTPUT_AMOUNT=4
+      - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
+      - INPUT_EXCHANGE=transfers_exchange
+      - INPUT_QUEUE=transfers_q4_queue
+      - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
+      - "DATE_RANGE=2000-01-01 00:00:00,2030-01-01 00:00:00"
+      - QUERY_ID=4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  filter_and_splitter_q4_4:
+    build:
+      context: ./src/
+      dockerfile: cmd/filterandsplitter/Dockerfile
+    container_name: filter_and_splitter_q4_4
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=4
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - FILTER_AMOUNT=5
+      - OUTPUT_AMOUNT=4
       - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
       - INPUT_EXCHANGE=transfers_exchange
       - INPUT_QUEUE=transfers_q4_queue
@@ -405,7 +479,7 @@ services:
       - ID=0
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - OUTPUT_AMOUNT=2
+      - OUTPUT_AMOUNT=3
       - OUTPUT_MIDDLEWARE_PREFIX=join_accounts_q4
       - INPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
       - QUERY_ID=4
@@ -427,7 +501,51 @@ services:
       - ID=1
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - OUTPUT_AMOUNT=2
+      - OUTPUT_AMOUNT=3
+      - OUTPUT_MIDDLEWARE_PREFIX=join_accounts_q4
+      - INPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
+      - QUERY_ID=4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  join_accounts_q4_2:
+    build:
+      context: ./src/
+      dockerfile: cmd/joinaccounts/Dockerfile
+    container_name: join_accounts_q4_2
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=2
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - OUTPUT_AMOUNT=3
+      - OUTPUT_MIDDLEWARE_PREFIX=join_accounts_q4
+      - INPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
+      - QUERY_ID=4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  join_accounts_q4_3:
+    build:
+      context: ./src/
+      dockerfile: cmd/joinaccounts/Dockerfile
+    container_name: join_accounts_q4_3
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=3
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - OUTPUT_AMOUNT=3
       - OUTPUT_MIDDLEWARE_PREFIX=join_accounts_q4
       - INPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
       - QUERY_ID=4
@@ -449,11 +567,11 @@ services:
       - ID=0
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - OUTPUT_AMOUNT=2
+      - OUTPUT_AMOUNT=1
       - OUTPUT_MIDDLEWARE_PREFIX=acum_accounts_q4
       - INPUT_MIDDLEWARE_PREFIX=join_accounts_q4
-      - EXPECTED_EOFS=2
-      - REQUIRED_AMT=2
+      - EXPECTED_EOFS=4
+      - REQUIRED_AMT=5
       - QUERY_ID=4
     logging:
       driver: json-file
@@ -473,11 +591,35 @@ services:
       - ID=1
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - OUTPUT_AMOUNT=2
+      - OUTPUT_AMOUNT=1
       - OUTPUT_MIDDLEWARE_PREFIX=acum_accounts_q4
       - INPUT_MIDDLEWARE_PREFIX=join_accounts_q4
-      - EXPECTED_EOFS=2
-      - REQUIRED_AMT=2
+      - EXPECTED_EOFS=4
+      - REQUIRED_AMT=5
+      - QUERY_ID=4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  acum_accounts_q4_2:
+    build:
+      context: ./src/
+      dockerfile: cmd/acumaccounts/Dockerfile
+    container_name: acum_accounts_q4_2
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=2
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - OUTPUT_AMOUNT=1
+      - OUTPUT_MIDDLEWARE_PREFIX=acum_accounts_q4
+      - INPUT_MIDDLEWARE_PREFIX=join_accounts_q4
+      - EXPECTED_EOFS=4
+      - REQUIRED_AMT=5
       - QUERY_ID=4
     logging:
       driver: json-file
@@ -499,29 +641,7 @@ services:
       - MOM_PORT=5672
       - INPUT_MIDDLEWARE_PREFIX=acum_accounts_q4
       - OUTPUT_MIDDLEWARE=results_queue
-      - EXPECTED_EOFS=2
-      - QUERY_ID=4
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "3"
-
-  filter_account_seen_q4_1:
-    build:
-      context: ./src/
-      dockerfile: cmd/filteraccountseen/Dockerfile
-    container_name: filter_account_seen_q4_1
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      - ID=1
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - INPUT_MIDDLEWARE_PREFIX=acum_accounts_q4
-      - OUTPUT_MIDDLEWARE=results_queue
-      - EXPECTED_EOFS=2
+      - EXPECTED_EOFS=3
       - QUERY_ID=4
     logging:
       driver: json-file

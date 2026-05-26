@@ -1,0 +1,22 @@
+clients: 2
+
+# Query 1-4:
+filter_currency: 2
+
+# Query 1:
+filter_amount: 2
+
+# Query 2:
+reducer_q2: 2
+filter_bank_id_already_seen: 2
+join_q2: 2
+
+# Query 4:
+filter_and_splitter_q4: 5
+join_accounts_q4: 4
+acum_accounts_q4: 3
+filter_account_seen_q4: 1
+
+# Query 5:
+filter_date_and_payment: 2
+filter_amt_q5: 2
