@@ -9,7 +9,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/shard"
@@ -24,16 +23,16 @@ func newReducer[T comparable](
 	keyFunc func(T) string,
 	queryId uint8,
 ) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, config.InputQueue, config.InputRoutingKeys, connSettings)
+	inputExchange, err := newmiddleware.NewFanoutMiddleware(connSettings, config.InputExchange, config.InputQueue)
 	if err != nil {
 		return nil, err
 	}
 
-	outputQueues := make([]middleware.Middleware, 0, len(config.OutputQueues))
+	outputQueues := make([]newmiddleware.Middleware, 0, len(config.OutputQueues))
 	for _, outputQueue := range config.OutputQueues {
-		m, err := middleware.CreateQueueMiddleware(outputQueue, connSettings)
+		m, err := newmiddleware.NewQueueMiddleware(connSettings, outputQueue)
 		if err != nil {
 			if err := inputExchange.Close(); err != nil {
 				slog.Error("While closing input exchange", "err", err)
@@ -50,9 +49,9 @@ func newReducer[T comparable](
 		eofRingQueuePrefix,
 	)
 
-	eofInput, err := middleware.CreateQueueMiddleware(
-		eofInputName,
+	eofInput, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		eofInputName,
 	)
 
 	if err != nil {
@@ -67,9 +66,9 @@ func newReducer[T comparable](
 		return nil, err
 	}
 
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		eofOutputName,
+	eofOutput, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		eofOutputName,
 	)
 
 	if err != nil {
@@ -107,7 +106,7 @@ func newReducer[T comparable](
 		config.ReducerAmount,
 		uint32(config.Id),
 		handlerMessages,
-		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+		func(clientID int, msg *newmiddleware.Message, isCoordinator bool) error {
 			values := reducer.reducerMonitor.GetValuesCopyByClientIdAndDelete(clientID)
 			for _, v := range values {
 				msgOutput, err := inner.SerializeData(inner.DataMsg[T]{

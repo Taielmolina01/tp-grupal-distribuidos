@@ -6,7 +6,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -23,22 +22,22 @@ type CountAndFilterConfig struct {
 
 type CountAndFilter[T comparable] struct {
 	id             uint32
-	inputExchange  middleware.Middleware
-	outputExchange middleware.Middleware
+	inputExchange  newmiddleware.Middleware
+	outputExchange newmiddleware.Middleware
 	amountTreshold int
 	countsByKey    map[T]int
 }
 
 func newCountAndFilter[T comparable](config CountAndFilterConfig) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, "", []string{}, connSettings)
+	inputExchange, err := newmiddleware.NewFanoutMiddleware(connSettings, config.InputExchange, "")
 
 	if err != nil {
 		return nil, err
 	}
 
-	outputExchange, err := middleware.CreateExchangeMiddleware(config.OutputExchange, "", []string{}, connSettings)
+	outputExchange, err := newmiddleware.NewFanoutMiddleware(connSettings, config.OutputExchange, "")
 	if err != nil {
 		if err := inputExchange.Close(); err != nil {
 			slog.Error("while closing input exchange", "err", err)

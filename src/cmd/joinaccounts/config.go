@@ -29,14 +29,14 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		return joinaccounts.JoinAccountsConfig{}, errors.New("OUTPUT_AMOUNT environment variable is required and must be a number")
 	}
 
-	outputPrefix := os.Getenv("OUTPUT_MIDDLEWARE_PREFIX")
-	if outputPrefix == "" {
-		return joinaccounts.JoinAccountsConfig{}, errors.New("OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
+	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
+	if outputExchange == "" {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
 	}
 
-	inputPrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
-	if inputPrefix == "" {
-		return joinaccounts.JoinAccountsConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
+	inputExchange := os.Getenv("INPUT_EXCHANGE")
+	if inputExchange == "" {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("INPUT_EXCHANGE environment variable is required")
 	}
 
 	queryID, err := strconv.Atoi(os.Getenv("QUERY_ID"))
@@ -45,12 +45,12 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 	}
 
 	return joinaccounts.JoinAccountsConfig{
-		Id:                     id,
-		OutputMiddlewareAmount: outputAmount,
-		OutputMiddlewarePrefix: outputPrefix,
-		MomHost:                momHost,
-		MomPort:                momPort,
-		InputMiddlewarePrefix:  inputPrefix,
-		QueryID:                queryID,
+		Id:             id,
+		OutputAmount:   outputAmount,
+		OutputExchange: outputExchange,
+		MomHost:        momHost,
+		MomPort:        momPort,
+		InputExchange:  inputExchange,
+		QueryID:        queryID,
 	}, nil
 }

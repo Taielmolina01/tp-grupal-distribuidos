@@ -6,7 +6,6 @@ import (
 	"os/signal"
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -16,23 +15,23 @@ import (
 func newCountReducer(
 	config ReducerConfig,
 ) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{
+	connSettings := newmiddleware.ConnSettings{
 		Hostname: config.MomHost,
 		Port:     config.MomPort,
 	}
 
-	inputQueue, err := middleware.CreateQueueMiddleware(
-		config.InputQueue,
+	inputQueue, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		config.InputQueue,
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	out, err := middleware.CreateQueueMiddleware(
-		config.OutputQueues[0],
+	out, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		config.OutputQueues[0],
 	)
 
 	if err != nil {

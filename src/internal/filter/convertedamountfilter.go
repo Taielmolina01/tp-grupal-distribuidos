@@ -10,7 +10,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -54,25 +53,24 @@ func newConvertedAmountFilter[T, S comparable](
 	toSaveFunc func(T, int) string,
 	fromSaveFunc func(string) (T, int, error),
 ) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{
+	connSettings := newmiddleware.ConnSettings{
 		Hostname: config.MomHost,
 		Port:     config.MomPort,
 	}
 
-	leftInputQueue, err := middleware.CreateQueueMiddleware(
-		config.LeftInputQueue,
+	leftInputQueue, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		config.LeftInputQueue,
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	rightInputQueue, err := middleware.CreateExchangeMiddleware(
+	rightInputQueue, err := newmiddleware.NewFanoutMiddleware(
+		connSettings,
 		config.RightInputExchange,
 		config.RightInputQueue,
-		config.RightInputRoutingKeys,
-		connSettings,
 	)
 
 	if err != nil {
@@ -82,9 +80,9 @@ func newConvertedAmountFilter[T, S comparable](
 		return nil, err
 	}
 
-	outputQueue, err := middleware.CreateQueueMiddleware(
-		config.OutputQueue,
+	outputQueue, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		config.OutputQueue,
 	)
 
 	if err != nil {
@@ -104,18 +102,18 @@ func newConvertedAmountFilter[T, S comparable](
 		eofRingQueuePrefix,
 	)
 
-	eofInput, err := middleware.CreateQueueMiddleware(
-		eofInputName,
+	eofInput, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		eofInputName,
 	)
 
 	if err != nil {
 		slog.Error("creating eof input", "err", err)
 	}
 
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		eofOutputName,
+	eofOutput, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		eofOutputName,
 	)
 
 	if err != nil {
@@ -129,7 +127,7 @@ func newConvertedAmountFilter[T, S comparable](
 		config.FilterAmount,
 		uint32(config.Id),
 		messagesMonitor,
-		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+		func(clientID int, msg *newmiddleware.Message, isCoordinator bool) error {
 			if isCoordinator {
 				slog.Info("ring callback called")
 				if err := outputQueue.Send(*msg); err != nil {

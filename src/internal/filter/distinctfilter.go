@@ -4,7 +4,6 @@ import (
 	"log/slog"
 
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -18,17 +17,17 @@ func newDistinctFilter[T comparable, S comparable](
 	keyFunc func(T) S,
 	shardCriteria func(T) string,
 ) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputQueue, err := middleware.CreateQueueMiddleware(config.InputQueue, connSettings)
+	inputQueue, err := newmiddleware.NewQueueMiddleware(connSettings, config.InputQueue)
 
 	if err != nil {
 		return nil, err
 	}
 
-	outputQueues := make([]middleware.Middleware, len(config.OutputQueues))
+	outputQueues := make([]newmiddleware.Middleware, len(config.OutputQueues))
 	for i, routingKey := range config.OutputQueues {
-		outputQueue, err := middleware.CreateQueueMiddleware(routingKey, connSettings)
+		outputQueue, err := newmiddleware.NewQueueMiddleware(connSettings, routingKey)
 		if err != nil {
 			return nil, err
 		}

@@ -8,7 +8,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -27,13 +26,13 @@ import (
 // puede emitir un EOF downstream con el TotalMessages correcto.
 type DateRangeSplitter struct {
 	id            uint32
-	inputExchange middleware.Middleware
+	inputExchange newmiddleware.Middleware
 
 	// Por output queue:
-	outputQueues    []middleware.Middleware
+	outputQueues    []newmiddleware.Middleware
 	monitors        []msgmonitor.MessageMonitor
 	eofHandlers     []eofring.EofRingAlgorithm
-	outputQueueEofs []middleware.Middleware
+	outputQueueEofs []newmiddleware.Middleware
 
 	queryID uint8
 
@@ -42,21 +41,20 @@ type DateRangeSplitter struct {
 }
 
 func CreateDateAndRangeSplitter(config FilterConfig) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := middleware.CreateExchangeMiddleware(
+	inputExchange, err := newmiddleware.NewFanoutMiddleware(
+		connSettings,
 		config.InputExchange,
 		config.InputQueue,
-		config.InputRoutingKeys,
-		connSettings,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	outputQueues := make([]middleware.Middleware, 0, len(config.OutputQueues))
+	outputQueues := make([]newmiddleware.Middleware, 0, len(config.OutputQueues))
 	for _, q := range config.OutputQueues {
-		m, err := middleware.CreateQueueMiddleware(q, connSettings)
+		m, err := newmiddleware.NewQueueMiddleware(connSettings, q)
 		if err != nil {
 			return nil, err
 		}
@@ -70,20 +68,20 @@ func CreateDateAndRangeSplitter(config FilterConfig) (worker.Worker, error) {
 
 	// Por cada output queue: un ring (input/output queues), un monitor, un eof handler.
 	monitors := make([]msgmonitor.MessageMonitor, 0, len(outputQueues))
-	eofInputs := make([]middleware.Middleware, 0, len(outputQueues))
-	eofOutputs := make([]middleware.Middleware, 0, len(outputQueues))
+	eofInputs := make([]newmiddleware.Middleware, 0, len(outputQueues))
+	eofOutputs := make([]newmiddleware.Middleware, 0, len(outputQueues))
 
 	for idx := range outputQueues {
-		eofIn, err := middleware.CreateQueueMiddleware(
-			"DATE_RANGE_SPLITTER_"+strconv.Itoa(idx)+"_"+strconv.Itoa(config.Id),
+		eofIn, err := newmiddleware.NewQueueMiddleware(
 			connSettings,
+			"DATE_RANGE_SPLITTER_"+strconv.Itoa(idx)+"_"+strconv.Itoa(config.Id),
 		)
 		if err != nil {
 			return nil, err
 		}
-		eofOut, err := middleware.CreateQueueMiddleware(
-			"DATE_RANGE_SPLITTER_"+strconv.Itoa(idx)+"_"+strconv.Itoa(next),
+		eofOut, err := newmiddleware.NewQueueMiddleware(
 			connSettings,
+			"DATE_RANGE_SPLITTER_"+strconv.Itoa(idx)+"_"+strconv.Itoa(next),
 		)
 		if err != nil {
 			eofIn.Close()
@@ -117,7 +115,7 @@ func CreateDateAndRangeSplitter(config FilterConfig) (worker.Worker, error) {
 			config.FilterAmount,
 			uint32(config.Id),
 			monitors[idx],
-			func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+			func(clientID int, msg *newmiddleware.Message, isCoordinator bool) error {
 				if !isCoordinator {
 					return nil
 				}

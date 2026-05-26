@@ -1,6 +1,6 @@
 package fetcher
 
-import "tp-grupal-distribuidos/internal/common/middleware"
+import "tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 
 type FetcherConfig struct {
 	MomHost          string
@@ -14,8 +14,8 @@ type FetcherConfig struct {
 }
 
 type Fetcher struct {
-	inputQueue       middleware.Middleware
-	outputQueues     []middleware.Middleware
+	inputQueue       newmiddleware.Middleware
+	outputQueues     []newmiddleware.Middleware
 	queryId          uint8
 	quote            string
 	conversionsByDay map[string]map[string]float32

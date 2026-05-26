@@ -4,11 +4,11 @@ import (
 	"log/slog"
 
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 )
 
 func newJoin[L, R, O any](
-	output middleware.Middleware,
+	output newmiddleware.Middleware,
 	leftKey func(L) string,
 	rightKey func(R) string,
 	combine func(L, R) O,

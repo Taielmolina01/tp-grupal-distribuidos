@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
@@ -25,7 +24,7 @@ const (
 )
 
 func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
-	connSettings := middleware.ConnSettings{
+	connSettings := newmiddleware.ConnSettings{
 		Hostname: config.MomHost,
 		Port:     config.MomPort,
 	}
@@ -38,22 +37,21 @@ func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 		"config.inputroutingkeys",
 		config.InputRoutingKeys,
 	)
-	inputQueue, err := middleware.CreateExchangeMiddleware(
+	inputQueue, err := newmiddleware.NewFanoutMiddleware(
+		connSettings,
 		config.InputExchange,
 		config.InputQueue,
-		config.InputRoutingKeys,
-		connSettings,
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	outputQueues := make([]middleware.Middleware, len(config.OutputQueues))
+	outputQueues := make([]newmiddleware.Middleware, len(config.OutputQueues))
 	for i, queueName := range config.OutputQueues {
-		outputQueue, err := middleware.CreateQueueMiddleware(
-			queueName,
+		outputQueue, err := newmiddleware.NewQueueMiddleware(
 			connSettings,
+			queueName,
 		)
 
 		if err != nil {

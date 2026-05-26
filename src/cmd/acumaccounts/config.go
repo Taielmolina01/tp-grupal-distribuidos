@@ -29,9 +29,9 @@ func loadConfig() (acumaccounts.AcumAccountsConfig, error) {
 		return acumaccounts.AcumAccountsConfig{}, errors.New("OUTPUT_AMOUNT environment variable is required and must be a number")
 	}
 
-	outputPrefix := os.Getenv("OUTPUT_MIDDLEWARE_PREFIX")
-	if outputPrefix == "" {
-		return acumaccounts.AcumAccountsConfig{}, errors.New("OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
+	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
+	if outputExchange == "" {
+		return acumaccounts.AcumAccountsConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
 	}
 
 	expectedEOFs, err := strconv.Atoi(os.Getenv("EXPECTED_EOFS"))
@@ -39,9 +39,9 @@ func loadConfig() (acumaccounts.AcumAccountsConfig, error) {
 		return acumaccounts.AcumAccountsConfig{}, errors.New("EXPECTED_EOFS environment variable is required and must be a number")
 	}
 
-	inputPrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
-	if inputPrefix == "" {
-		return acumaccounts.AcumAccountsConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
+	inputExchange := os.Getenv("INPUT_EXCHANGE")
+	if inputExchange == "" {
+		return acumaccounts.AcumAccountsConfig{}, errors.New("INPUT_EXCHANGE environment variable is required")
 	}
 
 	queryID, err := strconv.Atoi(os.Getenv("QUERY_ID"))
@@ -55,14 +55,14 @@ func loadConfig() (acumaccounts.AcumAccountsConfig, error) {
 	}
 
 	return acumaccounts.AcumAccountsConfig{
-		Id:                     id,
-		OutputMiddlewareAmount: outputAmount,
-		OutputMiddlewarePrefix: outputPrefix,
-		MomHost:                momHost,
-		MomPort:                momPort,
-		ExpectedEOFs:           expectedEOFs,
-		InputMiddlewarePrefix:  inputPrefix,
-		QueryID:                queryID,
-		RequiredAmt:            requiredAmt,
+		Id:             id,
+		OutputAmount:   outputAmount,
+		OutputExchange: outputExchange,
+		MomHost:        momHost,
+		MomPort:        momPort,
+		ExpectedEOFs:   expectedEOFs,
+		InputExchange:  inputExchange,
+		QueryID:        queryID,
+		RequiredAmt:    requiredAmt,
 	}, nil
 }

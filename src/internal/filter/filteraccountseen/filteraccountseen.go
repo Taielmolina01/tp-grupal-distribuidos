@@ -20,13 +20,13 @@ type FilterAccountSeenConfig struct {
 
 	ExpectedEOFs int
 
-	OutputMiddleware string
+	OutputQueue string
 
 	MomHost string
 	MomPort int
 
-	InputMiddlewarePrefix string
-	QueryID               int
+	InputExchange string
+	QueryID       int
 }
 
 type FilterAccountSeen struct {
@@ -68,15 +68,15 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (_ *FilterAccountSeen,
 		}
 	}()
 
-	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	inputQueue := config.InputExchange + "_" + strconv.Itoa(config.Id)
 	shardKey := fmt.Sprintf("shard-%d", config.Id)
 
-	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
+	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputExchange, inputQueue, shardKey)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewQueueMiddleware(connSettings, config.OutputMiddleware)
+	outputMiddleware, err = newmiddleware.NewQueueMiddleware(connSettings, config.OutputQueue)
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}

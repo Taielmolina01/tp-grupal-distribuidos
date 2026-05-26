@@ -22,16 +22,16 @@ type FilterAndSplitterConfig struct {
 	StartDate time.Time
 	EndDate   time.Time
 
-	OutputMiddlewareAmount int
-	OutputMiddlewarePrefix string
+	OutputAmount   int
+	OutputExchange string
 
-	FilterAndSpliterAmount int
+	ReplicasAmount int
 
 	MomHost string
 	MomPort int
 
-	InputMiddlewareExchangeName string
-	InputMiddlewareQueueName    string
+	InputExchange string
+	InputQueue    string
 
 	QueryID int
 }
@@ -55,14 +55,14 @@ type FilterAndSplitter struct {
 }
 
 func getRingNextIndex(config FilterAndSplitterConfig) int {
-	if config.Id == config.FilterAndSpliterAmount-1 {
+	if config.Id == config.ReplicasAmount-1 {
 		return 0
 	}
 	return config.Id + 1
 }
 
 func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter, err error) {
-	const ring_prefix = "FILTER_AND_SPLIITER_EOF_"
+	const ring_prefix = "q4_splitter_eof_"
 
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
@@ -92,12 +92,12 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		}
 	}()
 
-	inputMiddleware, err = newmiddleware.NewFanoutMiddleware(connSettings, config.InputMiddlewareExchangeName, config.InputMiddlewareQueueName)
+	inputMiddleware, err = newmiddleware.NewFanoutMiddleware(connSettings, config.InputExchange, config.InputQueue)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
+	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputExchange, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
@@ -115,7 +115,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 	eofHandler := eofring.CreateEofRingAlgorithm(
 		eofInput,
 		eofOutput,
-		config.FilterAndSpliterAmount,
+		config.ReplicasAmount,
 		uint32(config.Id),
 		handlerMessages,
 		func(clientID int, msg *newmiddleware.Message, isCoordinator bool) error {
@@ -135,7 +135,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		id:               config.Id,
 		startDate:        config.StartDate,
 		endDate:          config.EndDate,
-		hasher:           shard.New(config.OutputMiddlewareAmount),
+		hasher:           shard.New(config.OutputAmount),
 		queryID:          config.QueryID,
 		handlerMessages:  handlerMessages,
 		inputMiddleware:  inputMiddleware,

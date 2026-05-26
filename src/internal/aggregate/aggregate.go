@@ -8,7 +8,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -32,9 +31,9 @@ type partial struct {
 
 type AvgAggregator struct {
 	id              int
-	inputQueue      middleware.Middleware
-	outputQueues    []middleware.Middleware
-	outputQueueEof  middleware.Middleware
+	inputQueue      newmiddleware.Middleware
+	outputQueues    []newmiddleware.Middleware
+	outputQueueEof  newmiddleware.Middleware
 	eofHandler      eofring.EofRingAlgorithm
 	handlerMessages msgmonitor.MessageMonitor
 	queryID         uint8
@@ -44,16 +43,16 @@ type AvgAggregator struct {
 }
 
 func CreateAvgAggregator(config AggregateConfig) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputQueue, err := middleware.CreateQueueMiddleware(config.InputQueue, connSettings)
+	inputQueue, err := newmiddleware.NewQueueMiddleware(connSettings, config.InputQueue)
 	if err != nil {
 		return nil, err
 	}
 
-	outputQueues := make([]middleware.Middleware, 0, len(config.OutputQueues))
+	outputQueues := make([]newmiddleware.Middleware, 0, len(config.OutputQueues))
 	for _, q := range config.OutputQueues {
-		m, err := middleware.CreateQueueMiddleware(q, connSettings)
+		m, err := newmiddleware.NewQueueMiddleware(connSettings, q)
 		if err != nil {
 			return nil, err
 		}
@@ -65,17 +64,17 @@ func CreateAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 		next = 0
 	}
 
-	eofInput, err := middleware.CreateQueueMiddleware(
-		"AGGREGATE_"+strconv.Itoa(config.Id),
+	eofInput, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		"AGGREGATE_"+strconv.Itoa(config.Id),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		"AGGREGATE_"+strconv.Itoa(next),
+	eofOutput, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		"AGGREGATE_"+strconv.Itoa(next),
 	)
 	if err != nil {
 		eofInput.Close()
@@ -100,7 +99,7 @@ func CreateAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 		config.AggregateAmount,
 		uint32(config.Id),
 		handlerMessages,
-		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+		func(clientID int, msg *newmiddleware.Message, isCoordinator bool) error {
 			agg.lock.Lock()
 			byMethod := agg.acumuladores[clientID]
 			delete(agg.acumuladores, clientID)

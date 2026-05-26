@@ -8,7 +8,6 @@ import (
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -18,9 +17,9 @@ type TwoInputAdapter[L, R, O any] struct {
 	joinAmount        int
 	queryID           uint8
 	join              *Join[L, R, O]
-	leftInput         middleware.Middleware
-	rightInput        middleware.Middleware
-	output            middleware.Middleware
+	leftInput         newmiddleware.Middleware
+	rightInput        newmiddleware.Middleware
+	output            newmiddleware.Middleware
 	leftEofCount      map[int]int
 	rightEofCount     map[int]int
 	leftEofsExpected  int
@@ -36,14 +35,14 @@ func newTwoInputJoin[L, R, O any](
 	combine func(L, R) O,
 	leftCombine func(L, L) L,
 ) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	leftInput, err := middleware.CreateQueueMiddleware(config.LeftInputQueue, connSettings)
+	leftInput, err := newmiddleware.NewQueueMiddleware(connSettings, config.LeftInputQueue)
 	if err != nil {
 		return nil, err
 	}
 
-	rightInput, err := middleware.CreateQueueMiddleware(config.RightInputQueue, connSettings)
+	rightInput, err := newmiddleware.NewQueueMiddleware(connSettings, config.RightInputQueue)
 	if err != nil {
 		if err := leftInput.Close(); err != nil {
 			slog.Error("while closing left input", "err", err)
@@ -51,7 +50,7 @@ func newTwoInputJoin[L, R, O any](
 		return nil, err
 	}
 
-	output, err := middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
+	output, err := newmiddleware.NewQueueMiddleware(connSettings, config.OutputQueue)
 	if err != nil {
 		if err := leftInput.Close(); err != nil {
 			slog.Error("while closing left input", "err", err)
@@ -174,7 +173,7 @@ func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
 
 type SingleInputAdapter[T, O any] struct {
 	join   *Join[T, T, O]
-	input  middleware.Middleware
+	input  newmiddleware.Middleware
 	isLeft func(T) bool
 }
 
@@ -185,14 +184,14 @@ func newSingleInputJoin[T, O any](
 	rightKey func(T) string,
 	combine func(T, T) O,
 ) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	input, err := middleware.CreateQueueMiddleware(config.LeftInputQueue, connSettings)
+	input, err := newmiddleware.NewQueueMiddleware(connSettings, config.LeftInputQueue)
 	if err != nil {
 		return nil, err
 	}
 
-	output, err := middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
+	output, err := newmiddleware.NewQueueMiddleware(connSettings, config.OutputQueue)
 	if err != nil {
 		if err := input.Close(); err != nil {
 			slog.Error("while closing input", "err", err)

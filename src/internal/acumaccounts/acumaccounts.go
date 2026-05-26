@@ -18,14 +18,14 @@ import (
 type AcumAccountsConfig struct {
 	Id int
 
-	OutputMiddlewareAmount int
-	OutputMiddlewarePrefix string
+	OutputAmount   int
+	OutputExchange string
 
 	MomHost string
 	MomPort int
 
-	ExpectedEOFs          int
-	InputMiddlewarePrefix string
+	ExpectedEOFs  int
+	InputExchange string
 
 	QueryID int
 
@@ -71,22 +71,22 @@ func NewAcumAccounts(config AcumAccountsConfig) (_ *AcumAccounts, err error) {
 		}
 	}()
 
-	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	inputQueue := config.InputExchange + "_" + strconv.Itoa(config.Id)
 	shardKey := fmt.Sprintf("shard-%d", config.Id)
 
-	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
+	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputExchange, inputQueue, shardKey)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
+	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputExchange, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
 	return &AcumAccounts{
 		id:               config.Id,
-		hasher:           shard.New(config.OutputMiddlewareAmount),
+		hasher:           shard.New(config.OutputAmount),
 		expectedEOFs:     config.ExpectedEOFs,
 		inputMiddleware:  inputMiddleware,
 		outputMiddleware: outputMiddleware,

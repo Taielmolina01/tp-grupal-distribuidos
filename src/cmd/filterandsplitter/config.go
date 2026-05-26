@@ -29,9 +29,9 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	filterAmount, err := strconv.Atoi(os.Getenv("FILTER_AMOUNT"))
+	replicasAmount, err := strconv.Atoi(os.Getenv("REPLICAS_AMOUNT"))
 	if err != nil {
-		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("FILTER_AMOUNT environment variable is required and must be a number")
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("REPLICAS_AMOUNT environment variable is required and must be a number")
 	}
 
 	outputAmount, err := strconv.Atoi(os.Getenv("OUTPUT_AMOUNT"))
@@ -39,9 +39,9 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("OUTPUT_AMOUNT environment variable is required and must be a number")
 	}
 
-	outputPrefix := os.Getenv("OUTPUT_MIDDLEWARE_PREFIX")
-	if outputPrefix == "" {
-		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
+	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
+	if outputExchange == "" {
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
 	}
 
 	queryID, err := strconv.Atoi(os.Getenv("QUERY_ID"))
@@ -55,17 +55,17 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 	}
 
 	return filterandsplitter.FilterAndSplitterConfig{
-		Id:                          id,
-		StartDate:                   startDate,
-		EndDate:                     endDate,
-		OutputMiddlewareAmount:      outputAmount,
-		OutputMiddlewarePrefix:      outputPrefix,
-		FilterAndSpliterAmount:      filterAmount,
-		MomHost:                     momHost,
-		MomPort:                     momPort,
-		InputMiddlewareExchangeName: os.Getenv("INPUT_EXCHANGE"),
-		InputMiddlewareQueueName:    os.Getenv("INPUT_QUEUE"),
-		QueryID:                     queryID,
+		Id:             id,
+		StartDate:      startDate,
+		EndDate:        endDate,
+		OutputAmount:   outputAmount,
+		OutputExchange: outputExchange,
+		ReplicasAmount: replicasAmount,
+		MomHost:        momHost,
+		MomPort:        momPort,
+		InputExchange:  os.Getenv("INPUT_EXCHANGE"),
+		InputQueue:     os.Getenv("INPUT_QUEUE"),
+		QueryID:        queryID,
 	}, nil
 }
 

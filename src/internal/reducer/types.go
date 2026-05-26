@@ -2,7 +2,7 @@ package reducer
 
 import (
 	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 )
 
@@ -30,14 +30,14 @@ type ReducerConfig struct {
 
 type Reducer[T comparable] struct {
 	id                int
-	inputExchange     middleware.Middleware
-	outputQueues      []middleware.Middleware
+	inputExchange     newmiddleware.Middleware
+	outputQueues      []newmiddleware.Middleware
 	reducerMonitor    ReducerMonitor[T]
 	reducerFunction   func(T, T) T
 	keyFunc           func(T) string
 	eofHandler        eofring.EofRingAlgorithm
 	handlerMessages   msgmonitor.MessageMonitor
-	outputQueueEof    middleware.Middleware
+	outputQueueEof    newmiddleware.Middleware
 	queryId           uint8
 	inputEofsExpected int
 	inputEofCount     map[int]int
@@ -47,8 +47,8 @@ type Reducer[T comparable] struct {
 type CountReducer struct {
 	countByClient     map[int]uint32
 	eofsByClient      map[int]uint32
-	inputQueue        middleware.Middleware
-	outputQueue       middleware.Middleware
+	inputQueue        newmiddleware.Middleware
+	outputQueue       newmiddleware.Middleware
 	queryId           uint8
 	inputEofsExpected uint32
 }

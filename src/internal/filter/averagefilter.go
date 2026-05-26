@@ -7,7 +7,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/queryresult"
@@ -20,20 +19,20 @@ func newAverageFilter(
 	compareFunc func(float32, float32) bool,
 	queryID uint8,
 ) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputTransfersQueue, err := middleware.CreateQueueMiddleware(config.InputQueue, connSettings)
+	inputTransfersQueue, err := newmiddleware.NewQueueMiddleware(connSettings, config.InputQueue)
 	if err != nil {
 		return nil, err
 	}
 
-	inputAvgsQueue, err := middleware.CreateQueueMiddleware(config.AvgInputQueue, connSettings)
+	inputAvgsQueue, err := newmiddleware.NewQueueMiddleware(connSettings, config.AvgInputQueue)
 	if err != nil {
 		inputTransfersQueue.Close()
 		return nil, err
 	}
 
-	outputQueue, err := middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
+	outputQueue, err := newmiddleware.NewQueueMiddleware(connSettings, config.OutputQueue)
 	if err != nil {
 		inputTransfersQueue.Close()
 		inputAvgsQueue.Close()
@@ -45,17 +44,17 @@ func newAverageFilter(
 		next = 0
 	}
 
-	transfersEofIn, err := middleware.CreateQueueMiddleware(
-		"AVG_FILTER_T_"+strconv.Itoa(config.Id),
+	transfersEofIn, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		"AVG_FILTER_T_"+strconv.Itoa(config.Id),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	transfersEofOut, err := middleware.CreateQueueMiddleware(
-		"AVG_FILTER_T_"+strconv.Itoa(next),
+	transfersEofOut, err := newmiddleware.NewQueueMiddleware(
 		connSettings,
+		"AVG_FILTER_T_"+strconv.Itoa(next),
 	)
 	if err != nil {
 		transfersEofIn.Close()
@@ -88,7 +87,7 @@ func newAverageFilter(
 		config.FilterAmount,
 		uint32(config.Id),
 		transfersMonitor,
-		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+		func(clientID int, msg *newmiddleware.Message, isCoordinator bool) error {
 			af.lock.Lock()
 			delete(af.state, clientID)
 			af.lock.Unlock()

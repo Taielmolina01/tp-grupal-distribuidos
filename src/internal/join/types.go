@@ -3,7 +3,7 @@ package join
 import (
 	"sync"
 
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 )
 
 type JoinType string
@@ -27,7 +27,7 @@ type JoinConfig struct {
 }
 
 type Join[L, R, O any] struct {
-	output      middleware.Middleware
+	output      newmiddleware.Middleware
 	leftBuffer  map[int]map[string]L //{clientID : {key : data}}
 	rightBuffer map[int]map[string]R //{clientID : {key : data}}
 	leftKey     func(L) string

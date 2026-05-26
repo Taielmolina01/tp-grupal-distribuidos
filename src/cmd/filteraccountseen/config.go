@@ -29,14 +29,14 @@ func loadConfig() (filteraccountseen.FilterAccountSeenConfig, error) {
 		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("EXPECTED_EOFS environment variable is required and must be a number")
 	}
 
-	outputMiddleware := os.Getenv("OUTPUT_MIDDLEWARE")
-	if outputMiddleware == "" {
-		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("OUTPUT_MIDDLEWARE environment variable is required")
+	outputQueue := os.Getenv("OUTPUT_QUEUE")
+	if outputQueue == "" {
+		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("OUTPUT_QUEUE environment variable is required")
 	}
 
-	inputPrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
-	if inputPrefix == "" {
-		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
+	inputExchange := os.Getenv("INPUT_EXCHANGE")
+	if inputExchange == "" {
+		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("INPUT_EXCHANGE environment variable is required")
 	}
 
 	queryID, err := strconv.Atoi(os.Getenv("QUERY_ID"))
@@ -45,12 +45,12 @@ func loadConfig() (filteraccountseen.FilterAccountSeenConfig, error) {
 	}
 
 	return filteraccountseen.FilterAccountSeenConfig{
-		Id:                    id,
-		ExpectedEOFs:          expectedEOFs,
-		OutputMiddleware:      outputMiddleware,
-		MomHost:               momHost,
-		MomPort:               momPort,
-		InputMiddlewarePrefix: inputPrefix,
-		QueryID:               queryID,
+		Id:            id,
+		ExpectedEOFs:  expectedEOFs,
+		OutputQueue:   outputQueue,
+		MomHost:       momHost,
+		MomPort:       momPort,
+		InputExchange: inputExchange,
+		QueryID:       queryID,
 	}, nil
 }
