@@ -1,0 +1,18 @@
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 34-35,47,68,74,97,102,155,179,181
+scripts/compose-gen/generator.go
+  h_3c9b41718876fe 319-320
+src/cmd/filterandsplitter/config.go
+  h_3c9b41718876fe 66-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "467cec35b5f485921dbb4573649a16b839df3217",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
