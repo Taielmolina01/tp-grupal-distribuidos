@@ -1,0 +1,24 @@
+docker-compose.yaml
+  s_9ece0cddabbd76::t_fd858b98b03c48 79,194,262,308-312,341-343,532,598,661
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "03dcc9e7e2ab277b687e1f4ed486e64b37ef79e0",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9ece0cddabbd76": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "32e0cff8-5ca8-4b56-8f56-be88ebacaf63",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
