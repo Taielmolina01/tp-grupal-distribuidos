@@ -1,0 +1,89 @@
+src/internal/filter/daterangesplitter.go
+  s_9ece0cddabbd76::t_ec1b99bac623ba 4,223
+src/internal/filter/filter.go
+  s_9ece0cddabbd76::t_ec1b99bac623ba 4,191
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_9ece0cddabbd76::t_dcc6588bd2b745 4
+  s_9ece0cddabbd76::t_5ccf610277281f 103-104
+src/internal/acumaccounts/acumaccounts.go
+  s_9ece0cddabbd76::t_9234fb18a3707e 4
+  s_9ece0cddabbd76::t_d9d821ba04c907 108-109
+src/cmd/filteraccountseen/main.go
+  s_9ece0cddabbd76::t_e11768a41cc99e 4,7-8
+  s_9ece0cddabbd76::t_a9cb9bd6395684 26-29
+src/internal/filter/convertedamountfilter.go
+  s_9ece0cddabbd76::t_ec1b99bac623ba 4,377
+src/internal/reducer/count.go
+  s_9ece0cddabbd76::t_ec1b99bac623ba 4,115
+src/cmd/joinaccounts/main.go
+  s_9ece0cddabbd76::t_f0056018f0db5f 4,7-8
+  s_9ece0cddabbd76::t_43f22627b0fb4f 26-29
+src/internal/filter/countandiflter.go
+  s_9ece0cddabbd76::t_ec1b99bac623ba 4,80
+src/internal/sum/sum.go
+  s_9ece0cddabbd76::t_ec1b99bac623ba 4,203
+src/internal/reducer/reducer.go
+  s_9ece0cddabbd76::t_ec1b99bac623ba 4,209
+src/cmd/fetcher/main.go
+  s_9ece0cddabbd76::t_7601bd53699051 4,7-9
+  s_9ece0cddabbd76::t_e1d8839bf9dbf2 26-29
+src/internal/client/client.go
+  s_9ece0cddabbd76::t_fae8bd4563d699 5
+  s_9ece0cddabbd76::t_56443fc41179a5 76-82
+  s_9ece0cddabbd76::t_e95b7ebedb9ba0 74-75
+src/internal/filter/averagefilter.go
+  s_9ece0cddabbd76::t_ec1b99bac623ba 4,291
+src/cmd/acumaccounts/main.go
+  s_9ece0cddabbd76::t_e08ad1a77212a3 4,7-8
+  s_9ece0cddabbd76::t_4813b76170be48 26-29
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_9ece0cddabbd76::t_a5d69afd4d4df1 166-167
+  s_9ece0cddabbd76::t_7b98f5b5ff147e 4
+src/cmd/filter/main.go
+  s_9ece0cddabbd76::t_2c5999a053f3cd 4,8-9
+  s_9ece0cddabbd76::t_73da4d0c15d19c 49-52
+src/internal/fetcher/fetcher.go
+  s_9ece0cddabbd76::t_ec1b99bac623ba 4,164
+src/cmd/client/main.go
+  s_9ece0cddabbd76::t_43b531454a2ab6 100
+  s_9ece0cddabbd76::t_11ffe054f74cbd 4,8,10
+  s_9ece0cddabbd76::t_28e44354edf248 96-99
+src/internal/joinaccounts/joinaccounts.go
+  s_9ece0cddabbd76::t_ba1d7796fc4992 4
+  s_9ece0cddabbd76::t_41b9c9f879984b 101-102
+src/internal/filter/distinctfilter.go
+  s_9ece0cddabbd76::t_ec1b99bac623ba 4,95
+src/cmd/filterandsplitter/main.go
+  s_9ece0cddabbd76::t_c15cebc7a883c9 26-29
+  s_9ece0cddabbd76::t_8e19b19572e065 4,7-8
+src/internal/join/adapter.go
+  s_9ece0cddabbd76::t_ec1b99bac623ba 4,232,247
+src/internal/common/worker/worker.go
+  s_9ece0cddabbd76::t_aa0bbc584845c6 3-4,9
+src/internal/aggregate/aggregate.go
+  s_9ece0cddabbd76::t_ec1b99bac623ba 4,212
+src/cmd/join/main.go
+  s_9ece0cddabbd76::t_28dc0f669f56eb 4,8-9
+  s_9ece0cddabbd76::t_16bc5b2bfbbaea 44-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "4a835cffd301a86244ed104360cb3724f712bf54",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9ece0cddabbd76": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "32e0cff8-5ca8-4b56-8f56-be88ebacaf63",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
