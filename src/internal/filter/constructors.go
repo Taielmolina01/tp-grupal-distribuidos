@@ -30,7 +30,7 @@ func CreateAmountFilter(config FilterConfig) (worker.Worker, error) {
 	return newFilter(
 		config,
 		func(t transfer.Transfer) bool {
-			return t.AmountPaid > config.Amount
+			return t.AmountPaid < config.Amount
 		},
 		func(t transfer.Transfer) queryresult.Query1Result {
 			return queryresult.Query1Result{

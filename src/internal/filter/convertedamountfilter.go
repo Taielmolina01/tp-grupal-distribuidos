@@ -264,7 +264,6 @@ func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, 
 		filter.saveTransfersInFile(payload, result.ClientID)
 	} else {
 		conversion := filter.conversionsByDay[key][datasetToFrank[filter.rightsecondKeyFunc(payload)]]
-		slog.Info("before call comaprefunc", "transfer", payload, "s", conversion)
 		if filter.compareFunc(payload, filter.conversionFunc(
 			payload,
 			conversion,
@@ -318,7 +317,6 @@ func (filter *ConvertedAmountFilter[T, S]) CheckTransfersWithoutConversion(s S) 
 				slog.Error("while parsing line", "err", err)
 				continue
 			}
-			slog.Info("before call comparefunc", "transfer", transfer, "s", s)
 			if filter.compareFunc(transfer, s) {
 				slog.Info("sending payload to output queue", "client_id", clientID, "query_id", filter.queryId, "payload", transfer)
 				msgOutput, err := inner.SerializeData(inner.DataMsg[T]{

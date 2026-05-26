@@ -119,7 +119,7 @@ func loadAmountVenv(config *filter.FilterConfig) error {
 	amountStr := os.Getenv("AMOUNT")
 	amount, err := strconv.ParseFloat(amountStr, 32)
 	if err != nil {
-		return errors.New("FILTER_AMOUNT environment variable is required if FILTER_TYPE is AMOUNT")
+		return errors.New("AMOUNT environment variable is required if FILTER_TYPE is AMOUNT or CONVERTED_AMOUNT_FILTER")
 	}
 	config.Amount = float32(amount)
 	return nil
@@ -200,6 +200,9 @@ func loadFilterTypeConfig(config *filter.FilterConfig) error {
 			return err
 		}
 	case filter.AMOUNT:
+		if err := loadAmountVenv(config); err != nil {
+			return err
+		}
 	case filter.CONVERTED_AMOUNT_FILTER:
 		if err := loadAmountVenv(config); err != nil {
 			return err

@@ -98,8 +98,6 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 
 	transfer := result.Payload
 
-	slog.Info("transfer reached", "payload", transfer)
-
 	today := transfer.Timestamp.Format(DATE_LAYOUT)
 	if _, ok := fetcher.conversionsByDay[today]; !ok {
 		fetcher.conversionsByDay[today] = make(map[string]float32)
