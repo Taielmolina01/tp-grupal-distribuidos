@@ -14,16 +14,17 @@ const (
 )
 
 type JoinConfig struct {
-	Id                int
-	Amount            int
-	MomHost           string
-	MomPort           int
-	LeftInputQueue    string
-	RightInputQueue   string
-	OutputQueue       string
-	QueryID           uint8
-	LeftEofsExpected  int
-	RightEofsExpected int
+	Id                 int
+	Amount             int
+	MomHost            string
+	MomPort            int
+	LeftInputQueue     string
+	RightInputQueue    string
+	RightInputExchange string
+	OutputQueue        string
+	QueryID            uint8
+	LeftEofsExpected   int
+	RightEofsExpected  int
 }
 
 type Join[L, R, O any] struct {

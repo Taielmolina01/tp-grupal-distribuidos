@@ -84,7 +84,6 @@ func writeRabbitmq(b *strings.Builder) {
 }
 
 func writeGateway(b *strings.Builder, cfg *Config) {
-	accountQueues := queues("accounts", cfg.FilterBankIdAlreadySeen)
 	queryEofs := fmt.Sprintf("1:1,2:%d,3:1,4:%d,5:1", cfg.JoinQ2, cfg.FilterAccountSeenQ4)
 
 	b.WriteString("  gateway:\n")
@@ -94,7 +93,8 @@ func writeGateway(b *strings.Builder, cfg *Config) {
 	b.WriteString("    container_name: gateway\n")
 	rabbitmqDepends(b)
 	b.WriteString("    environment:\n")
-	fmt.Fprintf(b, "      - ACCOUNT_QUEUES=%s\n", accountQueues)
+	b.WriteString("      - ACCOUNTS_EXCHANGE=accounts_exchange\n")
+	fmt.Fprintf(b, "      - ACCOUNTS_SHARDS=%d\n", cfg.FilterBankIdAlreadySeen)
 	b.WriteString("      - TRANSFERS_EXCHANGE=transfers_exchange\n")
 	b.WriteString("      - TRANSFERS_ROUTING_KEYS=TRANSFERS_Q5_KEY,TRANSFERS_Q1234_KEY\n")
 	b.WriteString("      - RESULTS_QUEUE=results_queue\n")
@@ -253,23 +253,20 @@ func writeReducerQ2(b *strings.Builder, cfg *Config) {
 }
 
 func writeFilterBankIdAlreadySeen(b *strings.Builder, cfg *Config) {
-	outputQueues := queues("join_q2_accounts_q", cfg.JoinQ2)
-
 	for i := range cfg.FilterBankIdAlreadySeen {
 		fmt.Fprintf(b, "  filter_bank_id_already_seen_%d:\n", i)
 		b.WriteString("    build:\n")
 		b.WriteString("      context: ./src/\n")
-		b.WriteString("      dockerfile: cmd/filter/Dockerfile\n")
+		b.WriteString("      dockerfile: cmd/filterbankidseen/Dockerfile\n")
 		fmt.Fprintf(b, "    container_name: filter_bank_id_already_seen_%d\n", i)
 		rabbitmqDepends(b)
 		b.WriteString("    environment:\n")
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
 		fmt.Fprintf(b, "      - ID=%d\n", i)
-		fmt.Fprintf(b, "      - INPUT_QUEUE=accounts_%d\n", i)
-		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterBankIdAlreadySeen)
-		b.WriteString("      - FILTER_TYPE=BANK_DISTINCT\n")
+		b.WriteString("      - INPUT_EXCHANGE=accounts_exchange\n")
+		b.WriteString("      - OUTPUT_EXCHANGE=q2_accounts\n")
+		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.JoinQ2)
 		b.WriteString("      - QUERY_ID=2\n")
 		b.WriteString("\n")
 	}
@@ -288,12 +285,12 @@ func writeJoinQ2(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - MOM_PORT=5672\n")
 		b.WriteString("      - JOIN_TYPE=transfer_account_by_bank\n")
 		fmt.Fprintf(b, "      - LEFT_INPUT_QUEUE=reduced_transfers_q2_%d\n", i)
-		fmt.Fprintf(b, "      - RIGHT_INPUT_QUEUE=join_q2_accounts_q_%d\n", i)
+		b.WriteString("      - RIGHT_INPUT_EXCHANGE=q2_accounts\n")
 		b.WriteString("      - OUTPUT_EXCHANGE=results_queue\n")
 		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
 		b.WriteString("      - OUTPUT_ROUTING_KEYS=falopa2\n")
 		fmt.Fprintf(b, "      - LEFT_EOFS_EXPECTED=%d\n", cfg.ReducerQ2)
-		fmt.Fprintf(b, "      - RIGHT_EOFS_EXPECTED=%d\n", cfg.Clients)
+		fmt.Fprintf(b, "      - RIGHT_EOFS_EXPECTED=%d\n", cfg.FilterBankIdAlreadySeen)
 		fmt.Fprintf(b, "      - JOIN_AMOUNT=%d\n", cfg.JoinQ2)
 		fmt.Fprintf(b, "      - ID=%d\n", i)
 		jsonFileLogging(b)

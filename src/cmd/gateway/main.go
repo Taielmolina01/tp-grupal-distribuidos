@@ -15,12 +15,19 @@ import (
 const QUEUES_SEPARATOR = ","
 
 func loadConfig() (gateway.GatewayConfig, error) {
-	accountQueues := os.Getenv("ACCOUNT_QUEUES")
-	if accountQueues == "" {
-		return gateway.GatewayConfig{}, errors.New("ACCOUNT_QUEUES environment variable is required")
+	accountsExchange := os.Getenv("ACCOUNTS_EXCHANGE")
+	if accountsExchange == "" {
+		return gateway.GatewayConfig{}, errors.New("ACCOUNTS_EXCHANGE environment variable is required")
 	}
 
-	accountQueueList := splitter.Split(accountQueues, QUEUES_SEPARATOR)
+	accountsShardsStr := os.Getenv("ACCOUNTS_SHARDS")
+	if accountsShardsStr == "" {
+		return gateway.GatewayConfig{}, errors.New("ACCOUNTS_SHARDS environment variable is required")
+	}
+	accountsShards, err := strconv.Atoi(accountsShardsStr)
+	if err != nil || accountsShards <= 0 {
+		return gateway.GatewayConfig{}, errors.New("ACCOUNTS_SHARDS must be a positive integer")
+	}
 
 	transfersExchange := os.Getenv("TRANSFERS_EXCHANGE")
 	if transfersExchange == "" {
@@ -93,7 +100,8 @@ func loadConfig() (gateway.GatewayConfig, error) {
 	}
 
 	return gateway.GatewayConfig{
-		AccountQueues:        accountQueueList,
+		AccountsExchange:     accountsExchange,
+		AccountsShards:       accountsShards,
 		TransfersExchange:    transfersExchange,
 		TransfersRoutingKeys: transfersRoutingKeys,
 		ResultsQueue:         resultsQueue,

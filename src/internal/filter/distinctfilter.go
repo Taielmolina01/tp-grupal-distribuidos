@@ -20,7 +20,6 @@ func newDistinctFilter[T comparable, S comparable](
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	inputQueue, err := newmiddleware.NewQueueMiddleware(connSettings, config.InputQueue)
-
 	if err != nil {
 		return nil, err
 	}
@@ -47,14 +46,14 @@ func newDistinctFilter[T comparable, S comparable](
 
 func (distinctfilter *DistinctFilter[T, S]) Run() {
 	slog.Info("Starting filter consumers", "filter_id", distinctfilter.id)
-	if err := distinctfilter.inputQueue.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
-		distinctfilter.handleMessage(msg, ack, nack)
+	if err := distinctfilter.inputQueue.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
+		distinctfilter.handleMessage(msg, ack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
 	}
 }
 
-func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg newmiddleware.Message, ack, nack func()) {
+func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg newmiddleware.Message, ack func()) {
 	defer ack()
 
 	deserializedMsg, err := inner.DeserializeData[T](&msg)

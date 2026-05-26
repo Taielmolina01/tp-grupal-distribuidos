@@ -22,7 +22,8 @@ import (
 )
 
 type GatewayConfig struct {
-	AccountQueues        []string
+	AccountsExchange     string
+	AccountsShards       int
 	TransfersExchange    string
 	TransfersRoutingKeys []string
 	ResultsQueue         string
@@ -36,7 +37,8 @@ type GatewayConfig struct {
 
 type Gateway struct {
 	registry          clientregistry.ClientRegistry
-	accountQueues     []newmiddleware.Middleware
+	accountsExchange  newmiddleware.Middleware
+	accountsShards    int
 	transfersExchange newmiddleware.Middleware
 	resultsQueue      newmiddleware.Middleware
 	listener          net.Listener
@@ -55,17 +57,10 @@ type Gateway struct {
 func NewGateway(config GatewayConfig) (*Gateway, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	accountQueues := make([]newmiddleware.Middleware, 0, len(config.AccountQueues))
-	for _, queue := range config.AccountQueues {
-		accountQueue, err := newmiddleware.NewQueueMiddleware(connSettings, queue)
-		if err != nil {
-			return nil, err
-		}
-		accountQueues = append(accountQueues, accountQueue)
+	accountsExchange, err := newmiddleware.NewShardedMiddleware(connSettings, config.AccountsExchange, "", "")
+	if err != nil {
+		return nil, err
 	}
-
-	// Las keys acá vienen x config xq son dinámicas
-	// Se requiere sharding
 
 	transfersExchange, err := newmiddleware.NewFanoutMiddleware(
 		connSettings,
@@ -73,45 +68,40 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		"",
 	)
 	if err != nil {
-		for _, q := range accountQueues {
-			if err := q.Close(); err != nil {
-				slog.Error("While closing accounts queue", "err", err)
-			}
+		if closeErr := accountsExchange.Close(); closeErr != nil {
+			slog.Error("While closing accounts exchange", "err", closeErr)
 		}
 		return nil, err
 	}
 
 	resultsQueue, err := newmiddleware.NewQueueMiddleware(connSettings, config.ResultsQueue)
 	if err != nil {
-		for _, q := range accountQueues {
-			if err := q.Close(); err != nil {
-				slog.Error("While closing accounts queue", "err", err)
-			}
+		if closeErr := accountsExchange.Close(); closeErr != nil {
+			slog.Error("While closing accounts exchange", "err", closeErr)
 		}
-		if err := transfersExchange.Close(); err != nil {
-			slog.Error("While closing transfers exchange", "err", err)
+		if closeErr := transfersExchange.Close(); closeErr != nil {
+			slog.Error("While closing transfers exchange", "err", closeErr)
 		}
 		return nil, err
 	}
 
 	listener, err := net.Listen("tcp", config.ServerHost+":"+config.ServerPort)
 	if err != nil {
-		for _, q := range accountQueues {
-			if err := q.Close(); err != nil {
-				slog.Error("While closing accounts queue", "err", err)
-			}
+		if closeErr := accountsExchange.Close(); closeErr != nil {
+			slog.Error("While closing accounts exchange", "err", closeErr)
 		}
-		if err := transfersExchange.Close(); err != nil {
-			slog.Error("While closing transfers exchange", "err", err)
+		if closeErr := transfersExchange.Close(); closeErr != nil {
+			slog.Error("While closing transfers exchange", "err", closeErr)
 		}
-		if err := resultsQueue.Close(); err != nil {
-			slog.Error("While closing results queue", "err", err)
+		if closeErr := resultsQueue.Close(); closeErr != nil {
+			slog.Error("While closing results queue", "err", closeErr)
 		}
 		return nil, err
 	}
 
 	gateway := &Gateway{
-		accountQueues:     accountQueues,
+		accountsExchange:  accountsExchange,
+		accountsShards:    config.AccountsShards,
 		transfersExchange: transfersExchange,
 		resultsQueue:      resultsQueue,
 		listener:          listener,
@@ -178,10 +168,8 @@ func (gateway *Gateway) Run() error {
 }
 
 func (gateway *Gateway) close() {
-	for _, q := range gateway.accountQueues {
-		if err := q.Close(); err != nil {
-			slog.Error("While closing account queue", "err", err)
-		}
+	if err := gateway.accountsExchange.Close(); err != nil {
+		slog.Error("While closing accounts exchange", "err", err)
 	}
 	if err := gateway.transfersExchange.Close(); err != nil {
 		slog.Error("While closing transfers exchange", "err", err)
@@ -510,10 +498,11 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) er
 		idx := shard.CalculateIndexForShard(
 			client.ID,
 			normalizer.NormalizeBankID(acc.BankId),
-			len(gateway.accountQueues),
+			gateway.accountsShards,
 		)
+		msg.RoutingKey = fmt.Sprintf("shard-%d", idx)
 
-		if err := gateway.accountQueues[idx].Send(*msg); err != nil {
+		if err := gateway.accountsExchange.Send(*msg); err != nil {
 			slog.Debug("While sending account to accounts exchange", "err", err)
 			return err
 		}
@@ -546,7 +535,22 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState) erro
 func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState) error {
 	total := gateway.takeCount(gateway.accountsCount, client.ID)
 	slog.Info("Received EOF message", "kind", "accounts", "client_id", client.ID, "total", total)
-	return gateway.sendEOF(client, "accounts", total, gateway.accountQueues...)
+
+	msg, err := inner.SerializeData(inner.DataMsg[any]{
+		ClientID: client.ID,
+		EOF:      &inner.EOFInfo{Kind: "accounts", TotalMessages: total},
+	})
+	if err != nil {
+		slog.Debug("While serializing accounts EOF", "err", err)
+		return err
+	}
+	msg.RoutingKey = newmiddleware.BroadcastRoutingKey
+
+	if err := gateway.accountsExchange.Send(*msg); err != nil {
+		slog.Error("While sending accounts EOF to exchange", "err", err)
+		return err
+	}
+	return nil
 }
 
 func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState) error {

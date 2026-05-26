@@ -1,9 +1,11 @@
 package join
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 
@@ -42,7 +44,9 @@ func newTwoInputJoin[L, R, O any](
 		return nil, err
 	}
 
-	rightInput, err := newmiddleware.NewQueueMiddleware(connSettings, config.RightInputQueue)
+	queueName := config.RightInputExchange + "_" + strconv.Itoa(config.Id)
+	shardKey := fmt.Sprintf("shard-%d", config.Id)
+	rightInput, err := newmiddleware.NewShardedMiddleware(connSettings, config.RightInputExchange, queueName, shardKey)
 	if err != nil {
 		if err := leftInput.Close(); err != nil {
 			slog.Error("while closing left input", "err", err)
@@ -63,7 +67,7 @@ func newTwoInputJoin[L, R, O any](
 
 	slog.Info("join started",
 		"left_queue", config.LeftInputQueue,
-		"right_queue", config.RightInputQueue,
+		"right_exchange", config.RightInputExchange,
 		"output_queue", config.OutputQueue,
 	)
 

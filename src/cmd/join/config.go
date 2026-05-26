@@ -66,8 +66,9 @@ func loadConfig() (join.JoinConfig, error) {
 	}
 
 	rightInputQueue := os.Getenv("RIGHT_INPUT_QUEUE")
-	if rightInputQueue == "" {
-		return join.JoinConfig{}, errors.New("RIGHT_INPUT_QUEUE environment variable is required")
+	rightInputExchange := os.Getenv("RIGHT_INPUT_EXCHANGE")
+	if rightInputQueue == "" && rightInputExchange == "" {
+		return join.JoinConfig{}, errors.New("RIGHT_INPUT_QUEUE or RIGHT_INPUT_EXCHANGE environment variable is required")
 	}
 
 	outputQueue := os.Getenv("OUTPUT_QUEUE")
@@ -76,14 +77,15 @@ func loadConfig() (join.JoinConfig, error) {
 	}
 
 	return join.JoinConfig{
-		Id:                id,
-		Amount:            joinAmount,
-		MomHost:           momHost,
-		MomPort:           momPort,
-		LeftInputQueue:    leftInputQueue,
-		RightInputQueue:   rightInputQueue,
-		OutputQueue:       outputQueue,
-		LeftEofsExpected:  leftEofsNum,
-		RightEofsExpected: rightEofsNum,
+		Id:                 id,
+		Amount:             joinAmount,
+		MomHost:            momHost,
+		MomPort:            momPort,
+		LeftInputQueue:     leftInputQueue,
+		RightInputQueue:    rightInputQueue,
+		RightInputExchange: rightInputExchange,
+		OutputQueue:        outputQueue,
+		LeftEofsExpected:   leftEofsNum,
+		RightEofsExpected:  rightEofsNum,
 	}, nil
 }

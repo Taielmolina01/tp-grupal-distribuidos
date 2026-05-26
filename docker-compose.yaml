@@ -28,7 +28,8 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ACCOUNT_QUEUES=accounts_0,accounts_1
+      - ACCOUNTS_EXCHANGE=accounts_exchange
+      - ACCOUNTS_SHARDS=2
       - TRANSFERS_EXCHANGE=transfers_exchange
       - TRANSFERS_ROUTING_KEYS=TRANSFERS_Q5_KEY,TRANSFERS_Q1234_KEY
       - RESULTS_QUEUE=results_queue
@@ -247,7 +248,7 @@ services:
   filter_bank_id_already_seen_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/filterbankidseen/Dockerfile
     container_name: filter_bank_id_already_seen_0
     depends_on:
       rabbitmq:
@@ -256,16 +257,15 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - ID=0
-      - INPUT_QUEUE=accounts_0
-      - OUTPUT_QUEUES=join_q2_accounts_q_0,join_q2_accounts_q_1
-      - FILTER_AMOUNT=2
-      - FILTER_TYPE=BANK_DISTINCT
+      - INPUT_EXCHANGE=accounts_exchange
+      - OUTPUT_EXCHANGE=q2_accounts
+      - OUTPUT_AMOUNT=2
       - QUERY_ID=2
 
   filter_bank_id_already_seen_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/filterbankidseen/Dockerfile
     container_name: filter_bank_id_already_seen_1
     depends_on:
       rabbitmq:
@@ -274,10 +274,9 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - ID=1
-      - INPUT_QUEUE=accounts_1
-      - OUTPUT_QUEUES=join_q2_accounts_q_0,join_q2_accounts_q_1
-      - FILTER_AMOUNT=2
-      - FILTER_TYPE=BANK_DISTINCT
+      - INPUT_EXCHANGE=accounts_exchange
+      - OUTPUT_EXCHANGE=q2_accounts
+      - OUTPUT_AMOUNT=2
       - QUERY_ID=2
 
   join_q2_0:
@@ -293,7 +292,7 @@ services:
       - MOM_PORT=5672
       - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_QUEUE=reduced_transfers_q2_0
-      - RIGHT_INPUT_QUEUE=join_q2_accounts_q_0
+      - RIGHT_INPUT_EXCHANGE=q2_accounts
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=falopa2
@@ -320,7 +319,7 @@ services:
       - MOM_PORT=5672
       - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_QUEUE=reduced_transfers_q2_1
-      - RIGHT_INPUT_QUEUE=join_q2_accounts_q_1
+      - RIGHT_INPUT_EXCHANGE=q2_accounts
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=falopa2
