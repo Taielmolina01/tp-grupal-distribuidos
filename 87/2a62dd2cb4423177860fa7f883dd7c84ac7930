@@ -1,0 +1,108 @@
+src/internal/sum/sum.go
+  s_4ae467363060cc::t_557a6a60e103cf 31-33
+  s_4ae467363060cc::t_760901a978d7de 64,66,72,74
+  s_4ae467363060cc::t_a0a6225d9485a1 99
+  s_4ae467363060cc::t_cae4e6e0708b50 43,45,50,52
+src/internal/reducer/count.go
+  s_4ae467363060cc::t_dabc69c63b7bfd 18,23,25,32,34
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_4ae467363060cc::t_cf8be0b462f4e9 95,100
+  s_4ae467363060cc::t_2a25146025f577 138
+  s_4ae467363060cc::t_d838a96d497d19 25-26,28,33-34
+  s_4ae467363060cc::t_b058547bc989a5 58,65
+  s_4ae467363060cc::t_924a6d4fe3dae3 118
+src/internal/joinaccounts/joinaccounts.go
+  s_4ae467363060cc::t_2a3b18fd471596 84
+  s_4ae467363060cc::t_0b8a6986103fa0 69,72,77
+  s_4ae467363060cc::t_17ed78ab12d1cf 22-23,28-29
+src/internal/filter/convertedamountfilter.go
+  s_4ae467363060cc::t_d4edf082ab2b13 105,107,114,116
+  s_4ae467363060cc::t_af105f0b2047bc 56,61,63,70-71,83,85
+  s_4ae467363060cc::t_3bf988a92d9904 130
+src/cmd/joinaccounts/config.go
+  s_4ae467363060cc::t_cc80158c408ba6 32-34,37-39
+  s_4ae467363060cc::t_0d0a635ccac59a 48-54
+src/internal/filter/distinctfilter.go
+  s_4ae467363060cc::t_2111078faa90ca 20,22,28,30
+src/cmd/acumaccounts/config.go
+  s_4ae467363060cc::t_389c28cd1d0b39 32-34,42-44
+  s_4ae467363060cc::t_03c62698e34d71 58-66
+src/internal/join/adapter.go
+  s_4ae467363060cc::t_db72bf901e60cc 38,40,45,53
+  s_4ae467363060cc::t_44057bd6978716 176,187,189,194
+  s_4ae467363060cc::t_a311f699301cce 20-22
+src/internal/reducer/reducer.go
+  s_4ae467363060cc::t_32dd7101b7bfcf 109
+  s_4ae467363060cc::t_9255f22f1e197a 26,28,33,35
+  s_4ae467363060cc::t_b46ef0f3be71de 52,54,69,71
+src/internal/fetcher/fetcher.go
+  s_4ae467363060cc::t_f08b9f3d612f65 27,40-41,50,52,54
+src/internal/reducer/types.go
+  s_4ae467363060cc::t_6e9d6563d51d37 5
+  s_4ae467363060cc::t_38b373c18a748e 33-34,40,50-51
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_4ae467363060cc::t_f3c4b5903fb053 23,28-29
+  s_4ae467363060cc::t_cd1e24eb3e233a 71,74,79
+src/internal/fetcher/types.go
+  s_4ae467363060cc::t_5fc099af08776b 3,17-18
+src/internal/filter/countandiflter.go
+  s_4ae467363060cc::t_758d7add6b77fb 32,34,40
+  s_4ae467363060cc::t_b76b6068e73096 25-26
+src/internal/filter/averagefilter.go
+  s_4ae467363060cc::t_ba0f1db6b7ad44 47,49,55,57
+  s_4ae467363060cc::t_3e4107e5d08b52 22,24,29,35
+  s_4ae467363060cc::t_c3a5870c0c9115 90
+scripts/compose-gen/generator.go
+  s_4ae467363060cc::t_a0a94ede2ea626 362-363
+  s_4ae467363060cc::t_9505a3136e6b43 384-385
+  s_4ae467363060cc::t_b4d690e39e0004 341-342
+  s_4ae467363060cc::t_ddc78632b60c3c 316,318,320
+src/internal/acumaccounts/acumaccounts.go
+  s_4ae467363060cc::t_fb37e511986142 74,77,82
+  s_4ae467363060cc::t_bc03fd61ef6370 89
+  s_4ae467363060cc::t_29a3951b5451c9 21-22,27-28
+src/internal/join/join.go
+  s_4ae467363060cc::t_e4b80f35c5e0ff 7
+  s_4ae467363060cc::t_8a2ee69ebfadfc 11
+src/cmd/filteraccountseen/config.go
+  s_4ae467363060cc::t_619437b6f0bad2 32-34,37-39
+  s_4ae467363060cc::t_cf18d287bf0a44 48-54
+src/internal/aggregate/aggregate.go
+  s_4ae467363060cc::t_659d199c05f5b9 34-36
+  s_4ae467363060cc::t_0181bb5e3cf1eb 67,69,75,77
+  s_4ae467363060cc::t_e91934fdbf571b 102
+  s_4ae467363060cc::t_2d7d37a9ad3dd4 53,55
+  s_4ae467363060cc::t_a492c01e9f0fa6 46,48
+src/internal/filter/daterangesplitter.go
+  s_4ae467363060cc::t_770c165f70ffff 44,46-47,55,57
+  s_4ae467363060cc::t_a835000b31e76f 118
+  s_4ae467363060cc::t_f6c984a68fc053 29,32,35
+  s_4ae467363060cc::t_c6132d136dd499 71-72,75,77,82,84
+src/internal/join/types.go
+  s_4ae467363060cc::t_68a10f38566423 6
+  s_4ae467363060cc::t_7ee4633c03101b 30
+src/cmd/filterandsplitter/config.go
+  s_4ae467363060cc::t_834ba12e698a4c 58-68
+  s_4ae467363060cc::t_0d62b5cf90ab08 32,34,42-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "872a62dd2cb4423177860fa7f883dd7c84ac7930",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_4ae467363060cc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "62c481b3-8990-4306-92be-742cb60ffd2a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
