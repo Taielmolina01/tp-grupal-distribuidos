@@ -352,9 +352,8 @@ services:
       - FILTER_AMOUNT=2
       - OUTPUT_AMOUNT=2
       - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
-      - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_QUEUE=transfers_q4_queue
-      - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
+      - INPUT_EXCHANGE=filtered_transfers_exchange
+      - INPUT_QUEUE=transfers_q4
       - "DATE_RANGE=2022-09-01 00:00:00,2022-09-05 00:00:00"
       - QUERY_ID=4
     logging:
@@ -378,9 +377,8 @@ services:
       - FILTER_AMOUNT=2
       - OUTPUT_AMOUNT=2
       - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
-      - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_QUEUE=transfers_q4_queue
-      - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
+      - INPUT_EXCHANGE=filtered_transfers_exchange
+      - INPUT_QUEUE=transfers_q4
       - "DATE_RANGE=2022-09-01 00:00:00,2022-09-05 00:00:00"
       - QUERY_ID=4
     logging:

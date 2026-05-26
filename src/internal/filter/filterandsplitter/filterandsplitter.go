@@ -31,9 +31,8 @@ type FilterAndSplitterConfig struct {
 	MomHost string
 	MomPort int
 
-	InputMiddlewareName  string
-	InputMiddlewareQueue string
-	InputRoutingKeys     []string
+	InputMiddlewareExchangeName string
+	InputMiddlewareQueueName    string
 
 	QueryID int
 }
@@ -45,7 +44,7 @@ type FilterAndSplitter struct {
 
 	hasher shard.Hasher
 
-	inputMiddleware  middleware.Middleware
+	inputMiddleware  newmiddleware.Middleware
 	outputMiddleware newmiddleware.Middleware
 	eofInput         middleware.Middleware
 	eofOutput        middleware.Middleware
@@ -66,13 +65,13 @@ func getRingNextIndex(config FilterAndSplitterConfig) int {
 func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter, err error) {
 	const ring_prefix = "FILTER_AND_SPLIITER_EOF_"
 
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 	oldConnSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
 	var (
-		inputMiddleware  middleware.Middleware
+		inputMiddleware  newmiddleware.Middleware
 		outputMiddleware newmiddleware.Middleware
 		eofInput         middleware.Middleware
 		eofOutput        middleware.Middleware
@@ -95,17 +94,12 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		}
 	}()
 
-	inputMiddleware, err = middleware.CreateExchangeMiddleware(
-		config.InputMiddlewareName,
-		config.InputMiddlewareQueue,
-		config.InputRoutingKeys,
-		oldConnSettings,
-	)
+	inputMiddleware, err = newmiddleware.NewFanoutMiddleware(connSettings, config.InputMiddlewareExchangeName, config.InputMiddlewareQueueName)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewShardedMiddleware(newConnSettings, config.OutputMiddlewarePrefix, "", "")
+	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
@@ -158,7 +152,7 @@ func (f *FilterAndSplitter) Run() {
 	defer f.close()
 	go f.eofHandler.Run()
 
-	if err := f.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, _ func()) {
+	if err := f.inputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
 		f.handleInput(msg, ack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
@@ -182,9 +176,9 @@ func (f *FilterAndSplitter) close() {
 	f.outputMiddleware.Close()
 }
 
-func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
+func (f *FilterAndSplitter) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[transfer.Transfer](&msg)
+	m, err := inner.DeserializeData[transfer.Transfer](&middleware.Message{Body: msg.Body})
 
 	if err != nil {
 		slog.Error("While deserializing pipeline message", "err", err)

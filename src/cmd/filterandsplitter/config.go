@@ -54,24 +54,18 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		return filterandsplitter.FilterAndSplitterConfig{}, err
 	}
 
-	inputRoutingKeys := []string{}
-	if raw := os.Getenv("INPUT_ROUTING_KEYS"); raw != "" {
-		inputRoutingKeys = strings.Split(raw, ",")
-	}
-
 	return filterandsplitter.FilterAndSplitterConfig{
-		Id:                     id,
-		StartDate:              startDate,
-		EndDate:                endDate,
-		OutputMiddlewareAmount: outputAmount,
-		OutputMiddlewarePrefix: outputPrefix,
-		FilterAndSpliterAmount: filterAmount,
-		MomHost:                momHost,
-		MomPort:                momPort,
-		InputMiddlewareName:    os.Getenv("INPUT_EXCHANGE"),
-		InputMiddlewareQueue:   os.Getenv("INPUT_QUEUE"),
-		InputRoutingKeys:       inputRoutingKeys,
-		QueryID:                queryID,
+		Id:                          id,
+		StartDate:                   startDate,
+		EndDate:                     endDate,
+		OutputMiddlewareAmount:      outputAmount,
+		OutputMiddlewarePrefix:      outputPrefix,
+		FilterAndSpliterAmount:      filterAmount,
+		MomHost:                     momHost,
+		MomPort:                     momPort,
+		InputMiddlewareExchangeName: os.Getenv("INPUT_EXCHANGE"),
+		InputMiddlewareQueueName:    os.Getenv("INPUT_QUEUE"),
+		QueryID:                     queryID,
 	}, nil
 }
 
