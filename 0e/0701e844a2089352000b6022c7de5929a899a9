@@ -1,0 +1,48 @@
+scripts/compose-gen/compose-config.yaml
+  s_9ece0cddabbd76::t_7bddc04aeeaef3 11
+  s_9ece0cddabbd76::t_3c0bc7e8a5e14b 2,4,7-10,12-14,19-22
+  h_3c9b41718876fe 1,3,5-6,15-18
+scripts/compose-gen/go.mod
+  s_9ece0cddabbd76::t_80e6f6a182b6ce 1-2,4-5
+  h_3c9b41718876fe 3
+scripts/compose-gen/config.go
+  s_9ece0cddabbd76::t_606ecb33524a2a 1-13,15,18-20,24-40,42-45,47-50
+  h_3c9b41718876fe 14,16-17,41,46
+  s_9ece0cddabbd76::t_3f7bc7e5b86f91 21-23
+scripts/compose-gen/generator.go
+  s_9ece0cddabbd76::t_7d28cb1c085025 268
+  s_9ece0cddabbd76::t_370d7ed4e1a0bb 87
+  s_9ece0cddabbd76::t_6df6bd71c0f6aa 254,257-258,262,270
+  s_9ece0cddabbd76::t_b2112db25f2cd5 365
+  s_9ece0cddabbd76::t_0e31db586ffadd 1-22,24-86,89-104,106-253,255-256,259-261,263-267,269,271-364,366-442
+  s_9ece0cddabbd76::t_1ed29be06bcc4b 23
+  s_9ece0cddabbd76::t_1143a5fbda3c85 88,105
+Makefile
+  s_9ece0cddabbd76::t_35c93fccfc7765 28-31,36
+scripts/compose-gen/main.go
+  s_9ece0cddabbd76::t_d37b8301e95e21 48
+  s_9ece0cddabbd76::t_ed03a7d91593e1 31,38-47
+  s_9ece0cddabbd76::t_4ad8cff99d6db4 17-18,26,32,35-37
+  s_9ece0cddabbd76::t_ef3182d6531013 1-16,19-25,27-30,33-34,49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.0",
+  "base_commit_sha": "0e0701e844a2089352000b6022c7de5929a899a9",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9ece0cddabbd76": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "32e0cff8-5ca8-4b56-8f56-be88ebacaf63",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
