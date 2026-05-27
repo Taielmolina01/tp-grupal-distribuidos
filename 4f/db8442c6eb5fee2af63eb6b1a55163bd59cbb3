@@ -1,0 +1,24 @@
+src/internal/joinaccounts/joinaccounts.go
+  s_772964f3eb71b3::t_fd789d4e7f0ebb 278-280
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4fdb8442c6eb5fee2af63eb6b1a55163bd59cbb3",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_772964f3eb71b3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ae71a22c-3dca-4d46-a7f4-ba1222078623",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
