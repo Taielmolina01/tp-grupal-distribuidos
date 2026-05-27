@@ -48,31 +48,31 @@ services:
     environment:
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - INPUT_FILE_ACCOUNTS=/input2/LI-Large_accounts.csv
-      - INPUT_FILE_TRANS=/input2/output.csv
+      - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
+      - INPUT_FILE_TRANS=/input/transactions_0.csv
       - OUTPUT_FILE_PREFIX=/output/output_0
       - MAX_BATCH_SIZE=1000
     volumes:
-      - ./input2:/input2
+      - ./input:/input
       - ./output:/output
 
-  client_1:
-    build:
-      context: ./src/
-      dockerfile: cmd/client/Dockerfile
-    container_name: client_1
-    depends_on:
-      - gateway
-    environment:
-      - SERVER_HOST=gateway
-      - SERVER_PORT=5678
-      - INPUT_FILE_ACCOUNTS=/input2/LI-Large_accounts.csv
-      - INPUT_FILE_TRANS=/input2/output.csv
-      - OUTPUT_FILE_PREFIX=/output/output_1
-      - MAX_BATCH_SIZE=1000
-    volumes:
-      - ./input2:/input2
-      - ./output:/output
+  # client_1:
+  #   build:
+  #     context: ./src/
+  #     dockerfile: cmd/client/Dockerfile
+  #   container_name: client_1
+  #   depends_on:
+  #     - gateway
+  #   environment:
+  #     - SERVER_HOST=gateway
+  #     - SERVER_PORT=5678
+  #     - INPUT_FILE_ACCOUNTS=/input2/LI-Large_accounts.csv
+  #     - INPUT_FILE_TRANS=/input2/output.csv
+  #     - OUTPUT_FILE_PREFIX=/output/output_1
+  #     - MAX_BATCH_SIZE=1000
+  #   volumes:
+  #     - ./input2:/input2
+  #     - ./output:/output
 
 
   # Query 1
@@ -94,7 +94,7 @@ services:
       - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
       - OUTPUT_EXCHANGE=filtered_transfers_exchange
       - OUTPUT_QUEUE=filtered_transfers_q
-      - OUTPUT_ROUTING_KEYS=falopa
+      - OUTPUT_ROUTING_KEYS=transfers_q1234
       - CURRENCIES=US Dollar
       - FILTER_TYPE=CURRENCY
       - FILTER_AMOUNT=2
@@ -122,7 +122,7 @@ services:
       - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
       - OUTPUT_EXCHANGE=filtered_transfers_exchange
       - OUTPUT_QUEUE=filtered_transfers_q
-      - OUTPUT_ROUTING_KEYS=falopa
+      - OUTPUT_ROUTING_KEYS=transfers_q1234
       - CURRENCIES=US Dollar
       - FILTER_TYPE=CURRENCY
       - FILTER_AMOUNT=2
@@ -147,7 +147,7 @@ services:
       - MOM_HOST=rabbitmq
       - INPUT_EXCHANGE=filtered_transfers_exchange
       - INPUT_QUEUE=filtered_transfers_q
-      - INPUT_ROUTING_KEYS=falopa
+      - INPUT_ROUTING_KEYS=transfers_q1234
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=results_queue
@@ -175,7 +175,7 @@ services:
       - MOM_HOST=rabbitmq
       - INPUT_EXCHANGE=filtered_transfers_exchange
       - INPUT_QUEUE=filtered_transfers_q
-      - INPUT_ROUTING_KEYS=falopa
+      - INPUT_ROUTING_KEYS=transfers_q1234
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=results_queue
@@ -207,9 +207,9 @@ services:
       - MOM_PORT=5672
       - INPUT_EXCHANGE=filtered_transfers_exchange
       - INPUT_QUEUE=reducer_q2_in_q
-      - INPUT_ROUTING_KEYS=falopa
+      - INPUT_ROUTING_KEYS=transfers_q1234
       - OUTPUT_QUEUES=reduced_transfers_q2_0,reduced_transfers_q2_1
-      - OUTPUT_ROUTING_KEYS=falopa
+      - OUTPUT_ROUTING_KEYS=transfers_q1234
       - QUERY_ID=2
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
@@ -233,9 +233,9 @@ services:
       - MOM_PORT=5672
       - INPUT_EXCHANGE=filtered_transfers_exchange
       - INPUT_QUEUE=reducer_q2_in_q
-      - INPUT_ROUTING_KEYS=falopa
+      - INPUT_ROUTING_KEYS=transfers_q1234
       - OUTPUT_QUEUES=reduced_transfers_q2_0,reduced_transfers_q2_1
-      - OUTPUT_ROUTING_KEYS=falopa
+      - OUTPUT_ROUTING_KEYS=transfers_q1234
       - QUERY_ID=2
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
@@ -354,7 +354,7 @@ services:
       - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
       - INPUT_EXCHANGE=filtered_transfers_exchange
       - INPUT_QUEUE=filter_range_q4_in
-      - INPUT_ROUTING_KEYS=falopa
+      - INPUT_ROUTING_KEYS=transfers_q1234
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-05 00:00:00
       - QUERY_ID=4
     logging:
@@ -380,7 +380,7 @@ services:
       - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
       - INPUT_EXCHANGE=filtered_transfers_exchange
       - INPUT_QUEUE=filter_range_q4_in
-      - INPUT_ROUTING_KEYS=falopa
+      - INPUT_ROUTING_KEYS=transfers_q1234
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-05 00:00:00
       - QUERY_ID=4
     logging:
@@ -670,7 +670,7 @@ services:
       - MOM_PORT=5672
       - INPUT_EXCHANGE=filtered_transfers_exchange
       - INPUT_QUEUE=filter_range_q3_in
-      - INPUT_ROUTING_KEYS=falopa
+      - INPUT_ROUTING_KEYS=transfers_q1234
       - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=DATE_RANGE_AND_SPLITTER
@@ -690,7 +690,7 @@ services:
       - MOM_PORT=5672
       - INPUT_EXCHANGE=filtered_transfers_exchange
       - INPUT_QUEUE=filter_range_q3_in
-      - INPUT_ROUTING_KEYS=falopa
+      - INPUT_ROUTING_KEYS=transfers_q1234
       - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=DATE_RANGE_AND_SPLITTER
