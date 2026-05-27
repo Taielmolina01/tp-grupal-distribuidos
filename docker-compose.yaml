@@ -48,12 +48,12 @@ services:
     environment:
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
-      - INPUT_FILE_TRANS=/input/transactions_0.csv
+      - INPUT_FILE_ACCOUNTS=/input2/LI-Large_accounts.csv
+      - INPUT_FILE_TRANS=/input2/output.csv
       - OUTPUT_FILE_PREFIX=/output/output_0
       - MAX_BATCH_SIZE=1000
     volumes:
-      - ./input:/input
+      - ./input2:/input2
       - ./output:/output
 
   client_1:
@@ -66,12 +66,12 @@ services:
     environment:
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - INPUT_FILE_ACCOUNTS=/input/accounts_1.csv
-      - INPUT_FILE_TRANS=/input/transactions_1.csv
+      - INPUT_FILE_ACCOUNTS=/input2/LI-Large_accounts.csv
+      - INPUT_FILE_TRANS=/input2/output.csv
       - OUTPUT_FILE_PREFIX=/output/output_1
       - MAX_BATCH_SIZE=1000
     volumes:
-      - ./input:/input
+      - ./input2:/input2
       - ./output:/output
 
 

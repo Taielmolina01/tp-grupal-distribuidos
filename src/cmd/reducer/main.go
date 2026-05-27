@@ -47,9 +47,6 @@ func loadConfig() (reducer.ReducerConfig, error) {
 	}
 
 	inputEofsExpected, err := strconv.Atoi(os.Getenv("INPUT_EOFS_EXPECTED"))
-	if err != nil {
-		return reducer.ReducerConfig{}, errors.New("INPUT_EOFS_EXPECTED environment variable is required and must be a number")
-	}
 
 	inputQueue := os.Getenv("INPUT_QUEUE")
 	if inputQueue == "" {

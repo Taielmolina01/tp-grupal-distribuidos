@@ -152,6 +152,9 @@ func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.Transfer) error {
 	}
 
 	for _, row := range body {
+		if _, ok := fetcher.conversionsByDay[row.Date]; !ok {
+			fetcher.conversionsByDay[row.Date] = make(map[string]float32)
+		}
 		fetcher.conversionsByDay[row.Date][row.Quote] = row.Rate
 	}
 
