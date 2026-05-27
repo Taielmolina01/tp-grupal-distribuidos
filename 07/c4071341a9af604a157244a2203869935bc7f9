@@ -1,0 +1,61 @@
+src/cmd/joinaccounts/config.go
+  s_b9ea32df705b09::t_143e642024d0d5 47,56-64,67-68
+  s_b9ea32df705b09::t_e6da014ceb3199 48-55,69
+src/internal/joinaccounts/joinaccounts.go
+  s_b9ea32df705b09::t_9605a534a1566f 416-422,425-429,443,445-446
+  s_b9ea32df705b09::t_b22e9c517821e0 275,412
+  s_b9ea32df705b09::t_fae2bff1fc0a8d 413-415,424
+  s_b9ea32df705b09::t_24f9e0a3254a28 209-211,214-216,218,220-221,237-240,242,244,246,249-252
+  s_b9ea32df705b09::t_770de9b1b2b506 37,39-44
+  s_b9ea32df705b09::t_5895517ba14cfa 26-28
+  s_b9ea32df705b09::t_57cb0802cbff26 370-375,377,384-391
+  s_b9ea32df705b09::t_314f8e709e79d3 29
+  s_b9ea32df705b09::t_4e20ce0e7c589d 63
+  s_b9ea32df705b09::t_e25104d6d6b703 206-207
+  s_b9ea32df705b09::t_ec4e7ad0ee3d13 11
+  s_b9ea32df705b09::t_3b58f9c61ebe28 130-134
+  s_b9ea32df705b09::t_9a8363b095649f 145-155
+  s_b9ea32df705b09::t_df1dad46c4a490 64-68,71-72,74-78,85-87
+  s_b9ea32df705b09::t_883a47183f1bf6 4-5,10,13,25,30-31,35-36,38,45-49,60-62,80,88-90,125-129,135-141,185,196,199,203-205,208,219,222-234,236,241,243,245,247,254,256-262,265-268,271-273,276-278,282-283,285-288,290-292,294-295,297-304,306-308,311-321,323-330,332-334,337-340,342-345,347,349-360,364-366,380,403-408,411,423,430-442,444,447-477,479
+docker-compose.yaml
+  s_b9ea32df705b09::t_55a56b4198df6a 340,366
+  h_3c9b41718876fe 51-52,54,56
+src/internal/common/transfer/transfer.go
+  s_b9ea32df705b09::t_edd55695c45df8 24-27
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_b9ea32df705b09::t_ea897084075cd8 173-180
+  s_b9ea32df705b09::t_0ded234d2afbd4 22-29,65-67,167,235,240-243,245-247,249-250,253-256,262-270,288-307,309-313
+  s_b9ea32df705b09::t_d70ce7c300c32b 64
+  s_b9ea32df705b09::t_c029576582899b 9
+  s_b9ea32df705b09::t_ae41ceab2376e8 308
+src/internal/acumaccounts/acumaccounts.go
+  s_b9ea32df705b09::t_ed98b374bc513a 21
+  s_b9ea32df705b09::t_b412e8925bc73f 56,166
+  s_b9ea32df705b09::t_7bc8b8df694a84 159-160,163-165,169-171
+  s_b9ea32df705b09::t_dd843d40f037d4 161-162,167-168
+  s_b9ea32df705b09::t_a1dd40f8bca464 8
+  s_b9ea32df705b09::t_2ff91ba3e4c09d 20
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_b9ea32df705b09::t_45892b9720da4a 142-151,155-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "07c4071341a9af604a157244a2203869935bc7f9",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_b9ea32df705b09": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9e0d690a-ec9a-463d-9237-767900602979",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
