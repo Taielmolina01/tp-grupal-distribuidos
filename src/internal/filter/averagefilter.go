@@ -2,7 +2,6 @@ package filter
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -291,13 +290,9 @@ func (af *AverageFilter) saveTransferToFile(clientID int, t transfer.Transfer) {
 	}
 	defer file.Close()
 
-	data, err := json.Marshal(t)
-	if err != nil {
-		slog.Error("While marshaling transfer to file", "err", err)
-		return
-	}
 	writer := bufio.NewWriter(file)
-	if _, err := writer.WriteString(string(data) + "\n"); err != nil {
+	line := fmt.Sprintf("%s,%s,%s,%f\n", t.PaymentFormat, t.FromBank, t.FromBankAccount, t.AmountPaid)
+	if _, err := writer.WriteString(line); err != nil {
 		slog.Error("While writing transfer to file", "err", err)
 		return
 	}
@@ -326,10 +321,21 @@ func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *
 	drained := 0
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		var t transfer.Transfer
-		if err := json.Unmarshal([]byte(scanner.Text()), &t); err != nil {
-			slog.Error("While unmarshaling transfer from file", "err", err)
+		cols := strings.SplitN(scanner.Text(), ",", 4)
+		if len(cols) != 4 {
+			slog.Error("While parsing transfer from file: unexpected column count", "filter_id", af.id)
 			continue
+		}
+		amount, err := strconv.ParseFloat(cols[3], 32)
+		if err != nil {
+			slog.Error("While parsing amount from file", "filter_id", af.id, "err", err)
+			continue
+		}
+		t := transfer.Transfer{
+			PaymentFormat:   cols[0],
+			FromBank:        cols[1],
+			FromBankAccount: cols[2],
+			AmountPaid:      float32(amount),
 		}
 		af.processTransferLocked(clientID, t, state)
 		drained++
