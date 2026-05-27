@@ -1,0 +1,14 @@
+docker-compose.yaml
+  h_3c9b41718876fe 153,181,299,326,658-797
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "613df82eacbdadeb723532cd2c207192e7dfa90f",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
