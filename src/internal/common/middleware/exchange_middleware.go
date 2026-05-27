@@ -16,6 +16,7 @@ type exchangeMiddleware struct {
 	connection    *amqp.Connection
 	stopConsuming chan struct{}
 	returnChan    chan amqp.Return
+	queueName     string
 }
 
 func CreateExchangeMiddlewareHelper(
@@ -33,6 +34,7 @@ func CreateExchangeMiddlewareHelper(
 		exchange:      exchange,
 		publishKeys:   keys,
 		connection:    conn,
+		queueName:     queuename,
 		stopConsuming: nil,
 	}
 
@@ -69,37 +71,40 @@ func CreateExchangeMiddlewareHelper(
 		}
 		return nil, ErrMessageMiddlewareDisconnected
 	}
-	q, err := ch.QueueDeclare(
-		queuename, // name
-		false,     // durability
-		false,     // delete when unused
-		false,     // exclusive
-		false,     // no-wait
-		nil,       // arguments
-	)
-	slog.Info("queue declared in exchange is", "name", q.Name)
-	middleware.queue = q
 
-	if err != nil {
-		if err := middleware.Close(); err != nil {
-			slog.Error("While closing middleware", "err", err)
-		}
-		return nil, ErrMessageMiddlewareDisconnected
-	}
-
-	for _, key := range keys {
-		err = ch.QueueBind(
-			q.Name,   // queue name
-			key,      // routing key
-			exchange, // exchange
-			false,
-			nil,
+	if queuename == "results_queue" {
+		q, err := ch.QueueDeclare(
+			queuename, // name
+			false,     // durability
+			false,     // delete when unused
+			false,     // exclusive
+			false,     // no-wait
+			nil,       // arguments
 		)
+		slog.Info("queue declared in exchange is", "name", q.Name)
+		middleware.queue = q
+
 		if err != nil {
 			if err := middleware.Close(); err != nil {
 				slog.Error("While closing middleware", "err", err)
 			}
 			return nil, ErrMessageMiddlewareDisconnected
+		}
+
+		for _, key := range keys {
+			err = ch.QueueBind(
+				q.Name,   // queue name
+				key,      // routing key
+				exchange, // exchange
+				false,
+				nil,
+			)
+			if err != nil {
+				if err := middleware.Close(); err != nil {
+					slog.Error("While closing middleware", "err", err)
+				}
+				return nil, ErrMessageMiddlewareDisconnected
+			}
 		}
 	}
 
@@ -123,6 +128,40 @@ func CreateExchangeMiddlewareHelper(
 func (e *exchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack func(), nack func())) (err error) {
 	if !e.areConnsUp() {
 		return ErrMessageMiddlewareClose
+	}
+
+	q, err := e.channel.QueueDeclare(
+		e.queueName, // name
+		false,       // durability
+		false,       // delete when unused
+		false,       // exclusive
+		false,       // no-wait
+		nil,         // arguments
+	)
+	slog.Info("queue declared in exchange is", "name", q.Name)
+	e.queue = q
+
+	if err != nil {
+		if err := e.Close(); err != nil {
+			slog.Error("While closing middleware", "err", err)
+		}
+		return ErrMessageMiddlewareDisconnected
+	}
+
+	for _, key := range e.publishKeys {
+		err = e.channel.QueueBind(
+			q.Name,     // queue name
+			key,        // routing key
+			e.exchange, // exchange
+			false,
+			nil,
+		)
+		if err != nil {
+			if err := e.Close(); err != nil {
+				slog.Error("While closing middleware", "err", err)
+			}
+			return ErrMessageMiddlewareDisconnected
+		}
 	}
 
 	e.stopConsuming = make(chan struct{})
