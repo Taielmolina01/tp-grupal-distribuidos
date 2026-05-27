@@ -329,12 +329,12 @@ func (client *Client) flushBatchToWriters(results *queryresult.BatchResults, wri
 		}
 	}
 	for _, r := range results.Query2 {
-		if err := writers[1].Write([]string{r.BankName, r.FromBank, r.FromAccount, fmt.Sprintf("%.2f", r.Amount)}); err != nil {
+		if err := writers[1].Write([]string{r.FromBank, r.FromAccount, r.BankName, fmt.Sprintf("%.2f", r.Amount)}); err != nil {
 			slog.Error("While writing to output file", "query", 2, "err", err)
 		}
 	}
 	for _, r := range results.Query3 {
-		if err := writers[2].Write([]string{r.FromBank, r.FromAccount, fmt.Sprintf("%.2f", r.Amount)}); err != nil {
+		if err := writers[2].Write([]string{r.FromBank, r.FromAccount, r.PaymentFormat, fmt.Sprintf("%.2f", r.Amount)}); err != nil {
 			slog.Error("While writing to output file", "query", 3, "err", err)
 		}
 	}

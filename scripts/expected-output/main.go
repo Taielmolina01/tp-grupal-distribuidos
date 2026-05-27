@@ -302,7 +302,7 @@ func query2(txs []tx, accs []account, outPath string) error {
 		if !ok {
 			continue
 		}
-		out.row(name, m.t.FromBank, m.t.FromAccount, fmtAmount(m.amt))
+		out.row(m.t.FromBank, m.t.FromAccount, name, fmtAmount(m.amt))
 	}
 	return out.close()
 }
@@ -343,7 +343,7 @@ func query3(txs []tx, outPath string) error {
 			continue
 		}
 		if t.AmountPaid < a*avgFractionQ3 {
-			out.row(t.FromBank, t.FromAccount, fmtAmount(t.AmountPaid))
+			out.row(t.FromBank, t.FromAccount, t.PaymentFormat, fmtAmount(t.AmountPaid))
 		}
 	}
 	return out.close()
@@ -595,7 +595,7 @@ func sortedLines(path string) ([]string, error) {
 func diffSorted(a, b []string) []string {
 	var out []string
 	i, j := 0, 0
-	for i < len(a) && j < len(b) && len(out) < 20 {
+	for i < len(a) && j < len(b){
 		switch {
 		case a[i] == b[j]:
 			i++
@@ -608,11 +608,11 @@ func diffSorted(a, b []string) []string {
 			j++
 		}
 	}
-	for i < len(a) && len(out) < 20 {
+	for i < len(a) {
 		out = append(out, "< "+a[i])
 		i++
 	}
-	for j < len(b) && len(out) < 20 {
+	for j < len(b) {
 		out = append(out, "> "+b[j])
 		j++
 	}

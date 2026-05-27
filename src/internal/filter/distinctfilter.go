@@ -72,13 +72,12 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 		return
 	}
 
-	clientSeen, ok := distinctfilter.alreadySeen[deserializedMsg.ClientID]
+	_, ok := distinctfilter.alreadySeen[deserializedMsg.ClientID]
 	if !ok {
-		clientSeen = map[S]bool{}
-		distinctfilter.alreadySeen[deserializedMsg.ClientID] = clientSeen
+		distinctfilter.alreadySeen[deserializedMsg.ClientID] = map[S]bool{}
 	}
 	key := distinctfilter.keyFunc(deserializedMsg.Payload)
-	if !clientSeen[key] {
+	if _, ok :=  distinctfilter.alreadySeen[deserializedMsg.ClientID][key]; !ok {
 		if err := distinctfilter.outputQueues[shard.CalculateIndexForShard(
 			deserializedMsg.ClientID,
 			distinctfilter.shardCriteria(deserializedMsg.Payload),
@@ -87,7 +86,7 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 			slog.Error("While sending message to output exchange", "err", err)
 			return
 		}
-		clientSeen[key] = true
+		distinctfilter.alreadySeen[deserializedMsg.ClientID][key] = true
 	}
 }
 

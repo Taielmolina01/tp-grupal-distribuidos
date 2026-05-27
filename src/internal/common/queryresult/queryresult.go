@@ -20,6 +20,7 @@ type Query2Result struct {
 type Query3Result struct {
 	FromBank    string  `json:"from_bank"`
 	FromAccount string  `json:"from_account"`
+	PaymentFormat string  `json:"payment_format"` // revisar
 	Amount      float32 `json:"amount"`
 }
 
@@ -56,7 +57,7 @@ func (q Query1Result) GetHeaders() []string {
 }
 
 func (q Query2Result) GetHeaders() []string {
-	return []string{"From Bank", "Account", "Bank Name", "Amount Paid"}
+	return []string{"From Bank", "Account", "Bank Name" , "Amount Paid"}
 }
 
 func (q Query3Result) GetHeaders() []string {

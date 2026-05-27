@@ -100,7 +100,7 @@ func CreateBankDistinctFilter(config FilterConfig) (worker.Worker, error) {
 			return ac1.BankId == ac2.BankId
 		},
 		func(ac account.Account) string {
-			return ac.BankId
+			return normalizer.NormalizeBankID(ac.BankId)
 		},
 		func(t account.Account) string {
 			return normalizer.NormalizeBankID(t.BankId)

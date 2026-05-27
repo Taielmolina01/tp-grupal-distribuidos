@@ -6,6 +6,10 @@ OUTPUT_DIR   ?= ./output
 EXPECTED_DIR ?= ./expected_output
 N_CLIENTS    ?= 5
 
+LIME  := \033[38;2;138;206;0m
+RED   := \033[31m
+RESET := \033[0m
+
 up:
 	mkdir -p output
 	COMPOSE_HTTP_TIMEOUT=300 docker compose -f docker-compose.yaml up --build --remove-orphans --detach

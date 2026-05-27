@@ -235,9 +235,10 @@ func (af *AverageFilter) processTransferLocked(clientID int, t transfer.Transfer
 		return
 	}
 	out := queryresult.Query3Result{
-		FromBank:    t.FromBank,
-		FromAccount: t.FromBankAccount,
-		Amount:      t.AmountPaid,
+		FromBank:      t.FromBank,
+		FromAccount:   t.FromBankAccount,
+		PaymentFormat: t.PaymentFormat,
+		Amount:        t.AmountPaid,
 	}
 	serialized, err := inner.SerializeData(inner.DataMsg[queryresult.Query3Result]{
 		Payload:  out,
