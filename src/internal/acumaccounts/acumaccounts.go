@@ -201,6 +201,7 @@ func (a *AcumAccounts) handleEOF(data inner.DataMsg[account.AccountChain]) {
 		slog.Error("While sending EOF message", "err", err)
 	}
 
+	clear(state.acum)
 	delete(a.clientsState, data.ClientID)
 }
 

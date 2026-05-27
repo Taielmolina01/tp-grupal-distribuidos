@@ -275,6 +275,11 @@ func (j *JoinAccounts) handleEOF(data inner.DataMsg[transfer.SplittedTransfer]) 
 		slog.Error("While sending EOF message", "err", err)
 	}
 
+	state, ok := j.clientsState[data.ClientID]
+	if ok {
+		clear(state.left)
+		clear(state.right)
+	}
 	delete(j.clientsState, data.ClientID)
 }
 
