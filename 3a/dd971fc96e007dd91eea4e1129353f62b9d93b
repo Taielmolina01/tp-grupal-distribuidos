@@ -1,0 +1,70 @@
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_9597e5c7aa4b78::t_4ed7aa476d6d23 166-167
+  s_9597e5c7aa4b78::t_14631de44e392d 136-137
+src/internal/filter/filteramount/filteramount.go
+  h_3c9b41718876fe 125
+  s_9597e5c7aa4b78::t_d7aee382c5f9ad 149
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_c05f63c9da2142::t_c40c8f63b9cc89 100
+  s_9597e5c7aa4b78::t_4f09551c433281 242
+  s_9597e5c7aa4b78::t_442367fb666376 195
+src/internal/filter/filtercurrency/filtercurrency.go
+  s_9597e5c7aa4b78::t_11f270195078fe 143
+  s_9597e5c7aa4b78::t_c08a9c43a13a34 121-122
+src/internal/reducer/reducer.go
+  s_9597e5c7aa4b78::t_cade8df12b9df2 170
+  s_9597e5c7aa4b78::t_adbec9077a5b34 194,196
+src/internal/filter/filter.go
+  s_9597e5c7aa4b78::t_8e51db9122c60c 167
+src/internal/common/middleware/newmiddleware/sharded_middleware.go
+  s_c05f63c9da2142::t_706df04185b837 3-7,58-104
+scripts/compose-gen/compose-config.yaml
+  h_3c9b41718876fe 1,4,7,10-12,15-18,21-22
+src/internal/gateway/gateway.go
+  s_c05f63c9da2142::t_9622496290f978 60
+src/internal/fetcher/fetcher.go
+  s_9597e5c7aa4b78::t_36f5871c68bff5 89-90
+TOPOLOGY.md
+  s_9597e5c7aa4b78::t_a4d95e343c5cd1 1-5,10-14,20-25,27-29,31-36,41-46,53,57-58,65-67,69-70,72,74,88-89,96-101,103,105,107-109,111,115-121,128-132,134,140-146,165-166,172
+  s_9597e5c7aa4b78::t_bc46e671179e91 6-9,15-19,26,30,37-40,47-52,54-56,59-64,68,71,73,75-87,90-95,102,104,106,110,112-114,122-127,133,135-139,147-164,167-171
+src/internal/acumaccounts/acumaccounts.go
+  s_c05f63c9da2142::t_b907a3721fe7da 82
+  s_9597e5c7aa4b78::t_7cf48e8ec52cc4 141-142
+  s_9597e5c7aa4b78::t_d91b0664bd5339 185-186
+src/internal/filterbankidseen/filterbankidseen.go
+  s_9597e5c7aa4b78::t_d19f080d3fcdeb 120
+  s_c05f63c9da2142::t_2d0b7a7272f224 63
+src/internal/joinaccounts/joinaccounts.go
+  s_9597e5c7aa4b78::t_875f4cb8a81a96 265-266
+  s_9597e5c7aa4b78::t_d380a263502762 134
+  s_c05f63c9da2142::t_08adc7e66eba25 77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3add971fc96e007dd91eea4e1129353f62b9d93b",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9597e5c7aa4b78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f7eabf5-bc5b-4775-9a49-a3817affc961",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    },
+    "s_c05f63c9da2142": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "71088102-bdde-4988-ad94-0c5c891cc0af",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
