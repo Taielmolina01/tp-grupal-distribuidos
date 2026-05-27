@@ -1,8 +1,14 @@
 package filter
 
 import (
+	"bufio"
+	"encoding/json"
+	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
@@ -156,11 +162,11 @@ func (af *AverageFilter) handleAvgMessage(msg middleware.Message, ack, nack func
 			return
 		}
 		state.avgsReady = true
-		// Lo que quede en el buffer son transfers de métodos para los que
+		// Lo que quede en disco son transfers de métodos para los que
 		// nunca llegó un avg (no hubo transfers de ese método en el avg
 		// period). No matchean nada, los descartamos.
-		slog.Info("AverageFilter avgs ready, discarding leftover buffer", "filter_id", af.id, "client_id", result.ClientID, "discarded", len(state.bufferedTransfers), "avgs", len(state.avgs))
-		state.bufferedTransfers = nil
+		slog.Info("AverageFilter avgs ready, discarding leftover buffer files", "filter_id", af.id, "client_id", result.ClientID, "avgs", len(state.avgs))
+		af.deleteRemainingFiles(result.ClientID)
 
 		if state.transfersEofPending {
 			af.fireTransfersRingLocked(result.ClientID, state.transfersEofRealAmt)
@@ -172,25 +178,9 @@ func (af *AverageFilter) handleAvgMessage(msg middleware.Message, ack, nack func
 	method := result.Payload.Method
 	state.avgs[method] = result.Payload.Avg
 
-	// Drain incremental: procesar todos los transfers buffereados que coincidan
-	// con el método recién aprendido, y dejar el resto en el buffer.
-	if len(state.bufferedTransfers) == 0 {
-		return
-	}
-	remaining := state.bufferedTransfers[:0]
-	drained := 0
-	for _, t := range state.bufferedTransfers {
-		if t.PaymentFormat == method {
-			af.processTransferLocked(result.ClientID, t, state)
-			drained++
-		} else {
-			remaining = append(remaining, t)
-		}
-	}
-	state.bufferedTransfers = remaining
-	if drained > 0 {
-		slog.Info("AverageFilter drained buffer for method", "filter_id", af.id, "client_id", result.ClientID, "method", method, "drained", drained, "remaining", len(remaining))
-	}
+	// Drain incremental: procesar todos los transfers en disco que coincidan
+	// con el método recién aprendido.
+	af.drainFileForMethod(result.ClientID, method, state)
 }
 
 func (af *AverageFilter) handleTransferMessage(msg middleware.Message, ack, nack func()) {
@@ -208,7 +198,7 @@ func (af *AverageFilter) handleTransferMessage(msg middleware.Message, ack, nack
 		if !state.avgsReady {
 			state.transfersEofPending = true
 			state.transfersEofRealAmt = result.EOF.TotalMessages
-			slog.Info("AverageFilter deferring transfers EOF until avgs ready", "filter_id", af.id, "client_id", result.ClientID, "real_amount", result.EOF.TotalMessages, "buffered", len(state.bufferedTransfers))
+			slog.Info("AverageFilter deferring transfers EOF until avgs ready", "filter_id", af.id, "client_id", result.ClientID, "real_amount", result.EOF.TotalMessages)
 			af.lock.Unlock()
 			return
 		}
@@ -233,7 +223,7 @@ func (af *AverageFilter) handleTransferMessage(msg middleware.Message, ack, nack
 		return
 	}
 
-	state.bufferedTransfers = append(state.bufferedTransfers, result.Payload)
+	af.saveTransferToFile(result.ClientID, result.Payload)
 }
 
 // processTransferLocked debe llamarse con af.lock tomado.
@@ -285,6 +275,85 @@ func (af *AverageFilter) fireTransfersRingLocked(clientID int, realAmount uint32
 		return
 	}
 	slog.Info("AverageFilter fired transfers ring", "filter_id", af.id, "client_id", clientID, "real_amount", realAmount, "actual_amount", ringMsg.ActualAmount, "filtered", ringMsg.FilteredAmount)
+}
+
+func (af *AverageFilter) bufferFileName(clientID int, method string) string {
+	safe := strings.ReplaceAll(method, " ", "_")
+	return fmt.Sprintf("avg_filter_%d_client_%d_%s.csv", af.id, clientID, safe)
+}
+
+func (af *AverageFilter) saveTransferToFile(clientID int, t transfer.Transfer) {
+	filename := af.bufferFileName(clientID, t.PaymentFormat)
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		slog.Error("While opening buffer file", "filter_id", af.id, "err", err)
+		return
+	}
+	defer file.Close()
+
+	data, err := json.Marshal(t)
+	if err != nil {
+		slog.Error("While marshaling transfer to file", "err", err)
+		return
+	}
+	writer := bufio.NewWriter(file)
+	if _, err := writer.WriteString(string(data) + "\n"); err != nil {
+		slog.Error("While writing transfer to file", "err", err)
+		return
+	}
+	if err := writer.Flush(); err != nil {
+		slog.Error("While flushing buffer file", "err", err)
+	}
+}
+
+func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *avgFilterClientState) {
+	filename := af.bufferFileName(clientID, method)
+	file, err := os.Open(filename)
+	if os.IsNotExist(err) {
+		return
+	}
+	if err != nil {
+		slog.Error("While opening buffer file for drain", "filter_id", af.id, "err", err)
+		return
+	}
+	defer func() {
+		file.Close()
+		if err := os.Remove(filename); err != nil {
+			slog.Error("While removing buffer file", "err", err)
+		}
+	}()
+
+	drained := 0
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		var t transfer.Transfer
+		if err := json.Unmarshal([]byte(scanner.Text()), &t); err != nil {
+			slog.Error("While unmarshaling transfer from file", "err", err)
+			continue
+		}
+		af.processTransferLocked(clientID, t, state)
+		drained++
+	}
+	if drained > 0 {
+		slog.Info("AverageFilter drained file for method", "filter_id", af.id, "client_id", clientID, "method", method, "drained", drained)
+	}
+}
+
+func (af *AverageFilter) deleteRemainingFiles(clientID int) {
+	pattern := fmt.Sprintf("avg_filter_%d_client_%d_*.csv", af.id, clientID)
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		slog.Error("While globbing buffer files", "filter_id", af.id, "err", err)
+		return
+	}
+	for _, f := range matches {
+		if err := os.Remove(f); err != nil {
+			slog.Error("While removing buffer file", "filter_id", af.id, "file", f, "err", err)
+		}
+	}
+	if len(matches) > 0 {
+		slog.Info("AverageFilter deleted remaining buffer files", "filter_id", af.id, "client_id", clientID, "count", len(matches))
+	}
 }
 
 func (af *AverageFilter) HandleSignals() {

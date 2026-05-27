@@ -107,7 +107,6 @@ type avgFilterClientState struct {
 	avgs                map[string]float32
 	avgsReady           bool
 	avgsEofsReceived    int
-	bufferedTransfers   []transfer.Transfer
 	transfersEofPending bool
 	transfersEofRealAmt uint32
 }

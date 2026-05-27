@@ -48,12 +48,12 @@ services:
     environment:
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - INPUT_FILE_ACCOUNTS=/input2/LI-Large_accounts.csv
-      - INPUT_FILE_TRANS=/input2/output.csv
+      - INPUT_FILE_ACCOUNTS=/input/LI-Large_accounts.csv
+      - INPUT_FILE_TRANS=/input/output.csv
       - OUTPUT_FILE_PREFIX=/output/output_0
       - MAX_BATCH_SIZE=1000
     volumes:
-      - ./input2:/input2
+      - ./input:/input
       - ./output:/output
 
   client_1:
@@ -66,14 +66,13 @@ services:
     environment:
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - INPUT_FILE_ACCOUNTS=/input2/LI-Large_accounts.csv
-      - INPUT_FILE_TRANS=/input2/output.csv
+      - INPUT_FILE_ACCOUNTS=/input/LI-Large_accounts.csv
+      - INPUT_FILE_TRANS=/input/output.csv
       - OUTPUT_FILE_PREFIX=/output/output_1
       - MAX_BATCH_SIZE=1000
     volumes:
-      - ./input2:/input2
+      - ./input:/input
       - ./output:/output
-
 
   # Query 1
 
@@ -188,7 +187,6 @@ services:
       options:
         max-size: "50m"
         max-file: "3"
-
 
   # Query 2
 
@@ -333,7 +331,6 @@ services:
       options:
         max-size: "50m"
         max-file: "3"
-
 
   # Query 4
 
@@ -525,7 +522,6 @@ services:
         max-size: "50m"
         max-file: "3"
 
-
   # Query 5
 
   filter_date_and_payment_0:
@@ -654,7 +650,6 @@ services:
       - OUTPUT_QUEUES=results_queue
       - REDUCER_TYPE=COUNT
       - QUERY_ID=5
-
 
   filter_range_q3_0:
     build:
