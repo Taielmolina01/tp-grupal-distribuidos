@@ -94,6 +94,12 @@ func newAverageFilter(
 		transfersMonitor,
 		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
 			af.lock.Lock()
+			if state, ok := af.state[clientID]; ok {
+				for method := range state.avgs {
+					af.drainFileForMethod(clientID, method, state)
+				}
+				af.deleteRemainingFiles(clientID)
+			}
 			delete(af.state, clientID)
 			af.lock.Unlock()
 			if !isCoordinator {

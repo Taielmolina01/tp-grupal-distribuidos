@@ -333,7 +333,7 @@ func query3(txs []tx, outPath string) error {
 		if t.PaymentCurrency != usdCurrency {
 			continue
 		}
-		if !(t.Timestamp >= "2022/09/06" && t.Timestamp <= "2022/09/15") {
+		if !(t.Timestamp >= "2022/09/06" && t.Timestamp < "2022/09/16") {
 			continue
 		}
 		a, ok := avg[t.PaymentFormat]
