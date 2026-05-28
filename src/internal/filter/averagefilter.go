@@ -2,12 +2,15 @@ package filter
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/eofmessage"
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
@@ -55,6 +58,9 @@ func newAverageFilter(
 		connSettings,
 	)
 	if err != nil {
+		inputTransfersQueue.Close()
+		inputAvgsQueue.Close()
+		outputQueue.Close()
 		return nil, err
 	}
 
@@ -63,6 +69,9 @@ func newAverageFilter(
 		connSettings,
 	)
 	if err != nil {
+		inputTransfersQueue.Close()
+		inputAvgsQueue.Close()
+		outputQueue.Close()
 		transfersEofIn.Close()
 		return nil, err
 	}
@@ -98,7 +107,6 @@ func newAverageFilter(
 			defer af.lock.Unlock()
 
 			state, ok := af.state[clientID]
-
 			if !ok {
 				return nil
 			}
@@ -108,12 +116,7 @@ func newAverageFilter(
 				return nil
 			}
 
-			for method := range state.avgs {
-				af.drainFileForMethod(clientID, method, state)
-			}
-			af.deleteRemainingFiles(clientID)
-			delete(af.state, clientID)
-
+			af.finalizeClientLocked(clientID, state)
 			if err := af.outputQueue.Send(*msg); err != nil {
 				return err
 			}
@@ -127,6 +130,8 @@ func newAverageFilter(
 }
 
 func (af *AverageFilter) Run() {
+	defer af.close()
+
 	slog.Info("Starting average-filter consumers", "filter_id", af.id)
 	go af.transfersRing.Run()
 	go af.consumeAvgs()
@@ -156,7 +161,7 @@ func (af *AverageFilter) getOrInitState(clientID int) *avgFilterClientState {
 	return s
 }
 
-func (af *AverageFilter) handleAvgMessage(msg middleware.Message, ack, nack func()) {
+func (af *AverageFilter) handleAvgMessage(msg middleware.Message, ack, _ func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[transfer.AvgByMethod](&msg)
@@ -176,9 +181,6 @@ func (af *AverageFilter) handleAvgMessage(msg middleware.Message, ack, nack func
 			return
 		}
 		state.avgsReady = true
-		// Lo que quede en disco son transfers de métodos para los que
-		// nunca llegó un avg (no hubo transfers de ese método en el avg
-		// period). No matchean nada, los descartamos.
 		slog.Info("AverageFilter avgs ready, discarding leftover buffer files", "filter_id", af.id, "client_id", result.ClientID, "avgs", len(state.avgs))
 		af.deleteRemainingFiles(result.ClientID)
 
@@ -191,33 +193,16 @@ func (af *AverageFilter) handleAvgMessage(msg middleware.Message, ack, nack func
 			return
 		}
 
-		for method := range state.avgs {
-			af.drainFileForMethod(result.ClientID, method, state)
-		}
-		af.deleteRemainingFiles(result.ClientID)
-		delete(af.state, result.ClientID)
-
-		serialized, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: result.ClientID, QueryID: af.queryID})
-		if err != nil {
-			slog.Error("While serializing EOF message", "err", err)
-			return
-		}
-
-		if err := af.outputQueue.Send(*serialized); err != nil {
-			slog.Error("While sending EOF message", "err", err)
-		}
+		af.finalizeAndEmitEOFLocked(result.ClientID, state)
 		return
 	}
 
 	method := result.Payload.Method
 	state.avgs[method] = result.Payload.Avg
-
-	// Drain incremental: procesar todos los transfers en disco que coincidan
-	// con el método recién aprendido.
 	af.drainFileForMethod(result.ClientID, method, state)
 }
 
-func (af *AverageFilter) handleTransferMessage(msg middleware.Message, ack, nack func()) {
+func (af *AverageFilter) handleTransferMessage(msg middleware.Message, ack, _ func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[transfer.Transfer](&msg)
@@ -252,14 +237,12 @@ func (af *AverageFilter) handleTransferMessage(msg middleware.Message, ack, nack
 	}
 
 	if state.avgsReady {
-		// Ya llegaron todos los avgs y para este método no hay → descartar.
 		return
 	}
 
 	af.saveTransferToFile(result.ClientID, result.Payload)
 }
 
-// processTransferLocked debe llamarse con af.lock tomado.
 func (af *AverageFilter) processTransferLocked(clientID int, t transfer.Transfer, state *avgFilterClientState) {
 	avg, ok := state.avgs[t.PaymentFormat]
 	if !ok {
@@ -290,7 +273,6 @@ func (af *AverageFilter) processTransferLocked(clientID int, t transfer.Transfer
 	af.transfersMonitor.AddForwardedMessagesAmountByClientId(clientID, 1)
 }
 
-// fireTransfersRingLocked debe llamarse con af.lock tomado.
 func (af *AverageFilter) fireTransfersRingLocked(clientID int, realAmount uint32) {
 	ringMsg := eofmessagetypes.EofRingMessage{
 		RealAmount:     realAmount,
@@ -311,8 +293,34 @@ func (af *AverageFilter) fireTransfersRingLocked(clientID int, realAmount uint32
 	slog.Info("AverageFilter fired transfers ring", "filter_id", af.id, "client_id", clientID, "real_amount", realAmount, "actual_amount", ringMsg.ActualAmount, "filtered", ringMsg.FilteredAmount)
 }
 
+func (af *AverageFilter) finalizeClientLocked(clientID int, state *avgFilterClientState) {
+	for method := range state.avgs {
+		af.drainFileForMethod(clientID, method, state)
+	}
+	af.deleteRemainingFiles(clientID)
+	delete(af.state, clientID)
+}
+
+func (af *AverageFilter) finalizeAndEmitEOFLocked(clientID int, state *avgFilterClientState) {
+	af.finalizeClientLocked(clientID, state)
+
+	serialized, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: clientID, QueryID: af.queryID})
+	if err != nil {
+		slog.Error("While serializing EOF message", "err", err)
+		return
+	}
+	if err := af.outputQueue.Send(*serialized); err != nil {
+		slog.Error("While sending EOF message", "err", err)
+	}
+}
+
 func (af *AverageFilter) bufferFileName(clientID int, method string) string {
-	safe := strings.ReplaceAll(method, " ", "_")
+	safe := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			return r
+		}
+		return '_'
+	}, method)
 	return fmt.Sprintf("avg_filter_%d_client_%d_%s.csv", af.id, clientID, safe)
 }
 
@@ -326,7 +334,10 @@ func (af *AverageFilter) saveTransferToFile(clientID int, t transfer.Transfer) {
 	defer file.Close()
 
 	writer := bufio.NewWriter(file)
-	line := fmt.Sprintf("%s,%s,%s,%f\n", t.PaymentFormat, t.FromBank, t.FromBankAccount, t.AmountPaid)
+	line := fmt.Sprintf("%s,%s,%s,%s\n",
+		t.PaymentFormat, t.FromBank, t.FromBankAccount,
+		strconv.FormatFloat(t.AmountPaid, 'f', -1, 64),
+	)
 	if _, err := writer.WriteString(line); err != nil {
 		slog.Error("While writing transfer to file", "err", err)
 		return
@@ -339,7 +350,7 @@ func (af *AverageFilter) saveTransferToFile(clientID int, t transfer.Transfer) {
 func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *avgFilterClientState) {
 	filename := af.bufferFileName(clientID, method)
 	file, err := os.Open(filename)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		return
 	}
 	if err != nil {
@@ -396,9 +407,25 @@ func (af *AverageFilter) deleteRemainingFiles(clientID int) {
 		slog.Info("AverageFilter deleted remaining buffer files", "filter_id", af.id, "client_id", clientID, "count", len(matches))
 	}
 }
-
 func (af *AverageFilter) HandleSignals() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	<-signals
+	slog.Info("SIGTERM signal received, stopping consumer")
+
+	af.inputAvgsQueue.StopConsuming()
+	af.inputTransfersQueue.StopConsuming()
 }
 
-func (af *AverageFilter) Close() {
+func (af *AverageFilter) close() {
+	af.lock.Lock()
+	for clientID := range af.state {
+		af.deleteRemainingFiles(clientID)
+	}
+	af.lock.Unlock()
+
+	af.inputAvgsQueue.Close()
+	af.outputQueue.Close()
+	af.transfersRing.Close()
+	af.transfersEofOut.Close()
 }
