@@ -1,0 +1,26 @@
+duplicate_datasets.sh
+  s_6aa33da4799484::t_1459bfc2a94c5e 14
+  h_3c9b41718876fe 20-25
+  s_6aa33da4799484::t_ffc2e4f35bc71c 1-13,15-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e64fec6ae138404cf7639b2fb9bfd4b31945b1dc",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_6aa33da4799484": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2fe2b874-de75-4861-b02c-920f44c4fa56",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
