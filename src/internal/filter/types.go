@@ -51,6 +51,7 @@ type FilterConfig struct {
 	PaymentFormats        []string
 	AvgInputQueue         string
 	AvgExpectedEofs       int
+	Quote                 string
 }
 
 type Filter[T comparable, O comparable] struct {
@@ -131,4 +132,9 @@ type ConvertedAmountFilter[T, S comparable] struct {
 	eofOutputQueue     middleware.Middleware
 	handlerMessages    msgmonitor.MessageMonitor
 	id                 uint32
+	toIgnoreFunc       func(T) bool
+	quote              string
+	amountThreshold    float64
+	fileMutex          sync.Mutex
+	mapMutex           sync.Mutex
 }

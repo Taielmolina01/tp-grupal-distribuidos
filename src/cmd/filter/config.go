@@ -186,6 +186,15 @@ func loadBankDistinctVenv(config *filter.FilterConfig) error {
 	return nil
 }
 
+func loadQuoteVenv(config *filter.FilterConfig) error {
+	quote := os.Getenv("QUOTE")
+	if quote == "" {
+		return errors.New("QUOTE environment variable is required if FILTER_TYPE is CONVERTED_AMOUNT_FILTER")
+	}
+	config.Quote = quote
+	return nil
+}
+
 func loadFilterTypeConfig(config *filter.FilterConfig) error {
 	filterTypeVenv := os.Getenv("FILTER_TYPE")
 	if filterTypeVenv == "" {
@@ -205,6 +214,9 @@ func loadFilterTypeConfig(config *filter.FilterConfig) error {
 		}
 	case filter.CONVERTED_AMOUNT_FILTER:
 		if err := loadAmountVenv(config); err != nil {
+			return err
+		}
+		if err := loadQuoteVenv(config); err != nil {
 			return err
 		}
 	case filter.DATE_RANGE:

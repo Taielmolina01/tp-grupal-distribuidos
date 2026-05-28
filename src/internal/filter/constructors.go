@@ -14,6 +14,8 @@ import (
 	"tp-grupal-distribuidos/internal/filter/filterandsplitter"
 )
 
+const IGNORED_CURRENCY = "Bitcoin"
+
 func CreateCurrencyFilter(config FilterConfig) (worker.Worker, error) {
 	return newFilter(
 		config,
@@ -60,7 +62,7 @@ func CreateDateRangeAndPaymentMethod(config FilterConfig) (worker.Worker, error)
 	return newFilter(
 		config,
 		func(t transfer.Transfer) bool {
-			return isValidPaymentMethod(t, config) && t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
+			return isValidPaymentMethod(t, config) && !t.Timestamp.Before(config.StartDateRange) && t.Timestamp.Before(config.EndDateRange)
 		},
 		func(t transfer.Transfer) transfer.Transfer {
 			return t
@@ -123,32 +125,32 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 		config,
 		func(t transfer.Transfer, f fetcherresponse.FetcherResponse) bool {
 			return t.AmountPaid/f.Rate < config.Amount
-		},
+		}, // compareFunc
 		func(f fetcherresponse.FetcherResponse) string {
 			return f.Date
-		},
+		}, // leftKeyFunc
 		func(f fetcherresponse.FetcherResponse) string {
 			return f.Quote
-		},
+		}, // leftSecondKeyFunc
 		func(f fetcherresponse.FetcherResponse) float64 {
 			return f.Rate
-		},
+		}, // leftValueFunc
 		func(t transfer.Transfer) string {
 			return t.Timestamp.Format(DATE_LAYOUT)
-		},
+		}, // rightKeyFunc
 		func(t transfer.Transfer) string {
 			return t.ReceivingCurrency
-		},
+		}, // rightSecondKeyFunc
 		func(t transfer.Transfer) float64 {
 			return t.AmountPaid
-		},
+		}, // rightValueFunc
 		func(t transfer.Transfer, rate float64) fetcherresponse.FetcherResponse {
 			return fetcherresponse.FetcherResponse{
 				Date:  t.Timestamp.Format(DATE_LAYOUT),
 				Quote: t.ReceivingCurrency,
 				Rate:  rate,
 			}
-		},
+		}, // conversionFunc
 		func(t transfer.Transfer, clientID int) string {
 			fields := []string{}
 			fields = append(fields, t.Timestamp.Format(DATE_LAYOUT))
@@ -164,7 +166,7 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 			fields = append(fields, fmt.Sprintf("%t", t.IsLaundering))
 			fields = append(fields, fmt.Sprintf("%d", clientID))
 			return strings.Join(fields, ",")
-		},
+		}, // toSveFunc
 		func(line string) (transfer.Transfer, int, error) {
 			columns := strings.Split(line, ",")
 			if len(columns) < 11 {
@@ -199,6 +201,9 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 				PaymentFormat:     columns[9],
 				IsLaundering:      columns[10] == "true",
 			}, clientId, nil
-		},
+		}, // fromSaveFunc
+		func(t transfer.Transfer) bool {
+			return t.PaymentCurrency == IGNORED_CURRENCY
+		}, // ignoreFunc
 	)
 }

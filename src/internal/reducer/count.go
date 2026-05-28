@@ -65,8 +65,6 @@ func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func(
 		return
 	}
 
-	slog.Info("message received", "deserialized", deserialized)
-
 	if !deserialized.IsEOF() {
 		count.countByClient[deserialized.ClientID]++
 	} else {

@@ -29,14 +29,6 @@ func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 		Port:     config.MomPort,
 	}
 
-	slog.Info("Initializing fetcher",
-		"config.inputexchange",
-		config.InputExchange,
-		"config.InputQueue",
-		config.InputQueue,
-		"config.inputroutingkeys",
-		config.InputRoutingKeys,
-	)
 	inputQueue, err := middleware.CreateExchangeMiddleware(
 		config.InputExchange,
 		config.InputQueue,
