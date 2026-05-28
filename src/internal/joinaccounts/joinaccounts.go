@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"sync"
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/eofmessage"
@@ -31,8 +30,9 @@ type JoinAccountsConfig struct {
 }
 
 type clientState struct {
-	left  map[string]map[string]account.AccountPair
-	right map[string]map[string]account.AccountPair
+	left           map[string]map[string]account.AccountPair
+	right          map[string]map[string]account.AccountPair
+	processedCount int
 }
 
 type JoinAccounts struct {
@@ -43,7 +43,6 @@ type JoinAccounts struct {
 	inputMiddleware  newmiddleware.Middleware
 	outputMiddleware newmiddleware.Middleware
 
-	mu           sync.Mutex
 	clientsState map[int]*clientState
 	queryID      int
 }
@@ -132,22 +131,27 @@ func (j *JoinAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 }
 
 func (j *JoinAccounts) handleRecord(clientID int, record transfer.SplittedTransfer) {
-	if record.IsLeftPart {
-		j.handleLeftPartRecord(clientID, record)
-		return
+	state := j.stateFor(clientID)
+	state.processedCount++
+	if state.processedCount%10_000 == 0 {
+		slog.Info("joinaccounts progress", "id", j.id, "client_id", clientID, "processed", state.processedCount)
 	}
-	j.handleRightPartRecord(clientID, record)
+
+	var chains []account.AccountChain
+	if record.IsLeftPart {
+		chains = j.handleLeftPartRecord(clientID, record)
+	} else {
+		chains = j.handleRightPartRecord(clientID, record)
+	}
+	j.sendChains(clientID, chains)
 }
 
-func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.SplittedTransfer) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-
-	idenetifier := account.AccountIdentifier{
+func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.SplittedTransfer) []account.AccountChain {
+	identifier := account.AccountIdentifier{
 		BankID:        record.Transfer.FromBank,
 		AccountNumber: record.Transfer.FromBankAccount,
 	}
-	identifierKey := idenetifier.GetKey()
+	identifierKey := identifier.GetKey()
 
 	rightIdentifier := account.AccountIdentifier{
 		BankID:        record.Transfer.ToBank,
@@ -163,52 +167,29 @@ func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.Splitt
 		state.left[identifierKey] = accMap
 	}
 
-	_, ok = accMap[rightIdentifierKey]
-	if ok {
-		return
+	if _, ok = accMap[rightIdentifierKey]; ok {
+		return nil
 	}
-	accMap[rightIdentifierKey] = account.AccountPair{
-		Left:  idenetifier,
-		Right: rightIdentifier,
-	}
+	accMap[rightIdentifierKey] = account.AccountPair{Left: identifier, Right: rightIdentifier}
 
 	accMapRight, ok := state.right[identifierKey]
 	if !ok {
-		return
+		return nil
 	}
 
+	chains := make([]account.AccountChain, 0, len(accMapRight))
 	for _, v := range accMapRight {
-		msg, err := inner.SerializeData(inner.DataMsg[account.AccountChain]{
-			ClientID: clientID,
-			QueryID:  uint8(j.queryID),
-			Payload: account.AccountChain{
-				Left:   v.Left,
-				Middle: idenetifier,
-				Right:  rightIdentifier,
-			},
-		})
-
-		if err != nil {
-			slog.Error("While serializing output message", "err", err)
-			continue
-		}
-
-		routingKey := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, v.Left.GetKey(), rightIdentifierKey))
-		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: routingKey}); err != nil {
-			slog.Error("While sending output message", "err", err)
-		}
+		chains = append(chains, account.AccountChain{Left: v.Left, Middle: identifier, Right: rightIdentifier})
 	}
+	return chains
 }
 
-func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.SplittedTransfer) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-
-	idenetifier := account.AccountIdentifier{
+func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.SplittedTransfer) []account.AccountChain {
+	identifier := account.AccountIdentifier{
 		BankID:        record.Transfer.ToBank,
 		AccountNumber: record.Transfer.ToBankAccount,
 	}
-	identifierKey := idenetifier.GetKey()
+	identifierKey := identifier.GetKey()
 
 	leftIdentifier := account.AccountIdentifier{
 		BankID:        record.Transfer.FromBank,
@@ -224,47 +205,49 @@ func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.Split
 		state.right[identifierKey] = accMap
 	}
 
-	_, ok = accMap[leftIdentifierKey]
-	if ok {
-		return
+	if _, ok = accMap[leftIdentifierKey]; ok {
+		return nil
 	}
-	accMap[leftIdentifierKey] = account.AccountPair{
-		Left:  leftIdentifier,
-		Right: idenetifier,
-	}
+	accMap[leftIdentifierKey] = account.AccountPair{Left: leftIdentifier, Right: identifier}
 
-	accMapRight, ok := state.left[identifierKey]
+	accMapLeft, ok := state.left[identifierKey]
 	if !ok {
-		return
+		return nil
 	}
 
-	for _, v := range accMapRight {
-		msg, err := inner.SerializeData(inner.DataMsg[account.AccountChain]{
+	chains := make([]account.AccountChain, 0, len(accMapLeft))
+	for _, v := range accMapLeft {
+		chains = append(chains, account.AccountChain{Left: leftIdentifier, Middle: identifier, Right: v.Right})
+	}
+	return chains
+}
+
+func (j *JoinAccounts) sendChains(clientID int, chains []account.AccountChain) {
+	if len(chains) == 0 {
+		return
+	}
+	grouped := make(map[string][]account.AccountChain)
+	for _, chain := range chains {
+		rk := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, chain.Left.GetKey(), chain.Right.GetKey()))
+		grouped[rk] = append(grouped[rk], chain)
+	}
+	for rk, batch := range grouped {
+		msg, err := inner.SerializeData(inner.DataMsg[account.AccountChainBatch]{
 			ClientID: clientID,
 			QueryID:  uint8(j.queryID),
-			Payload: account.AccountChain{
-				Left:   leftIdentifier,
-				Middle: idenetifier,
-				Right:  v.Right,
-			},
+			Payload:  account.AccountChainBatch{Items: batch},
 		})
-
 		if err != nil {
-			slog.Error("While serializing output message", "err", err)
+			slog.Error("While serializing chain batch", "err", err)
 			continue
 		}
-
-		routingKey := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, leftIdentifierKey, v.Right.GetKey()))
-		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: routingKey}); err != nil {
-			slog.Error("While sending output message", "err", err)
+		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: rk}); err != nil {
+			slog.Error("While sending chain batch", "err", err)
 		}
 	}
 }
 
 func (j *JoinAccounts) handleEOF(data inner.DataMsg[transfer.SplittedTransfer]) {
-	j.mu.Lock()
-	defer j.mu.Unlock()
-
 	msg, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(j.queryID)})
 	if err != nil {
 		slog.Error("While serializing EOF message", "err", err)
