@@ -17,10 +17,11 @@ import (
 
 const eofRingQueuePrefix = "REDUCE"
 
-func newReducer[T comparable](
+func newReducer[T, O comparable](
 	config ReducerConfig,
 	reducerFunction func(T, T) T,
 	keyFunc func(T) string,
+	projectFunc func(T) O,
 	queryId uint8,
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
@@ -88,13 +89,14 @@ func newReducer[T comparable](
 
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
-	reducer := &Reducer[T]{
+	reducer := &Reducer[T, O]{
 		id:                config.Id,
 		inputExchange:     inputExchange,
 		outputQueues:      outputQueues,
 		reducerMonitor:    NewReducerMonitor[T](handlerMessages),
 		reducerFunction:   reducerFunction,
 		keyFunc:           keyFunc,
+		projectFunc:       projectFunc,
 		inputEofsExpected: config.InputEofsExpected,
 		inputEofCount:     map[int]int{},
 		totalRealAmount:   map[int]uint32{},
@@ -109,8 +111,8 @@ func newReducer[T comparable](
 		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
 			values := reducer.reducerMonitor.GetValuesCopyByClientIdAndDelete(clientID)
 			for _, v := range values {
-				msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
-					Payload:  v,
+				msgOutput, err := inner.SerializeData(inner.DataMsg[O]{
+					Payload:  projectFunc(v),
 					ClientID: clientID,
 					QueryID:  reducer.queryId,
 				})
@@ -143,7 +145,7 @@ func newReducer[T comparable](
 	return reducer, nil
 }
 
-func (reducer *Reducer[T]) Run() {
+func (reducer *Reducer[T, O]) Run() {
 	go reducer.eofHandler.Run()
 	if err := reducer.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		reducer.handleMessage(msg, ack, nack)
@@ -152,7 +154,7 @@ func (reducer *Reducer[T]) Run() {
 	}
 }
 
-func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nack func()) {
+func (reducer *Reducer[T, O]) handleMessage(msg middleware.Message, ack func(), nack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[T](&msg)
@@ -204,7 +206,7 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 
 }
 
-func (reducer *Reducer[T]) HandleSignals() {
+func (reducer *Reducer[T, O]) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
@@ -214,7 +216,7 @@ func (reducer *Reducer[T]) HandleSignals() {
 	}
 }
 
-func (reducer *Reducer[T]) Close() error {
+func (reducer *Reducer[T, O]) Close() error {
 	if err := reducer.inputExchange.StopConsuming(); err != nil {
 		return err
 	}

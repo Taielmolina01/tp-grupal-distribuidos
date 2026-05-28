@@ -28,13 +28,14 @@ type ReducerConfig struct {
 	ReducerType       ReducerType
 }
 
-type Reducer[T comparable] struct {
+type Reducer[T, O comparable] struct {
 	id                int
 	inputExchange     middleware.Middleware
 	outputQueues      []middleware.Middleware
 	reducerMonitor    ReducerMonitor[T]
 	reducerFunction   func(T, T) T
 	keyFunc           func(T) string
+	projectFunc       func(T) O
 	eofHandler        eofring.EofRingAlgorithm
 	handlerMessages   msgmonitor.MessageMonitor
 	outputQueueEof    middleware.Middleware

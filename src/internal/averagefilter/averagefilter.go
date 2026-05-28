@@ -230,11 +230,10 @@ func (af *AverageFilter) getOrInitState(clientID int) *clientState {
 	return s
 }
 
-
 func (af *AverageFilter) handleTransferInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[transfer.Transfer](&msg)
+	result, err := inner.DeserializeData[transfer.TransferForQ3Filter](&msg)
 	if err != nil {
 		slog.Error("While deserializing transfer message", "err", err)
 		return
@@ -248,7 +247,7 @@ func (af *AverageFilter) handleTransferInput(msg middleware.Message, ack func())
 	af.handleTransferRecord(result.ClientID, result.Payload)
 }
 
-func (af *AverageFilter) handleTransferRecord(clientID int, t transfer.Transfer) {
+func (af *AverageFilter) handleTransferRecord(clientID int, t transfer.TransferForQ3Filter) {
 	af.transfersMonitor.AddProcessedMessagesAmountByClientId(clientID, 1)
 
 	af.lock.Lock()
@@ -267,7 +266,7 @@ func (af *AverageFilter) handleTransferRecord(clientID int, t transfer.Transfer)
 	af.saveTransferToFile(clientID, t)
 }
 
-func (af *AverageFilter) handleTransferEOF(data inner.DataMsg[transfer.Transfer]) {
+func (af *AverageFilter) handleTransferEOF(data inner.DataMsg[transfer.TransferForQ3Filter]) {
 	af.lock.Lock()
 	defer af.lock.Unlock()
 
@@ -348,7 +347,7 @@ func (af *AverageFilter) onTransfersRingConverged(clientID int, msg *middleware.
 	return nil
 }
 
-func (af *AverageFilter) processTransferLocked(clientID int, t transfer.Transfer, state *clientState) {
+func (af *AverageFilter) processTransferLocked(clientID int, t transfer.TransferForQ3Filter, state *clientState) {
 	avg, ok := state.avgs[t.PaymentFormat]
 	if !ok {
 		return
@@ -429,7 +428,7 @@ func (af *AverageFilter) bufferFileName(clientID int, method string) string {
 	return fmt.Sprintf("avg_filter_%d_client_%d_%s.csv", af.id, clientID, safe)
 }
 
-func (af *AverageFilter) saveTransferToFile(clientID int, t transfer.Transfer) {
+func (af *AverageFilter) saveTransferToFile(clientID int, t transfer.TransferForQ3Filter) {
 	filename := af.bufferFileName(clientID, t.PaymentFormat)
 	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -482,7 +481,7 @@ func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *
 			slog.Error("While parsing amount from file", "filter_id", af.id, "err", err)
 			continue
 		}
-		t := transfer.Transfer{
+		t := transfer.TransferForQ3Filter{
 			PaymentFormat:   cols[0],
 			FromBank:        cols[1],
 			FromBankAccount: cols[2],

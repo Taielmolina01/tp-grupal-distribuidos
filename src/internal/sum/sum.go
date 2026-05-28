@@ -34,12 +34,12 @@ type SumByPaymentFormat struct {
 	id      int
 	queryID uint8
 
-	inputQueue     middleware.Middleware
-	outputQueues   []middleware.Middleware
-	eofInput       middleware.Middleware
-	eofOutput      middleware.Middleware
-	eofHandler     eofring.EofRingAlgorithm
-	msgMonitor     msgmonitor.MessageMonitor
+	inputQueue   middleware.Middleware
+	outputQueues []middleware.Middleware
+	eofInput     middleware.Middleware
+	eofOutput    middleware.Middleware
+	eofHandler   eofring.EofRingAlgorithm
+	msgMonitor   msgmonitor.MessageMonitor
 
 	mu           sync.Mutex
 	acumuladores map[int]map[string]transfer.SumByMethod
@@ -170,7 +170,7 @@ func (s *SumByPaymentFormat) close() {
 func (s *SumByPaymentFormat) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[transfer.Transfer](&msg)
+	result, err := inner.DeserializeData[transfer.TransferForQ3Avg](&msg)
 	if err != nil {
 		slog.Error("While deserializing message", "err", err)
 		return
@@ -184,7 +184,7 @@ func (s *SumByPaymentFormat) handleInput(msg middleware.Message, ack func()) {
 	s.handleRecord(result.ClientID, result.Payload)
 }
 
-func (s *SumByPaymentFormat) handleRecord(clientID int, t transfer.Transfer) {
+func (s *SumByPaymentFormat) handleRecord(clientID int, t transfer.TransferForQ3Avg) {
 	method := t.PaymentFormat
 
 	s.mu.Lock()
@@ -210,7 +210,7 @@ func (s *SumByPaymentFormat) handleRecord(clientID int, t transfer.Transfer) {
 	s.msgMonitor.AddProcessedMessagesAmountByClientId(clientID, 1)
 }
 
-func (s *SumByPaymentFormat) handleEOF(data inner.DataMsg[transfer.Transfer]) {
+func (s *SumByPaymentFormat) handleEOF(data inner.DataMsg[transfer.TransferForQ3Avg]) {
 	ringMsg := eofmessagetypes.EofRingMessage{
 		RealAmount:     data.EOF.TotalMessages,
 		ActualAmount:   s.msgMonitor.GetProcessedMessagesAmountByClientId(data.ClientID),

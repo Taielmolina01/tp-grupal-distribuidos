@@ -222,7 +222,7 @@ func (s *DateRangeSplitter) close() {
 func (s *DateRangeSplitter) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[transfer.Transfer](&msg)
+	result, err := inner.DeserializeData[transfer.TransferAfterCurrency](&msg)
 	if err != nil {
 		slog.Error("While deserializing message", "err", err)
 		return
@@ -233,10 +233,10 @@ func (s *DateRangeSplitter) handleInput(msg middleware.Message, ack func()) {
 		return
 	}
 
-	s.handleRecord(result.ClientID, result.Payload, msg)
+	s.handleRecord(result.ClientID, result.Payload)
 }
 
-func (s *DateRangeSplitter) handleRecord(clientID int, record transfer.Transfer, raw middleware.Message) {
+func (s *DateRangeSplitter) handleRecord(clientID int, record transfer.TransferAfterCurrency) {
 	for _, m := range s.monitors {
 		m.AddProcessedMessagesAmountByClientId(clientID, 1)
 	}
@@ -252,12 +252,36 @@ func (s *DateRangeSplitter) handleRecord(clientID int, record transfer.Transfer,
 
 	s.monitors[idx].AddForwardedMessagesAmountByClientId(clientID, 1)
 
-	if err := s.outputQueues[idx].Send(raw); err != nil {
+	var outMsg *middleware.Message
+	var err error
+	switch idx {
+	case 0:
+		outMsg, err = inner.SerializeData(inner.DataMsg[transfer.TransferForQ3Avg]{
+			ClientID: clientID,
+			QueryID:  s.queryID,
+			Payload:  transfer.ProjectForQ3Avg(record),
+		})
+	case 1:
+		outMsg, err = inner.SerializeData(inner.DataMsg[transfer.TransferForQ3Filter]{
+			ClientID: clientID,
+			QueryID:  s.queryID,
+			Payload:  transfer.ProjectForQ3Filter(record),
+		})
+	default:
+		slog.Error("DateRangeSplitter: unknown output idx", "idx", idx)
+		return
+	}
+	if err != nil {
+		slog.Error("While serializing output message", "idx", idx, "err", err)
+		return
+	}
+
+	if err := s.outputQueues[idx].Send(*outMsg); err != nil {
 		slog.Error("While sending message to output queue", "idx", idx, "err", err)
 	}
 }
 
-func (s *DateRangeSplitter) handleEOF(data inner.DataMsg[transfer.Transfer]) {
+func (s *DateRangeSplitter) handleEOF(data inner.DataMsg[transfer.TransferAfterCurrency]) {
 	for idx, eofOut := range s.eofOutputs {
 		ringMsg := eofmessagetypes.EofRingMessage{
 			RealAmount:     data.EOF.TotalMessages,
@@ -279,7 +303,7 @@ func (s *DateRangeSplitter) handleEOF(data inner.DataMsg[transfer.Transfer]) {
 	}
 }
 
-func (s *DateRangeSplitter) periodIndex(t transfer.Transfer) int {
+func (s *DateRangeSplitter) periodIndex(t transfer.TransferAfterCurrency) int {
 	switch {
 	case !t.Timestamp.Before(s.avgPeriodStart) && !t.Timestamp.After(s.avgPeriodEnd):
 		return 0

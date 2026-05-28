@@ -20,19 +20,17 @@ func CreateCurrencyFilter(config FilterConfig) (worker.Worker, error) {
 		func(t transfer.Transfer) bool {
 			return isValidCurrency(t, config)
 		},
-		func(t transfer.Transfer) transfer.Transfer {
-			return t
-		},
+		transfer.ProjectAfterCurrency,
 	)
 }
 
 func CreateAmountFilter(config FilterConfig) (worker.Worker, error) {
 	return newFilter(
 		config,
-		func(t transfer.Transfer) bool {
+		func(t transfer.TransferAfterCurrency) bool {
 			return t.AmountPaid < config.Amount
 		},
-		func(t transfer.Transfer) queryresult.Query1Result {
+		func(t transfer.TransferAfterCurrency) queryresult.Query1Result {
 			return queryresult.Query1Result{
 				FromBank:    t.FromBank,
 				FromAccount: t.FromBankAccount,

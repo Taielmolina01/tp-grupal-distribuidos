@@ -9,14 +9,15 @@ import (
 func CreateReducerMaxAmountFromBank(config ReducerConfig) (worker.Worker, error) {
 	return newReducer(
 		config,
-		func(t1, t2 transfer.Transfer) transfer.Transfer {
+		func(t1, t2 transfer.TransferAfterCurrency) transfer.TransferAfterCurrency {
 			if t1.AmountPaid > t2.AmountPaid {
 				return t1
 			} else {
 				return t2
 			}
 		},
-		func(t transfer.Transfer) string { return normalizer.NormalizeBankID(t.FromBank) },
+		func(t transfer.TransferAfterCurrency) string { return normalizer.NormalizeBankID(t.FromBank) },
+		transfer.ProjectForQ2,
 		config.QueryId,
 	)
 }

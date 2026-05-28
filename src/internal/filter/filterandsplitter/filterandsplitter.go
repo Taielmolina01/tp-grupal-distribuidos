@@ -184,7 +184,7 @@ func (f *FilterAndSplitter) close() {
 
 func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[transfer.Transfer](&msg)
+	m, err := inner.DeserializeData[transfer.TransferAfterCurrency](&msg)
 
 	if err != nil {
 		slog.Error("While deserializing pipeline message", "err", err)
@@ -199,7 +199,7 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
 	f.handleRecord(m.ClientID, m.Payload)
 }
 
-func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer) {
+func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.TransferAfterCurrency) {
 	f.handlerMessages.AddProcessedMessagesAmountByClientId(clientID, 1)
 
 	if record.Timestamp.Before(f.startDate) || record.Timestamp.After(f.endDate) {
@@ -210,9 +210,10 @@ func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer)
 		return
 	}
 
+	projected := transfer.ProjectForQ4(record)
 	output := []transfer.SplittedTransfer{
-		{Transfer: record, IsLeftPart: true},
-		{Transfer: record, IsLeftPart: false},
+		{Transfer: projected, IsLeftPart: true},
+		{Transfer: projected, IsLeftPart: false},
 	}
 
 	for _, o := range output {
@@ -245,7 +246,7 @@ func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.Transfer)
 	}
 }
 
-func (f *FilterAndSplitter) handleEOF(data inner.DataMsg[transfer.Transfer]) {
+func (f *FilterAndSplitter) handleEOF(data inner.DataMsg[transfer.TransferAfterCurrency]) {
 	eofRingMessage := eofmessagetypes.EofRingMessage{
 		RealAmount:     data.EOF.TotalMessages,
 		ActualAmount:   f.handlerMessages.GetProcessedMessagesAmountByClientId(data.ClientID),
