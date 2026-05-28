@@ -1,0 +1,31 @@
+src/internal/filter/averagefilter.go
+  s_de0cda68900f35::t_bbed56c280400c 164
+  s_de0cda68900f35::t_2921ddb1164fe5 421-426
+  s_de0cda68900f35::t_b57fd2981ac265 353
+  h_3c9b41718876fe 9,13,133-134,411-417,420,427-430
+  s_de0cda68900f35::t_8f5e774164989f 205
+  s_de0cda68900f35::t_cee367ad506e8a 318-323
+  s_de0cda68900f35::t_99cebc3b1f5f11 61-63,72-74,119,196,296-314,337-340
+  s_de0cda68900f35::t_65a088ed3c96f0 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "17187994f50a36d780c40ea59187fa948bb308b8",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_de0cda68900f35": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c5630a13-ecda-4334-a019-db4f0300dd5a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
