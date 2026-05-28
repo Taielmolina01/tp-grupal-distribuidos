@@ -8,6 +8,7 @@ import (
 const UINT8_SIZE uint32 = 1
 const UINT16_SIZE uint32 = 2
 const UINT32_SIZE uint32 = 4
+const UINT64_SIZE uint32 = 8
 const BOOL_SIZE uint32 = 1
 
 func SerializeUint8(value uint8) []byte {
@@ -47,14 +48,14 @@ func DeserializeString(bytes []byte) string {
 	return string(bytes)
 }
 
-func SerializeFloat32(value float32) []byte {
-	data := make([]byte, UINT32_SIZE)
-	binary.BigEndian.PutUint32(data, math.Float32bits(value))
+func SerializeFloat64(value float64) []byte {
+	data := make([]byte, UINT64_SIZE)
+	binary.BigEndian.PutUint64(data, math.Float64bits(value))
 	return data
 }
 
-func DeserializeFloat32(bytes []byte) float32 {
-	return math.Float32frombits(binary.BigEndian.Uint32(bytes))
+func DeserializeFloat64(bytes []byte) float64 {
+	return math.Float64frombits(binary.BigEndian.Uint64(bytes))
 }
 
 func SerializeBool(value bool) []byte {

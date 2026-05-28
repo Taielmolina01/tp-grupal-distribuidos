@@ -17,10 +17,11 @@ import (
 
 const eofRingQueuePrefix = "REDUCE"
 
-func newReducer[T comparable](
+func newReducer[T, O comparable](
 	config ReducerConfig,
 	reducerFunction func(T, T) T,
 	keyFunc func(T) string,
+	projectFunc func(T) O,
 	queryId uint8,
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
@@ -88,13 +89,14 @@ func newReducer[T comparable](
 
 	handlerMessages := msgmonitor.NewMessageMonitor()
 
-	reducer := &Reducer[T]{
+	reducer := &Reducer[T, O]{
 		id:                config.Id,
 		inputExchange:     inputExchange,
 		outputQueues:      outputQueues,
 		reducerMonitor:    NewReducerMonitor[T](handlerMessages),
 		reducerFunction:   reducerFunction,
 		keyFunc:           keyFunc,
+		projectFunc:       projectFunc,
 		inputEofsExpected: config.InputEofsExpected,
 		inputEofCount:     map[int]int{},
 		totalRealAmount:   map[int]uint32{},
@@ -109,15 +111,14 @@ func newReducer[T comparable](
 		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
 			values := reducer.reducerMonitor.GetValuesCopyByClientIdAndDelete(clientID)
 			for _, v := range values {
-				msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
-					Payload:  v,
+				msgOutput, err := inner.SerializeData(inner.DataMsg[O]{
+					Payload:  projectFunc(v),
 					ClientID: clientID,
 					QueryID:  reducer.queryId,
 				})
 				if err != nil {
 					return err
 				}
-				slog.Info("Reducer sending message to output exchange", "client_id", clientID, "payload", v)
 				if err := reducer.outputQueues[shard.CalculateIndexForShard(
 					clientID,
 					keyFunc(v),
@@ -144,7 +145,9 @@ func newReducer[T comparable](
 	return reducer, nil
 }
 
-func (reducer *Reducer[T]) Run() {
+
+func (reducer *Reducer[T, O]) Run() {
+	defer reducer.close()
 	go reducer.eofHandler.Run()
 	if err := reducer.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		reducer.handleMessage(msg, ack, nack)
@@ -153,7 +156,7 @@ func (reducer *Reducer[T]) Run() {
 	}
 }
 
-func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nack func()) {
+func (reducer *Reducer[T, O]) handleMessage(msg middleware.Message, ack func(), nack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[T](&msg)
@@ -167,7 +170,6 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 	if result.IsEOF() {
 		reducer.inputEofCount[result.ClientID]++
 		reducer.totalRealAmount[result.ClientID] = result.EOF.TotalMessages
-		// slog.Info("input EOF received", "client_id", result.ClientID, "count", reducer.inputEofCount[result.ClientID], "expected", reducer.inputEofsExpected)
 
 		eofRingMessage := eofmessagetypes.EofRingMessage{
 			RealAmount:     reducer.totalRealAmount[result.ClientID],
@@ -191,7 +193,6 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 		); err != nil {
 			slog.Error("While sending EOF message to EOF ring", "err", err)
 		}
-		// slog.Info("EOF message sent to EOF ring", "reducer_id", reducer.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
 	} else {
 		key := reducer.keyFunc(result.Payload)
 
@@ -205,27 +206,22 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 
 }
 
-func (reducer *Reducer[T]) HandleSignals() {
+func (reducer *Reducer[T, O]) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	if err := reducer.Close(); err != nil {
-		slog.Error("While closing reducer node", "err", err)
+	if err := reducer.inputExchange.StopConsuming(); err != nil {
+		slog.Error("while closing reducer", "err", err)
 	}
 }
 
-func (reducer *Reducer[T]) Close() error {
-	if err := reducer.inputExchange.StopConsuming(); err != nil {
-		return err
-	}
+
+func (reducer *Reducer[T, O]) close() error {
 	if err := reducer.inputExchange.Close(); err != nil {
 		return err
 	}
 	for _, outputQueue := range reducer.outputQueues {
-		if err := outputQueue.StopConsuming(); err != nil {
-			return err
-		}
 		if err := outputQueue.Close(); err != nil {
 			return err
 		}

@@ -14,25 +14,25 @@ import (
 	"tp-grupal-distribuidos/internal/filter/filterandsplitter"
 )
 
+const IGNORED_CURRENCY = "Bitcoin"
+
 func CreateCurrencyFilter(config FilterConfig) (worker.Worker, error) {
 	return newFilter(
 		config,
 		func(t transfer.Transfer) bool {
 			return isValidCurrency(t, config)
 		},
-		func(t transfer.Transfer) transfer.Transfer {
-			return t
-		},
+		transfer.ProjectAfterCurrency,
 	)
 }
 
 func CreateAmountFilter(config FilterConfig) (worker.Worker, error) {
 	return newFilter(
 		config,
-		func(t transfer.Transfer) bool {
+		func(t transfer.TransferAfterCurrency) bool {
 			return t.AmountPaid < config.Amount
 		},
-		func(t transfer.Transfer) queryresult.Query1Result {
+		func(t transfer.TransferAfterCurrency) queryresult.Query1Result {
 			return queryresult.Query1Result{
 				FromBank:    t.FromBank,
 				FromAccount: t.FromBankAccount,
@@ -60,36 +60,15 @@ func CreateDateRangeAndPaymentMethod(config FilterConfig) (worker.Worker, error)
 	return newFilter(
 		config,
 		func(t transfer.Transfer) bool {
-			return isValidPaymentMethod(t, config) && t.Timestamp.Before(config.EndDateRange) && t.Timestamp.After(config.StartDateRange)
+			return isValidPaymentMethod(t, config) && !t.Timestamp.Before(config.StartDateRange) && t.Timestamp.Before(config.EndDateRange)
 		},
-		func(t transfer.Transfer) transfer.Transfer {
-			return t
-		},
+		transfer.ProjectForQ5Filter,
 	)
-}
-
-func CreateCountAndFilter(config CountAndFilterConfig) (worker.Worker, error) {
-	return newCountAndFilter[transfer.Transfer](config)
 }
 
 func CreateFilterAndSplitter(config filterandsplitter.FilterAndSplitterConfig) (worker.Worker, error) {
 	return filterandsplitter.NewFilterAndSplitter(
 		config,
-	)
-}
-
-func CreateTransferDistinctFilter(config FilterConfig) (worker.Worker, error) {
-	return newDistinctFilter(
-		config,
-		func(t1 transfer.Transfer, t2 transfer.Transfer) bool {
-			return t1.Equals(t2)
-		},
-		func(t transfer.Transfer) transfer.Transfer {
-			return t
-		},
-		func(t transfer.Transfer) string {
-			return t.FromBank
-		},
 	)
 }
 
@@ -100,7 +79,7 @@ func CreateBankDistinctFilter(config FilterConfig) (worker.Worker, error) {
 			return ac1.BankId == ac2.BankId
 		},
 		func(ac account.Account) string {
-			return ac.BankId
+			return normalizer.NormalizeBankID(ac.BankId)
 		},
 		func(t account.Account) string {
 			return normalizer.NormalizeBankID(t.BankId)
@@ -108,97 +87,63 @@ func CreateBankDistinctFilter(config FilterConfig) (worker.Worker, error) {
 	)
 }
 
-func CreateAverageFilter(config FilterConfig) (worker.Worker, error) {
-	return newAverageFilter(
-		config,
-		func(transferAmount float32, avg float32) bool {
-			return transferAmount < avg/100
-		},
-		3,
-	)
-}
-
 func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 	return newConvertedAmountFilter(
 		config,
-		func(t transfer.Transfer, f fetcherresponse.FetcherResponse) bool {
+		func(t transfer.TransferForQ5Filter, f fetcherresponse.FetcherResponse) bool {
 			return t.AmountPaid/f.Rate < config.Amount
 		},
-		func(f fetcherresponse.FetcherResponse) string {
-			return f.Date
-		},
-		func(f fetcherresponse.FetcherResponse) string {
-			return f.Quote
-		},
-		func(f fetcherresponse.FetcherResponse) float32 {
-			return f.Rate
-		},
-		func(t transfer.Transfer) string {
+		func(f fetcherresponse.FetcherResponse) string { return f.Date },
+		func(f fetcherresponse.FetcherResponse) string { return f.Quote },
+		func(f fetcherresponse.FetcherResponse) float64 { return f.Rate },
+		func(t transfer.TransferForQ5Filter) string {
 			return t.Timestamp.Format(DATE_LAYOUT)
 		},
-		func(t transfer.Transfer) string {
-			return t.ReceivingCurrency
-		},
-		func(t transfer.Transfer) float32 {
-			return t.AmountPaid
-		},
-		func(t transfer.Transfer, rate float32) fetcherresponse.FetcherResponse {
+		func(t transfer.TransferForQ5Filter) string { return t.Currency },
+		func(t transfer.TransferForQ5Filter) float64 { return t.AmountPaid },
+		func(t transfer.TransferForQ5Filter, rate float64) fetcherresponse.FetcherResponse {
 			return fetcherresponse.FetcherResponse{
 				Date:  t.Timestamp.Format(DATE_LAYOUT),
-				Quote: t.ReceivingCurrency,
+				Quote: t.Currency,
 				Rate:  rate,
 			}
 		},
-		func(t transfer.Transfer, clientID int) string {
-			fields := []string{}
-			fields = append(fields, t.Timestamp.Format(DATE_LAYOUT))
-			fields = append(fields, t.FromBank)
-			fields = append(fields, t.FromBankAccount)
-			fields = append(fields, t.ToBank)
-			fields = append(fields, t.ToBankAccount)
-			fields = append(fields, fmt.Sprintf("%f", t.AmountReceived))
-			fields = append(fields, t.ReceivingCurrency)
-			fields = append(fields, fmt.Sprintf("%f", t.AmountPaid))
-			fields = append(fields, t.PaymentCurrency)
-			fields = append(fields, t.PaymentFormat)
-			fields = append(fields, fmt.Sprintf("%t", t.IsLaundering))
-			fields = append(fields, fmt.Sprintf("%d", clientID))
-			return strings.Join(fields, ",")
+		func(t transfer.TransferForQ5Filter, clientID int) string {
+			return strings.Join([]string{
+				t.Timestamp.Format(time.RFC3339),
+				t.Currency,
+				strconv.FormatFloat(t.AmountPaid, 'f', -1, 64),
+				strconv.Itoa(clientID),
+			}, ",")
 		},
-		func(line string) (transfer.Transfer, int, error) {
+		func(line string) (transfer.TransferForQ5Filter, int, error) {
 			columns := strings.Split(line, ",")
-			if len(columns) < 11 {
-				return transfer.Transfer{}, -1, fmt.Errorf("invalid line format")
+			if len(columns) < 4 {
+				return transfer.TransferForQ5Filter{}, -1, fmt.Errorf("invalid line format")
 			}
-			timestamp, err := time.Parse(DATE_LAYOUT, columns[0])
+			timestamp, err := time.Parse(time.RFC3339, columns[0])
 			if err != nil {
-				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing timestamp: %w", err)
+				return transfer.TransferForQ5Filter{}, -1, fmt.Errorf("error while parsing timestamp: %w", err)
 			}
-			amountReceived, err := strconv.ParseFloat(columns[5], 32)
+			amountPaid, err := strconv.ParseFloat(columns[2], 64)
 			if err != nil {
-				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing amount received: %w", err)
+				return transfer.TransferForQ5Filter{}, -1, fmt.Errorf("error while parsing amount paid: %w", err)
 			}
-			amountPaid, err := strconv.ParseFloat(columns[7], 32)
+			clientId, err := strconv.Atoi(columns[3])
 			if err != nil {
-				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing amount paid: %w", err)
+				return transfer.TransferForQ5Filter{}, -1, fmt.Errorf("error while parsing client ID: %w", err)
 			}
-			clientId, err := strconv.Atoi(columns[11])
-			if err != nil {
-				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing client ID: %w", err)
-			}
-			return transfer.Transfer{
-				Timestamp:         timestamp,
-				FromBank:          columns[1],
-				FromBankAccount:   columns[2],
-				ToBank:            columns[3],
-				ToBankAccount:     columns[4],
-				AmountReceived:    float32(amountReceived),
-				ReceivingCurrency: columns[6],
-				AmountPaid:        float32(amountPaid),
-				PaymentCurrency:   columns[8],
-				PaymentFormat:     columns[9],
-				IsLaundering:      columns[10] == "true",
+			return transfer.TransferForQ5Filter{
+				Timestamp:  timestamp,
+				Currency:   columns[1],
+				AmountPaid: amountPaid,
 			}, clientId, nil
+		},
+		func(t transfer.TransferForQ5Filter) bool {
+			return t.Currency == IGNORED_CURRENCY
+		},
+		func() transfer.FinalTransferForQ5 {
+			return transfer.ProjectForQ5Final()
 		},
 	)
 }

@@ -7,20 +7,21 @@ type Query1Result struct {
 	FromAccount string  `json:"from_account"`
 	ToBank      string  `json:"to_bank"`
 	ToAccount   string  `json:"to_account"`
-	Amount      float32 `json:"amount"`
+	Amount      float64 `json:"amount"`
 }
 
 type Query2Result struct {
 	BankName    string  `json:"bank_name"`
 	FromBank    string  `json:"from_bank"`
 	FromAccount string  `json:"from_account"`
-	Amount      float32 `json:"amount"`
+	Amount      float64 `json:"amount"`
 }
 
 type Query3Result struct {
-	FromBank    string  `json:"from_bank"`
-	FromAccount string  `json:"from_account"`
-	Amount      float32 `json:"amount"`
+	FromBank      string  `json:"from_bank"`
+	FromAccount   string  `json:"from_account"`
+	PaymentFormat string  `json:"payment_format"` // revisar
+	Amount        float64 `json:"amount"`
 }
 
 type Query4Result struct {

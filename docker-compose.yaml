@@ -36,7 +36,7 @@ services:
       - MOM_PORT=5672
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - QUERY_EOFS_EXPECTED=1:1,2:2,3:1,4:2,5:1
+      - QUERY_EOFS_EXPECTED=1:1,2:2,3:2,4:2,5:1
 
   client_0:
     build:
@@ -55,24 +55,6 @@ services:
     volumes:
       - ./input:/input
       - ./output:/output
-
-  # client_1:
-  #   build:
-  #     context: ./src/
-  #     dockerfile: cmd/client/Dockerfile
-  #   container_name: client_1
-  #   depends_on:
-  #     - gateway
-  #   environment:
-  #     - SERVER_HOST=gateway
-  #     - SERVER_PORT=5678
-  #     - INPUT_FILE_ACCOUNTS=/input2/LI-Large_accounts.csv
-  #     - INPUT_FILE_TRANS=/input2/output.csv
-  #     - OUTPUT_FILE_PREFIX=/output/output_1
-  #     - MAX_BATCH_SIZE=1000
-  #   volumes:
-  #     - ./input2:/input2
-  #     - ./output:/output
 
 
   # Query 1
@@ -526,6 +508,153 @@ services:
         max-file: "3"
 
 
+  # Query 3
+
+  filter_range_q3_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/daterangesplitter/Dockerfile
+    container_name: filter_range_q3_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=0
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_EXCHANGE=filtered_transfers_exchange
+      - INPUT_QUEUE=filter_range_q3_in
+      - INPUT_ROUTING_KEYS=transfers_q1234
+      - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
+      - FILTER_AMOUNT=2
+      - QUERY_ID=3
+
+  filter_range_q3_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/daterangesplitter/Dockerfile
+    container_name: filter_range_q3_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=1
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_EXCHANGE=filtered_transfers_exchange
+      - INPUT_QUEUE=filter_range_q3_in
+      - INPUT_ROUTING_KEYS=transfers_q1234
+      - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
+      - FILTER_AMOUNT=2
+      - QUERY_ID=3
+
+  sum_q3_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/sum/Dockerfile
+    container_name: sum_q3_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=0
+      - SUM_AMOUNT=2
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_QUEUE=transfers_avg_period_q
+      - OUTPUT_QUEUES=sum_aggregate_q3_0,sum_aggregate_q3_1
+      - QUERY_ID=3
+
+  sum_q3_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/sum/Dockerfile
+    container_name: sum_q3_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=1
+      - SUM_AMOUNT=2
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_QUEUE=transfers_avg_period_q
+      - OUTPUT_QUEUES=sum_aggregate_q3_0,sum_aggregate_q3_1
+      - QUERY_ID=3
+
+  aggregate_q3_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/aggregate/Dockerfile
+    container_name: aggregate_q3_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=0
+      - AGGREGATE_AMOUNT=2
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_QUEUE=sum_aggregate_q3_0
+      - OUTPUT_QUEUES=filter2_avg_q3_0,filter2_avg_q3_1
+      - QUERY_ID=3
+
+  aggregate_q3_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/aggregate/Dockerfile
+    container_name: aggregate_q3_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=1
+      - AGGREGATE_AMOUNT=2
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_QUEUE=sum_aggregate_q3_1
+      - OUTPUT_QUEUES=filter2_avg_q3_0,filter2_avg_q3_1
+      - QUERY_ID=3
+
+  average_filter_q3_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/averagefilter/Dockerfile
+    container_name: average_filter_q3_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=0
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - FILTER_AMOUNT=2
+      - INPUT_QUEUE=transfers_filter_period_q
+      - AVG_INPUT_QUEUE=filter2_avg_q3_0
+      - AVG_EXPECTED_EOFS=2
+      - OUTPUT_QUEUE=results_queue
+      - QUERY_ID=3
+
+  average_filter_q3_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/averagefilter/Dockerfile
+    container_name: average_filter_q3_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=1
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - FILTER_AMOUNT=2
+      - INPUT_QUEUE=transfers_filter_period_q
+      - AVG_INPUT_QUEUE=filter2_avg_q3_1
+      - AVG_EXPECTED_EOFS=2
+      - OUTPUT_QUEUE=results_queue
+      - QUERY_ID=3
+
+
   # Query 5
 
   filter_date_and_payment_0:
@@ -613,6 +742,7 @@ services:
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
       - QUERY_ID=5
+      - QUOTE=US Dollar
 
   filter_amt_q5_1:
     build:
@@ -635,6 +765,7 @@ services:
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
       - QUERY_ID=5
+      - QUOTE=US Dollar
 
   count_reducer_q5:
     build:
@@ -655,151 +786,3 @@ services:
       - REDUCER_TYPE=COUNT
       - QUERY_ID=5
 
-
-  filter_range_q3_0:
-    build:
-      context: ./src/
-      dockerfile: cmd/filter/Dockerfile
-    container_name: filter_range_q3_0
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      - ID=0
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=filter_range_q3_in
-      - INPUT_ROUTING_KEYS=transfers_q1234
-      - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
-      - FILTER_AMOUNT=2
-      - FILTER_TYPE=DATE_RANGE_AND_SPLITTER
-      - QUERY_ID=3
-
-  filter_range_q3_1:
-    build:
-      context: ./src/
-      dockerfile: cmd/filter/Dockerfile
-    container_name: filter_range_q3_1
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      - ID=1
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=filter_range_q3_in
-      - INPUT_ROUTING_KEYS=transfers_q1234
-      - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
-      - FILTER_AMOUNT=2
-      - FILTER_TYPE=DATE_RANGE_AND_SPLITTER
-      - QUERY_ID=3
-
-  sum_q3_0:
-    build:
-      context: ./src/
-      dockerfile: cmd/sum/Dockerfile
-    container_name: sum_q3_0
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      - ID=0
-      - SUM_AMOUNT=2
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - INPUT_QUEUE=transfers_avg_period_q
-      - OUTPUT_QUEUES=sum_aggregate_q3_0,sum_aggregate_q3_1
-      - QUERY_ID=3
-
-  sum_q3_1:
-    build:
-      context: ./src/
-      dockerfile: cmd/sum/Dockerfile
-    container_name: sum_q3_1
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      - ID=1
-      - SUM_AMOUNT=2
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - INPUT_QUEUE=transfers_avg_period_q
-      - OUTPUT_QUEUES=sum_aggregate_q3_0,sum_aggregate_q3_1
-      - QUERY_ID=3
-
-  aggregate_q3_0:
-    build:
-      context: ./src/
-      dockerfile: cmd/aggregate/Dockerfile
-    container_name: aggregate_q3_0
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      - ID=0
-      - AGGREGATE_AMOUNT=2
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - INPUT_QUEUE=sum_aggregate_q3_0
-      - OUTPUT_QUEUES=filter2_avg_q3_0,filter2_avg_q3_1
-      - QUERY_ID=3
-
-  aggregate_q3_1:
-    build:
-      context: ./src/
-      dockerfile: cmd/aggregate/Dockerfile
-    container_name: aggregate_q3_1
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      - ID=1
-      - AGGREGATE_AMOUNT=2
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - INPUT_QUEUE=sum_aggregate_q3_1
-      - OUTPUT_QUEUES=filter2_avg_q3_0,filter2_avg_q3_1
-      - QUERY_ID=3
-
-  average_filter_q3_0:
-    build:
-      context: ./src/
-      dockerfile: cmd/filter/Dockerfile
-    container_name: average_filter_q3_0
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      - ID=0
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - FILTER_TYPE=AVERAGE_FILTER
-      - FILTER_AMOUNT=2
-      - INPUT_QUEUE=transfers_filter_period_q
-      - AVG_INPUT_QUEUE=filter2_avg_q3_0
-      - AVG_EXPECTED_EOFS=2
-      - OUTPUT_QUEUE=results_queue
-      - QUERY_ID=3
-
-  average_filter_q3_1:
-    build:
-      context: ./src/
-      dockerfile: cmd/filter/Dockerfile
-    container_name: average_filter_q3_1
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      - ID=1
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - FILTER_TYPE=AVERAGE_FILTER
-      - FILTER_AMOUNT=2
-      - INPUT_QUEUE=transfers_filter_period_q
-      - AVG_INPUT_QUEUE=filter2_avg_q3_1
-      - AVG_EXPECTED_EOFS=2
-      - OUTPUT_QUEUE=results_queue
-      - QUERY_ID=3

@@ -43,7 +43,11 @@ func main() {
 	fmt.Printf("  join_accounts_q4 (Q4):       %d\n", cfg.JoinAccountsQ4)
 	fmt.Printf("  acum_accounts_q4 (Q4):       %d\n", cfg.AcumAccountsQ4)
 	fmt.Printf("  filter_account_seen_q4 (Q4): %d\n", cfg.FilterAccountSeenQ4)
+	fmt.Printf("  filter_range_q3 (Q3):        %d\n", cfg.FilterRangeQ3)
+	fmt.Printf("  sum_q3 (Q3):                 %d\n", cfg.SumQ3)
+	fmt.Printf("  aggregate_q3 (Q3):           %d\n", cfg.AggregateQ3)
+	fmt.Printf("  average_filter_q3 (Q3):      %d\n", cfg.AverageFilterQ3)
 	fmt.Printf("  filter_date_and_payment (Q5):%d\n", cfg.FilterDateAndPayment)
 	fmt.Printf("  filter_amt_q5 (Q5):          %d\n", cfg.FilterAmtQ5)
-	fmt.Printf("  filter_bank_id_already_seen:     %d\n", cfg.FilterBankIdAlreadySeen)
+	fmt.Printf("  filter_bank_id_already_seen: %d\n", cfg.FilterBankIdAlreadySeen)
 }

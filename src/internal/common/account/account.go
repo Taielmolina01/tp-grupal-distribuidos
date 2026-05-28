@@ -43,6 +43,10 @@ func (a AccountIdentifier) GetKey() string {
 	return a.BankID + "_" + a.AccountNumber
 }
 
+type AccountIdentifierBatch struct {
+	Items []AccountIdentifier `json:"items"`
+}
+
 type Bank struct {
 	ID   string `json:"bank_id"`
 	Name string `json:"bank_name"`

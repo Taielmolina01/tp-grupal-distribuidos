@@ -29,14 +29,6 @@ func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 		Port:     config.MomPort,
 	}
 
-	slog.Info("Initializing fetcher",
-		"config.inputexchange",
-		config.InputExchange,
-		"config.InputQueue",
-		config.InputQueue,
-		"config.inputroutingkeys",
-		config.InputRoutingKeys,
-	)
 	inputQueue, err := middleware.CreateExchangeMiddleware(
 		config.InputExchange,
 		config.InputQueue,
@@ -67,11 +59,13 @@ func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 		outputQueues:     outputQueues,
 		queryId:          config.QueryId,
 		quote:            config.Quote,
-		conversionsByDay: make(map[string]map[string]float32),
+		conversionsByDay: make(map[string]map[string]float64),
 	}, nil
 }
 
 func (fetcher *Fetcher) Run() {
+	defer fetcher.close()
+
 	if err := fetcher.inputQueue.StartConsuming(fetcher.consume); err != nil {
 		slog.Error("while starting consuming from input queue", "err", err)
 		return
@@ -81,7 +75,7 @@ func (fetcher *Fetcher) Run() {
 func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[transfer.Transfer](&msg)
+	result, err := inner.DeserializeData[transfer.TransferForQ5](&msg)
 	if err != nil {
 		slog.Error("while deserializing transfer", "err", err)
 		return
@@ -100,7 +94,7 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 
 	today := transfer.Timestamp.Format(DATE_LAYOUT)
 	if _, ok := fetcher.conversionsByDay[today]; !ok {
-		fetcher.conversionsByDay[today] = make(map[string]float32)
+		fetcher.conversionsByDay[today] = make(map[string]float64)
 		if err := fetcher.fetchExchangeRate(transfer); err != nil {
 			slog.Error("while fetching exchange rate", "err", err)
 			return
@@ -130,7 +124,7 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 
 }
 
-func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.Transfer) error {
+func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.TransferForQ5) error {
 	response, err := http.Get(fmt.Sprintf(FULL_ENDPOINT, fetcher.quote, transfer.Timestamp.Format("2006-01-02")))
 	if err != nil {
 		return err
@@ -153,7 +147,7 @@ func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.Transfer) error {
 
 	for _, row := range body {
 		if _, ok := fetcher.conversionsByDay[row.Date]; !ok {
-			fetcher.conversionsByDay[row.Date] = make(map[string]float32)
+			fetcher.conversionsByDay[row.Date] = make(map[string]float64)
 		}
 		fetcher.conversionsByDay[row.Date][row.Quote] = row.Rate
 	}
@@ -166,14 +160,13 @@ func (fetcher *Fetcher) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	fetcher.close()
-}
 
-func (fetcher *Fetcher) close() {
 	if err := fetcher.inputQueue.StopConsuming(); err != nil {
 		slog.Error("while stopping consuming from input queue", "err", err)
 	}
+}
 
+func (fetcher *Fetcher) close() {
 	if err := fetcher.inputQueue.Close(); err != nil {
 		slog.Error("while closing input queue", "err", err)
 	}

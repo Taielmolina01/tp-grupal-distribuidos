@@ -34,15 +34,6 @@ func newFilter[T comparable, O comparable](
 		return nil, err
 	}
 
-	slog.Info("Initializing filter",
-		"config.OutputExchange",
-		config.OutputExchange,
-		"config.OutputQueue",
-		config.OutputQueue,
-		"config.outputroutingkeys",
-		config.OutputRoutingKeys,
-	)
-
 	outputExchange, err := middleware.CreateExchangeMiddleware(
 		config.OutputExchange,
 		config.OutputQueue,
@@ -126,7 +117,8 @@ func newFilter[T comparable, O comparable](
 }
 
 func (filter *Filter[T, O]) Run() {
-	slog.Info("Starting filter consumers", "filter_id", filter.id)
+	defer filter.close()
+
 	go filter.eofHandler.Run()
 	if err := filter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		filter.handleMessage(msg, ack, nack)
@@ -135,7 +127,7 @@ func (filter *Filter[T, O]) Run() {
 	}
 }
 
-func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func()) {
+func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, _ func()) {
 	ack()
 
 	result, err := inner.DeserializeData[T](&msg)
@@ -145,7 +137,6 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func
 	}
 
 	if result.IsEOF() {
-		slog.Info("RECEIVED EOF", "real_amount", result.EOF.TotalMessages)
 		eofRingMessage := eofmessagetypes.EofRingMessage{
 			RealAmount:     result.EOF.TotalMessages,
 			ActualAmount:   filter.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
@@ -163,8 +154,6 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func
 		); err != nil {
 			slog.Error("While sending EOF message to EOF ring", "err", err)
 		}
-		slog.Info("EOF message sent to EOF ring", "filter_id", filter.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
-		slog.Info("Total messages processed by filter", "filter_id", filter.id, "client_id", filter.id, "processed_messages", filter.handlerMessages.GetProcessedMessagesAmountByClientId(int(filter.id)))
 	} else {
 		filter.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
 		if filter.filterFunction(result.Payload) {
@@ -192,17 +181,12 @@ func (filter *Filter[T, O]) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	if err := filter.close(); err != nil {
-		slog.Error("While closing filter node", "err", err)
+	if err := filter.inputExchange.StopConsuming(); err != nil {
+		slog.Error("while stop consuming from input exchange", "err", err)
 	}
 }
 
 func (filter *Filter[T, O]) close() error {
-
-	if err := filter.inputExchange.StopConsuming(); err != nil {
-		slog.Error("while stop consuming from input exchange", "err", err)
-		return err
-	}
 
 	if err := filter.inputExchange.Close(); err != nil {
 		slog.Error("while closing input exchange", "err", err)

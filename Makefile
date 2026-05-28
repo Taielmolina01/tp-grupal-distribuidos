@@ -1,6 +1,15 @@
 SHELL := /bin/bash
 PWD := $(shell pwd)
 
+INPUT_DIR    ?= ./input
+OUTPUT_DIR   ?= ./output
+EXPECTED_DIR ?= ./expected_output
+N_CLIENTS    ?= 1
+
+LIME  := \033[38;2;138;206;0m
+RED   := \033[31m
+RESET := \033[0m
+
 up:
 	mkdir -p output
 	COMPOSE_HTTP_TIMEOUT=300 docker compose -f docker-compose.yaml up --build --remove-orphans --detach
@@ -26,7 +35,7 @@ test:
 .PHONY: test
 
 compose:
-	@cd scripts/compose-gen && go run . $(if $(CONFIG),-config $(CONFIG),)
+	@cd scripts/compose-gen && GOWORK=off go run . $(if $(CONFIG),-config $(CONFIG),)
 .PHONY: compose
 
 switch:
@@ -39,3 +48,21 @@ switch:
 	@read -p "Selecciona uno [1-5]: " option;	\
 	cp ./scenarios/$${option}.yaml docker-compose.yaml
 .PHONY: switch
+
+EXPECTED_ENV = INPUT_DIR=$(PWD)/$(INPUT_DIR) EXPECTED_DIR=$(PWD)/$(EXPECTED_DIR) OUTPUT_DIR=$(PWD)/$(OUTPUT_DIR) N_CLIENTS=$(N_CLIENTS)
+
+build-expected:
+	@cd scripts/expected-output && GOWORK=off $(EXPECTED_ENV) go run . build
+.PHONY: build-expected
+
+verify-output:
+	@cd scripts/expected-output && GOWORK=off $(EXPECTED_ENV) go run . verify
+.PHONY: verify-output
+
+output-test: build-expected verify-output
+.PHONY: output-test
+
+build-race:
+	@go build -race ./src/...
+	@cd src && go build -race ./...
+.PHONY: build-race

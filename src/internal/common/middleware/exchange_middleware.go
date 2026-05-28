@@ -81,7 +81,6 @@ func CreateExchangeMiddlewareHelper(
 			false,     // no-wait
 			nil,       // arguments
 		)
-		slog.Info("queue declared in exchange is", "name", q.Name)
 		middleware.queue = q
 
 		if err != nil {
@@ -138,7 +137,6 @@ func (e *exchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack f
 		false,       // no-wait
 		nil,         // arguments
 	)
-	slog.Info("queue declared in exchange is", "name", q.Name)
 	e.queue = q
 
 	if err != nil {

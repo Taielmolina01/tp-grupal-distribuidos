@@ -63,6 +63,6 @@ func loadConfig() (acumaccounts.AcumAccountsConfig, error) {
 		ExpectedEOFs:           expectedEOFs,
 		InputMiddlewarePrefix:  inputPrefix,
 		QueryID:                queryID,
-		RequiredAmt:            requiredAmt,
+		RequiredAmt:            int8(requiredAmt),
 	}, nil
 }

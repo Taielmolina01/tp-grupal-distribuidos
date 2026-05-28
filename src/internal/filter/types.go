@@ -17,11 +17,11 @@ const (
 	AMOUNT                  FilterType = "AMOUNT"
 	DATE_RANGE              FilterType = "DATE_RANGE"
 	DATE_RANGE_AND_PAYMENT  FilterType = "DATE_RANGE_AND_PAYMENT"
-	COUNT_AND_FILTER        FilterType = "COUNT_AND_FILTER"
 	DATE_RANGE_AND_SPLITTER FilterType = "DATE_RANGE_AND_SPLITTER"
+	AVERAGE_FILTER          FilterType = "AVERAGE_FILTER"
+	COUNT_AND_FILTER        FilterType = "COUNT_AND_FILTER"
 	TRANSFER_DISTINCT       FilterType = "TRANSFER_DISTINCT"
 	BANK_DISTINCT           FilterType = "BANK_DISTINCT"
-	AVERAGE_FILTER          FilterType = "AVERAGE_FILTER"
 	CONVERTED_AMOUNT_FILTER FilterType = "CONVERTED_AMOUNT_FILTER"
 )
 
@@ -40,7 +40,7 @@ type FilterConfig struct {
 	RightInputQueue       string
 	RightInputExchange    string
 	RightInputRoutingKeys []string
-	Amount                float32
+	Amount                float64
 	StartDateRange        time.Time
 	EndDateRange          time.Time
 	Currencies            []string
@@ -49,8 +49,7 @@ type FilterConfig struct {
 	OutputQueues          []string
 	QueryId               uint8
 	PaymentFormats        []string
-	AvgInputQueue         string
-	AvgExpectedEofs       int
+	Quote                 string
 }
 
 type Filter[T comparable, O comparable] struct {
@@ -84,35 +83,7 @@ type DistinctFilter[T comparable, S comparable] struct {
 	shardCriteria func(T) string
 }
 
-type AverageFilter struct {
-	id                  uint32
-	queryID             uint8
-	inputTransfersQueue middleware.Middleware
-	inputAvgsQueue      middleware.Middleware
-	outputQueue         middleware.Middleware
-
-	transfersRing    eofring.EofRingAlgorithm
-	transfersMonitor msgmonitor.MessageMonitor
-	transfersEofOut  middleware.Middleware
-
-	avgsExpectedEofs int
-
-	compareFunc func(float32, float32) bool
-
-	state map[int]*avgFilterClientState
-	lock  sync.Mutex
-}
-
-type avgFilterClientState struct {
-	avgs                map[string]float32
-	avgsReady           bool
-	avgsEofsReceived    int
-	bufferedTransfers   []transfer.Transfer
-	transfersEofPending bool
-	transfersEofRealAmt uint32
-}
-
-type ConvertedAmountFilter[T, S comparable] struct {
+type ConvertedAmountFilter[T, S, O comparable] struct {
 	leftInputQueue     middleware.Middleware
 	rightInputQueue    middleware.Middleware
 	outputQueue        middleware.Middleware
@@ -120,16 +91,23 @@ type ConvertedAmountFilter[T, S comparable] struct {
 	queryId            uint8
 	leftKeyFunc        func(S) string
 	leftSecondKeyFunc  func(S) string
-	leftValueFunc      func(S) float32
+	leftValueFunc      func(S) float64
 	rightKeyFunc       func(T) string
 	rightsecondKeyFunc func(T) string
-	rightValueFunc     func(T) float32
-	conversionFunc     func(T, float32) S
-	conversionsByDay   map[string]map[string]float32
+	rightValueFunc     func(T) float64
+	conversionFunc     func(T, float64) S
+	conversionsByDay   map[string]map[string]float64
 	toSaveFunc         func(T, int) string
 	fromSaveFunc       func(string) (T, int, error)
 	eofRing            eofring.EofRingAlgorithm
 	eofOutputQueue     middleware.Middleware
 	handlerMessages    msgmonitor.MessageMonitor
 	id                 uint32
+	toIgnoreFunc       func(T) bool
+	quote              string
+	amountThreshold    float64
+	fileMutexes        map[string]*sync.Mutex
+	fileMutexesMu      sync.Mutex
+	mapMutex           sync.Mutex
+	transformToOutput  func() O
 }

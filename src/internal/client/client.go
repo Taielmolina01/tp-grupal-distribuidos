@@ -198,12 +198,12 @@ func (client *Client) sendTransRecords() error {
 			slog.Debug("Error while parsing trans timestamp", "err", err)
 			continue
 		}
-		amountReceived, err := strconv.ParseFloat(columns[5], 32)
+		amountReceived, err := strconv.ParseFloat(columns[5], 64)
 		if err != nil {
 			slog.Debug("Error while parsing trans amount received", "err", err)
 			continue
 		}
-		amountPaid, err := strconv.ParseFloat(columns[7], 32)
+		amountPaid, err := strconv.ParseFloat(columns[7], 64)
 		if err != nil {
 			slog.Debug("Error while parsing trans amount paid", "err", err)
 			continue
@@ -214,9 +214,9 @@ func (client *Client) sendTransRecords() error {
 			FromBankAccount:   columns[2],
 			ToBank:            columns[3],
 			ToBankAccount:     columns[4],
-			AmountReceived:    float32(amountReceived),
+			AmountReceived:    amountReceived,
 			ReceivingCurrency: columns[6],
-			AmountPaid:        float32(amountPaid),
+			AmountPaid:        amountPaid,
 			PaymentCurrency:   columns[8],
 			PaymentFormat:     columns[9],
 			IsLaundering:      columns[10] == "1",
@@ -329,12 +329,12 @@ func (client *Client) flushBatchToWriters(results *queryresult.BatchResults, wri
 		}
 	}
 	for _, r := range results.Query2 {
-		if err := writers[1].Write([]string{r.BankName, r.FromBank, r.FromAccount, fmt.Sprintf("%.2f", r.Amount)}); err != nil {
+		if err := writers[1].Write([]string{r.FromBank, r.FromAccount, r.BankName, fmt.Sprintf("%.2f", r.Amount)}); err != nil {
 			slog.Error("While writing to output file", "query", 2, "err", err)
 		}
 	}
 	for _, r := range results.Query3 {
-		if err := writers[2].Write([]string{r.FromBank, r.FromAccount, fmt.Sprintf("%.2f", r.Amount)}); err != nil {
+		if err := writers[2].Write([]string{r.FromBank, r.FromAccount, r.PaymentFormat, fmt.Sprintf("%.2f", r.Amount)}); err != nil {
 			slog.Error("While writing to output file", "query", 3, "err", err)
 		}
 	}

@@ -122,9 +122,9 @@ func serializeTransRecord(trans *transfer.Transfer) []byte {
 	msg = append(msg, serializer.SerializeString(trans.FromBankAccount)...)
 	msg = append(msg, serializer.SerializeString(trans.ToBank)...)
 	msg = append(msg, serializer.SerializeString(trans.ToBankAccount)...)
-	msg = append(msg, serializer.SerializeFloat32(trans.AmountReceived)...)
+	msg = append(msg, serializer.SerializeFloat64(trans.AmountReceived)...)
 	msg = append(msg, serializer.SerializeString(trans.ReceivingCurrency)...)
-	msg = append(msg, serializer.SerializeFloat32(trans.AmountPaid)...)
+	msg = append(msg, serializer.SerializeFloat64(trans.AmountPaid)...)
 	msg = append(msg, serializer.SerializeString(trans.PaymentCurrency)...)
 	msg = append(msg, serializer.SerializeString(trans.PaymentFormat)...)
 	msg = append(msg, serializer.SerializeBool(trans.IsLaundering)...)
@@ -173,7 +173,7 @@ func deserializeTransRecord(reader io.Reader) (transfer.Transfer, error) {
 	if err != nil {
 		return transfer.Transfer{}, err
 	}
-	amountReceived, err := readFloat32(reader)
+	amountReceived, err := readFloat64(reader)
 	if err != nil {
 		return transfer.Transfer{}, err
 	}
@@ -181,7 +181,7 @@ func deserializeTransRecord(reader io.Reader) (transfer.Transfer, error) {
 	if err != nil {
 		return transfer.Transfer{}, err
 	}
-	amountPaid, err := readFloat32(reader)
+	amountPaid, err := readFloat64(reader)
 	if err != nil {
 		return transfer.Transfer{}, err
 	}
@@ -303,12 +303,12 @@ func readCount(r io.Reader) (uint32, error) {
 	return uint32(serializer.DeserializeUint16(b)), nil
 }
 
-func readFloat32(r io.Reader) (float32, error) {
-	b, err := safeio.ReadAll(r, serializer.UINT32_SIZE)
+func readFloat64(r io.Reader) (float64, error) {
+	b, err := safeio.ReadAll(r, serializer.UINT64_SIZE)
 	if err != nil {
 		return 0, err
 	}
-	return serializer.DeserializeFloat32(b), nil
+	return serializer.DeserializeFloat64(b), nil
 }
 
 func deserializeQuery1Result(r io.Reader) (queryresult.Query1Result, error) {
@@ -328,7 +328,7 @@ func deserializeQuery1Result(r io.Reader) (queryresult.Query1Result, error) {
 	if err != nil {
 		return queryresult.Query1Result{}, err
 	}
-	amount, err := readFloat32(r)
+	amount, err := readFloat64(r)
 	if err != nil {
 		return queryresult.Query1Result{}, err
 	}
@@ -354,7 +354,7 @@ func deserializeQuery2Result(r io.Reader) (queryresult.Query2Result, error) {
 	if err != nil {
 		return queryresult.Query2Result{}, err
 	}
-	amount, err := readFloat32(r)
+	amount, err := readFloat64(r)
 	if err != nil {
 		return queryresult.Query2Result{}, err
 	}
@@ -375,14 +375,19 @@ func deserializeQuery3Result(r io.Reader) (queryresult.Query3Result, error) {
 	if err != nil {
 		return queryresult.Query3Result{}, err
 	}
-	amount, err := readFloat32(r)
+	paymentFormat, err := readString(r)
+	if err != nil {
+		return queryresult.Query3Result{}, err
+	}
+	amount, err := readFloat64(r)
 	if err != nil {
 		return queryresult.Query3Result{}, err
 	}
 	return queryresult.Query3Result{
-		FromBank:    fromBank,
-		FromAccount: fromAccount,
-		Amount:      amount,
+		FromBank:      fromBank,
+		FromAccount:   fromAccount,
+		PaymentFormat: paymentFormat,
+		Amount:        amount,
 	}, nil
 }
 
@@ -411,7 +416,7 @@ func serializeQuery1Result(r *queryresult.Query1Result) []byte {
 	msg = append(msg, serializer.SerializeString(r.FromAccount)...)
 	msg = append(msg, serializer.SerializeString(r.ToBank)...)
 	msg = append(msg, serializer.SerializeString(r.ToAccount)...)
-	msg = append(msg, serializer.SerializeFloat32(r.Amount)...)
+	msg = append(msg, serializer.SerializeFloat64(r.Amount)...)
 	return msg
 }
 
@@ -419,14 +424,15 @@ func serializeQuery2Result(r *queryresult.Query2Result) []byte {
 	msg := serializer.SerializeString(r.BankName)
 	msg = append(msg, serializer.SerializeString(r.FromBank)...)
 	msg = append(msg, serializer.SerializeString(r.FromAccount)...)
-	msg = append(msg, serializer.SerializeFloat32(r.Amount)...)
+	msg = append(msg, serializer.SerializeFloat64(r.Amount)...)
 	return msg
 }
 
 func serializeQuery3Result(r *queryresult.Query3Result) []byte {
 	msg := serializer.SerializeString(r.FromBank)
 	msg = append(msg, serializer.SerializeString(r.FromAccount)...)
-	msg = append(msg, serializer.SerializeFloat32(r.Amount)...)
+	msg = append(msg, serializer.SerializeString(r.PaymentFormat)...)
+	msg = append(msg, serializer.SerializeFloat64(r.Amount)...)
 	return msg
 }
 
