@@ -106,6 +106,7 @@ type ConvertedAmountFilter[T, S comparable] struct {
 	toIgnoreFunc       func(T) bool
 	quote              string
 	amountThreshold    float64
-	fileMutex          sync.Mutex
+	fileMutexes        map[string]*sync.Mutex
+	fileMutexesMu      sync.Mutex
 	mapMutex           sync.Mutex
 }

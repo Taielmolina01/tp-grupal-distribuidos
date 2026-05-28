@@ -167,7 +167,8 @@ func newConvertedAmountFilter[T, S comparable](
 		toIgnoreFunc:       toIgnoreFunc,
 		quote:              config.Quote,
 		amountThreshold:    config.Amount,
-		fileMutex:          sync.Mutex{},
+		fileMutexes:        make(map[string]*sync.Mutex),
+		fileMutexesMu:      sync.Mutex{},
 		mapMutex:           sync.Mutex{},
 	}, nil
 }
@@ -297,8 +298,6 @@ func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, 
 }
 
 func (filter *ConvertedAmountFilter[T, S]) CheckTransfersWithoutConversion(s S) {
-	filter.fileMutex.Lock()
-	defer filter.fileMutex.Unlock()
 
 	firstKeyFile := strings.ReplaceAll(filter.leftKeyFunc(s), " ", "")
 	secondKeyFile := strings.ReplaceAll(filter.leftSecondKeyFunc(s), " ", "")
@@ -308,6 +307,9 @@ func (filter *ConvertedAmountFilter[T, S]) CheckTransfersWithoutConversion(s S) 
 	if err != nil {
 		return
 	} else {
+		filter.fileMutexes[filePath].Lock()
+		defer filter.fileMutexes[filePath].Unlock()
+
 		file, err := os.Open(filePath)
 		if err != nil {
 			slog.Error("while opening file", "err", err)
@@ -361,15 +363,22 @@ func (filter *ConvertedAmountFilter[T, S]) saveTransfersInFile(transfer T, clien
 	secondKey := datasetToFrank[filter.rightsecondKeyFunc(transfer)]
 	filter.mapMutex.Unlock()
 
-	filter.fileMutex.Lock()
-	defer filter.fileMutex.Unlock()
-
 	// https://www.solvetic.com/tutoriales/article/1458-entender-los-permisos-linux-chmod/
 	filePath := fmt.Sprintf(
 		FILE_LAYOUT,
 		strings.ReplaceAll(filter.rightKeyFunc(transfer), " ", ""),
 		secondKey,
 	)
+
+	filter.fileMutexesMu.Lock()
+	if filter.fileMutexes[filePath] == nil {
+		filter.fileMutexes[filePath] = &sync.Mutex{}
+	}
+	filter.fileMutexesMu.Unlock()
+
+	filter.fileMutexes[filePath].Lock()
+	defer filter.fileMutexes[filePath].Unlock()
+
 	file, err := os.OpenFile(
 		filePath,
 		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
@@ -403,8 +412,6 @@ func (filter *ConvertedAmountFilter[T, S]) saveTransfersInFile(transfer T, clien
 
 func (filter *ConvertedAmountFilter[T, S]) closeClientFiles(clientID int) {
 	// quizas deberia tener un mutex por file? no se que tan costoso es eso
-	filter.fileMutex.Lock()
-	defer filter.fileMutex.Unlock()
 
 	pattern := "*_*.csv"
 	files, err := filepath.Glob(pattern)
@@ -414,6 +421,15 @@ func (filter *ConvertedAmountFilter[T, S]) closeClientFiles(clientID int) {
 	}
 
 	for _, filePath := range files {
+		filter.fileMutexesMu.Lock()
+		if filter.fileMutexes[filePath] == nil {
+			filter.fileMutexes[filePath] = &sync.Mutex{}
+		}
+		filter.fileMutexesMu.Unlock()
+
+		filter.fileMutexes[filePath].Lock()
+		defer filter.fileMutexes[filePath].Unlock()
+
 		f, err := os.Open(filePath)
 		if err != nil {
 			slog.Error("while opening file for client cleanup", "file", filePath, "err", err)
