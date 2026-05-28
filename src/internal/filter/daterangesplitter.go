@@ -14,16 +14,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-// DateRangeSplitter (Q3): rutea cada Transfer al output 0 si la fecha cae en
-// [09-01, 09-05], al output 1 si cae en [09-06, 09-15], y descarta el resto.
-//
-// Diseño de EOFs: hay UN ring de coordinación POR OUTPUT QUEUE. Cada ring
-// tiene su propio MessageMonitor: todos los monitors registran el mismo
-// "processed" (total de inputs leídos por la réplica), pero el "filtered"
-// es específico — solo se incrementa cuando el mensaje sale por ESA queue.
-// Así cuando cada ring commitea, el FilteredAmount global representa la
-// cantidad real de mensajes que llegaron a esa queue específica, y se
-// puede emitir un EOF downstream con el TotalMessages correcto.
 type DateRangeSplitter struct {
 	id            uint32
 	inputExchange middleware.Middleware
@@ -109,7 +99,6 @@ func CreateDateAndRangeSplitter(config FilterConfig) (worker.Worker, error) {
 
 	eofHandlers := make([]eofring.EofRingAlgorithm, 0, len(outputQueues))
 	for idx := range outputQueues {
-		idx := idx // capture
 		eofHandlers = append(eofHandlers, eofring.CreateEofRingAlgorithm(
 			eofInputs[idx],
 			eofOutputs[idx],
@@ -203,11 +192,6 @@ func (s *DateRangeSplitter) handleMessage(msg middleware.Message, ack, nack func
 	}
 }
 
-// periodIndex devuelve:
-//
-//	0 → la fecha cae en el período de cálculo del promedio (output queue 0).
-//	1 → la fecha cae en el período a filtrar (output queue 1).
-//	-1 → fuera de ambos rangos: descartar.
 func (s *DateRangeSplitter) periodIndex(t transfer.Transfer) int {
 	switch {
 	case !t.Timestamp.Before(s.avgPeriodStart) && !t.Timestamp.After(s.avgPeriodEnd):

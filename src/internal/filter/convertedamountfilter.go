@@ -179,7 +179,7 @@ func (filter *ConvertedAmountFilter[T, S]) Run() {
 	}
 }
 
-func (filter *ConvertedAmountFilter[T, S]) consumeLeft(msg middleware.Message, ack, nack func()) {
+func (filter *ConvertedAmountFilter[T, S]) consumeLeft(msg middleware.Message, ack, _ func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[S](&msg)
@@ -213,7 +213,7 @@ func (filter *ConvertedAmountFilter[T, S]) consumeLeft(msg middleware.Message, a
 	filter.CheckTransfersWithoutConversion(result.Payload)
 }
 
-func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, ack, nack func()) {
+func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, ack, _ func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[T](&msg)
