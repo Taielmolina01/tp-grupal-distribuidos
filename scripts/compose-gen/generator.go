@@ -298,7 +298,7 @@ func writeJoinQ2(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
 		b.WriteString("      - OUTPUT_ROUTING_KEYS=results_queue\n")
 		fmt.Fprintf(b, "      - LEFT_EOFS_EXPECTED=%d\n", cfg.ReducerQ2)
-		fmt.Fprintf(b, "      - RIGHT_EOFS_EXPECTED=%d\n", cfg.Clients)
+		fmt.Fprintf(b, "      - RIGHT_EOFS_EXPECTED=%d\n", cfg.FilterBankIdAlreadySeen)
 		fmt.Fprintf(b, "      - JOIN_AMOUNT=%d\n", cfg.JoinQ2)
 		fmt.Fprintf(b, "      - ID=%d\n", i)
 		jsonFileLogging(b)
