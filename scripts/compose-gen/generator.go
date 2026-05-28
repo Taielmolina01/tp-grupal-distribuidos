@@ -531,6 +531,7 @@ func writeFilterAmtQ5(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterAmtQ5)
 		b.WriteString("      - FILTER_TYPE=CONVERTED_AMOUNT_FILTER\n")
 		b.WriteString("      - QUERY_ID=5\n")
+		b.WriteString("      - QUOTE=US Dollar\n")
 		b.WriteString("\n")
 	}
 }

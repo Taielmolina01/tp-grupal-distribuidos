@@ -142,5 +142,8 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 		func(t transfer.TransferForQ5Filter) bool {
 			return t.Currency == IGNORED_CURRENCY
 		},
+		func() transfer.FinalTransferForQ5 {
+			return transfer.ProjectForQ5Final()
+		},
 	)
 }

@@ -83,7 +83,7 @@ type DistinctFilter[T comparable, S comparable] struct {
 	shardCriteria func(T) string
 }
 
-type ConvertedAmountFilter[T, S comparable] struct {
+type ConvertedAmountFilter[T, S, O comparable] struct {
 	leftInputQueue     middleware.Middleware
 	rightInputQueue    middleware.Middleware
 	outputQueue        middleware.Middleware
@@ -109,4 +109,5 @@ type ConvertedAmountFilter[T, S comparable] struct {
 	fileMutexes        map[string]*sync.Mutex
 	fileMutexesMu      sync.Mutex
 	mapMutex           sync.Mutex
+	transformToOutput  func() O
 }

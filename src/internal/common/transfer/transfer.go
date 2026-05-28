@@ -97,13 +97,13 @@ func ProjectAfterCurrency(t Transfer) TransferAfterCurrency {
 }
 
 type TransferForQ5 struct {
-	Timestamp	   time.Time `json:"timestamp"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 type TransferForQ5Filter struct {
-	Timestamp	   time.Time `json:"timestamp"`
-	Currency       string    `json:"currency"`
-	AmountPaid      float64   `json:"amount_paid"`
+	Timestamp  time.Time `json:"timestamp"`
+	Currency   string    `json:"currency"`
+	AmountPaid float64   `json:"amount_paid"`
 }
 
 type FinalTransferForQ5 struct{}
@@ -118,6 +118,10 @@ func ProjectForQ5Filter(t Transfer) TransferForQ5Filter {
 		Currency:   t.ReceivingCurrency,
 		AmountPaid: t.AmountPaid,
 	}
+}
+
+func ProjectForQ5Final() FinalTransferForQ5 {
+	return FinalTransferForQ5{}
 }
 
 type SplittedTransfer struct {

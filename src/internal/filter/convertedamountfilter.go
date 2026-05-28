@@ -43,7 +43,7 @@ var datasetToFrank = map[string]string{
 	"Yuan":              "CNY",
 }
 
-func newConvertedAmountFilter[T, S comparable](
+func newConvertedAmountFilter[T, S, O comparable](
 	config FilterConfig,
 	compareFunc func(t T, s S) bool,
 	leftKeyFunc func(S) string,
@@ -56,6 +56,7 @@ func newConvertedAmountFilter[T, S comparable](
 	toSaveFunc func(T, int) string,
 	fromSaveFunc func(string) (T, int, error),
 	toIgnoreFunc func(T) bool,
+	transformToOutputType func() O,
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{
 		Hostname: config.MomHost,
@@ -144,7 +145,7 @@ func newConvertedAmountFilter[T, S comparable](
 		config.QueryId,
 	)
 
-	return &ConvertedAmountFilter[T, S]{
+	return &ConvertedAmountFilter[T, S, O]{
 		leftInputQueue:     leftInputQueue,
 		rightInputQueue:    rightInputQueue,
 		outputQueue:        outputQueue,
@@ -170,10 +171,11 @@ func newConvertedAmountFilter[T, S comparable](
 		fileMutexes:        make(map[string]*sync.Mutex),
 		fileMutexesMu:      sync.Mutex{},
 		mapMutex:           sync.Mutex{},
+		transformToOutput:  transformToOutputType,
 	}, nil
 }
 
-func (filter *ConvertedAmountFilter[T, S]) Run() {
+func (filter *ConvertedAmountFilter[T, S, O]) Run() {
 	defer filter.close()
 
 	go func() {
@@ -190,7 +192,7 @@ func (filter *ConvertedAmountFilter[T, S]) Run() {
 	}
 }
 
-func (filter *ConvertedAmountFilter[T, S]) consumeLeft(msg middleware.Message, ack, _ func()) {
+func (filter *ConvertedAmountFilter[T, S, O]) consumeLeft(msg middleware.Message, ack, _ func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[S](&msg)
@@ -226,7 +228,7 @@ func (filter *ConvertedAmountFilter[T, S]) consumeLeft(msg middleware.Message, a
 	filter.CheckTransfersWithoutConversion(result.Payload)
 }
 
-func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, ack, _ func()) {
+func (filter *ConvertedAmountFilter[T, S, O]) consumeRight(msg middleware.Message, ack, _ func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[T](&msg)
@@ -277,10 +279,10 @@ func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, 
 			conversion,
 		)) || filter.rightValueFunc(payload) < filter.amountThreshold {
 			filter.handlerMessages.AddForwardedMessagesAmountByClientId(result.ClientID, 1)
-			msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
+			msgOutput, err := inner.SerializeData(inner.DataMsg[O]{
 				ClientID: result.ClientID,
 				QueryID:  filter.queryId,
-				Payload:  payload,
+				Payload:  filter.transformToOutput(),
 				EOF:      nil,
 			})
 			if err != nil {
@@ -297,7 +299,7 @@ func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, 
 	}
 }
 
-func (filter *ConvertedAmountFilter[T, S]) CheckTransfersWithoutConversion(s S) {
+func (filter *ConvertedAmountFilter[T, S, O]) CheckTransfersWithoutConversion(s S) {
 
 	firstKeyFile := strings.ReplaceAll(filter.leftKeyFunc(s), " ", "")
 	secondKeyFile := strings.ReplaceAll(filter.leftSecondKeyFunc(s), " ", "")
@@ -339,10 +341,10 @@ func (filter *ConvertedAmountFilter[T, S]) CheckTransfersWithoutConversion(s S) 
 			}
 
 			if filter.compareFunc(transfer, s) {
-				msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
+				msgOutput, err := inner.SerializeData(inner.DataMsg[O]{
 					ClientID: clientID,
 					QueryID:  filter.queryId,
-					Payload:  transfer,
+					Payload:  filter.transformToOutput(),
 					EOF:      nil,
 				})
 				if err != nil {
@@ -358,7 +360,7 @@ func (filter *ConvertedAmountFilter[T, S]) CheckTransfersWithoutConversion(s S) 
 	}
 }
 
-func (filter *ConvertedAmountFilter[T, S]) saveTransfersInFile(transfer T, clientID int) {
+func (filter *ConvertedAmountFilter[T, S, O]) saveTransfersInFile(transfer T, clientID int) {
 	filter.mapMutex.Lock()
 	secondKey := datasetToFrank[filter.rightsecondKeyFunc(transfer)]
 	filter.mapMutex.Unlock()
@@ -410,7 +412,7 @@ func (filter *ConvertedAmountFilter[T, S]) saveTransfersInFile(transfer T, clien
 	}
 }
 
-func (filter *ConvertedAmountFilter[T, S]) closeClientFiles(clientID int) {
+func (filter *ConvertedAmountFilter[T, S, O]) closeClientFiles(clientID int) {
 	// quizas deberia tener un mutex por file? no se que tan costoso es eso
 
 	pattern := "*_*.csv"
@@ -514,7 +516,7 @@ func (filter *ConvertedAmountFilter[T, S]) closeClientFiles(clientID int) {
 	}
 }
 
-func (filter *ConvertedAmountFilter[T, S]) HandleSignals() {
+func (filter *ConvertedAmountFilter[T, S, O]) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
@@ -528,7 +530,7 @@ func (filter *ConvertedAmountFilter[T, S]) HandleSignals() {
 	}
 }
 
-func (filter *ConvertedAmountFilter[T, S]) close() {
+func (filter *ConvertedAmountFilter[T, S, O]) close() {
 
 	if err := filter.leftInputQueue.Close(); err != nil {
 		slog.Error("while closing left input queue", "err", err)

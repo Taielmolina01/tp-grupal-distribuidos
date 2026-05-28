@@ -46,7 +46,7 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		inputRoutingKeys = strings.Split(inputRoutingKeysStr, ",")
 	}
 
-	inputEofsExpected, err := strconv.Atoi(os.Getenv("INPUT_EOFS_EXPECTED"))
+	inputEofsExpected, _ := strconv.Atoi(os.Getenv("INPUT_EOFS_EXPECTED"))
 
 	inputQueue := os.Getenv("INPUT_QUEUE")
 	if inputQueue == "" {

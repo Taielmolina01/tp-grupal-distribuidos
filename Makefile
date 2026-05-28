@@ -61,3 +61,8 @@ verify-output:
 
 output-test: build-expected verify-output
 .PHONY: output-test
+
+build-race:
+	@go build -race ./src/...
+	@cd src && go build -race ./...
+.PHONY: build-race

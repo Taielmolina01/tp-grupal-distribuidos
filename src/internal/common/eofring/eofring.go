@@ -63,9 +63,6 @@ func (eofring *eofRingAlgorithmImpl) Close() error {
 	return nil
 }
 
-var hola = false
-var hola2 = false
-
 func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Message, ack, nack func()) {
 	eofRingMessage, eofRingCommitMessage, err := inner.DeserializeRingMessage(&msg)
 	if err != nil {
