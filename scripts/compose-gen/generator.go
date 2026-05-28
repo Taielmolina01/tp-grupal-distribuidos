@@ -324,7 +324,7 @@ func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - INPUT_EXCHANGE=filtered_transfers_exchange\n")
 		b.WriteString("      - INPUT_QUEUE=filter_range_q4_in\n")
 		b.WriteString("      - INPUT_ROUTING_KEYS=transfers_q1234\n")
-		b.WriteString("      - \"DATE_RANGE=2022-09-01 00:00:00,2022-09-05 00:00:00\"\n")
+		b.WriteString("      - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00\n")
 		b.WriteString("      - QUERY_ID=4\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
