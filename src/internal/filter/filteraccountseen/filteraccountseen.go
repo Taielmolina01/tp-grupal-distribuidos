@@ -118,7 +118,7 @@ func (f *FilterAccountSeen) close() {
 
 func (f *FilterAccountSeen) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[account.AccountIdentifier](&middleware.Message{Body: msg.Body})
+	m, err := inner.DeserializeData[account.AccountIdentifierBatch](&middleware.Message{Body: msg.Body})
 
 	if err != nil {
 		slog.Error("While deserializing pipeline message", "err", err)
@@ -130,7 +130,9 @@ func (f *FilterAccountSeen) handleInput(msg newmiddleware.Message, ack func()) {
 		return
 	}
 
-	f.handleRecord(m.ClientID, m.Payload)
+	for _, id := range m.Payload.Items {
+		f.handleRecord(m.ClientID, id)
+	}
 }
 
 func (f *FilterAccountSeen) handleRecord(clientID int, record account.AccountIdentifier) {
@@ -161,7 +163,7 @@ func (f *FilterAccountSeen) handleRecord(clientID int, record account.AccountIde
 	}
 }
 
-func (f *FilterAccountSeen) handleEOF(data inner.DataMsg[account.AccountIdentifier]) {
+func (f *FilterAccountSeen) handleEOF(data inner.DataMsg[account.AccountIdentifierBatch]) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
