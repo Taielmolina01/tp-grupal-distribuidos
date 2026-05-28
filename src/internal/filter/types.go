@@ -106,6 +106,7 @@ type AverageFilter struct {
 type avgFilterClientState struct {
 	avgs                map[string]float64
 	avgsReady           bool
+	ringeof             bool
 	avgsEofsReceived    int
 	transfersEofPending bool
 	transfersEofRealAmt uint32

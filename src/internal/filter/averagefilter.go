@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"tp-grupal-distribuidos/internal/common/eofmessage"
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
@@ -94,17 +95,25 @@ func newAverageFilter(
 		transfersMonitor,
 		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
 			af.lock.Lock()
-			if state, ok := af.state[clientID]; ok {
-				for method := range state.avgs {
-					af.drainFileForMethod(clientID, method, state)
-				}
-				af.deleteRemainingFiles(clientID)
-			}
-			delete(af.state, clientID)
-			af.lock.Unlock()
-			if !isCoordinator {
+			defer af.lock.Unlock()
+
+			state, ok := af.state[clientID]
+
+			if !ok {
 				return nil
 			}
+
+			state.ringeof = true
+			if !state.avgsReady {
+				return nil
+			}
+
+			for method := range state.avgs {
+				af.drainFileForMethod(clientID, method, state)
+			}
+			af.deleteRemainingFiles(clientID)
+			delete(af.state, clientID)
+
 			if err := af.outputQueue.Send(*msg); err != nil {
 				return err
 			}
@@ -177,6 +186,26 @@ func (af *AverageFilter) handleAvgMessage(msg middleware.Message, ack, nack func
 			af.fireTransfersRingLocked(result.ClientID, state.transfersEofRealAmt)
 			state.transfersEofPending = false
 		}
+
+		if !state.ringeof {
+			return
+		}
+
+		for method := range state.avgs {
+			af.drainFileForMethod(result.ClientID, method, state)
+		}
+		af.deleteRemainingFiles(result.ClientID)
+		delete(af.state, result.ClientID)
+
+		serialized, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: result.ClientID, QueryID: af.queryID})
+		if err != nil {
+			slog.Error("While serializing EOF message", "err", err)
+			return
+		}
+
+		if err := af.outputQueue.Send(*serialized); err != nil {
+			slog.Error("While sending EOF message", "err", err)
+		}
 		return
 	}
 
@@ -199,16 +228,15 @@ func (af *AverageFilter) handleTransferMessage(msg middleware.Message, ack, nack
 
 	if result.IsEOF() {
 		af.lock.Lock()
+		defer af.lock.Unlock()
 		state := af.getOrInitState(result.ClientID)
 		if !state.avgsReady {
 			state.transfersEofPending = true
 			state.transfersEofRealAmt = result.EOF.TotalMessages
 			slog.Info("AverageFilter deferring transfers EOF until avgs ready", "filter_id", af.id, "client_id", result.ClientID, "real_amount", result.EOF.TotalMessages)
-			af.lock.Unlock()
 			return
 		}
 		af.fireTransfersRingLocked(result.ClientID, result.EOF.TotalMessages)
-		af.lock.Unlock()
 		return
 	}
 

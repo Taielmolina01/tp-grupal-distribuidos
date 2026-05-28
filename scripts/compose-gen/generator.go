@@ -91,7 +91,7 @@ func writeRabbitmq(b *strings.Builder) {
 
 func writeGateway(b *strings.Builder, cfg *Config) {
 	accountQueues := queues("accounts", cfg.FilterBankIdAlreadySeen)
-	queryEofs := fmt.Sprintf("1:1,2:%d,3:1,4:%d,5:1", cfg.JoinQ2, cfg.FilterAccountSeenQ4)
+	queryEofs := fmt.Sprintf("1:1,2:%d,3:%d,4:%d,5:1", cfg.JoinQ2, cfg.AverageFilterQ3, cfg.FilterAccountSeenQ4)
 
 	b.WriteString("  gateway:\n")
 	b.WriteString("    build:\n")
