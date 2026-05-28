@@ -173,6 +173,8 @@ func newConvertedAmountFilter[T, S comparable](
 }
 
 func (filter *ConvertedAmountFilter[T, S]) Run() {
+	defer filter.close()
+
 	go func() {
 		if err := filter.leftInputQueue.StartConsuming(filter.consumeLeft); err != nil {
 			slog.Error("while starting consuming from left input queue", "err", err)
@@ -501,24 +503,22 @@ func (filter *ConvertedAmountFilter[T, S]) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	filter.close()
-}
 
-func (filter *ConvertedAmountFilter[T, S]) close() {
 	if err := filter.leftInputQueue.StopConsuming(); err != nil {
 		slog.Error("while stopping consuming from left input queue", "err", err)
-	}
-	if err := filter.leftInputQueue.Close(); err != nil {
-		slog.Error("while closing left input queue", "err", err)
 	}
 	if err := filter.rightInputQueue.StopConsuming(); err != nil {
 		slog.Error("while stopping consuming from right input queue", "err", err)
 	}
+}
+
+func (filter *ConvertedAmountFilter[T, S]) close() {
+
+	if err := filter.leftInputQueue.Close(); err != nil {
+		slog.Error("while closing left input queue", "err", err)
+	}
 	if err := filter.rightInputQueue.Close(); err != nil {
 		slog.Error("while closing right input queue", "err", err)
-	}
-	if err := filter.outputQueue.StopConsuming(); err != nil {
-		slog.Error("while stopping consuming from output queue", "err", err)
 	}
 	if err := filter.outputQueue.Close(); err != nil {
 		slog.Error("while closing output queue", "err", err)

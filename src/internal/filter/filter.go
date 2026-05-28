@@ -117,6 +117,8 @@ func newFilter[T comparable, O comparable](
 }
 
 func (filter *Filter[T, O]) Run() {
+	defer filter.close()
+
 	go filter.eofHandler.Run()
 	if err := filter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		filter.handleMessage(msg, ack, nack)
@@ -179,17 +181,12 @@ func (filter *Filter[T, O]) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	if err := filter.close(); err != nil {
-		slog.Error("While closing filter node", "err", err)
+	if err := filter.inputExchange.StopConsuming(); err != nil {
+		slog.Error("while stop consuming from input exchange", "err", err)
 	}
 }
 
 func (filter *Filter[T, O]) close() error {
-
-	if err := filter.inputExchange.StopConsuming(); err != nil {
-		slog.Error("while stop consuming from input exchange", "err", err)
-		return err
-	}
 
 	if err := filter.inputExchange.Close(); err != nil {
 		slog.Error("while closing input exchange", "err", err)

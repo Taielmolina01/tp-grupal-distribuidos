@@ -25,8 +25,6 @@ func run() int {
 		server, err = filter.CreateDateRangeFilter(config)
 	case filter.DATE_RANGE_AND_PAYMENT:
 		server, err = filter.CreateDateRangeAndPaymentMethod(config)
-	case filter.BANK_DISTINCT:
-		server, err = filter.CreateBankDistinctFilter(config)
 	case filter.CONVERTED_AMOUNT_FILTER:
 		server, err = filter.CreateConvertedAmountFilter(config)
 	default:

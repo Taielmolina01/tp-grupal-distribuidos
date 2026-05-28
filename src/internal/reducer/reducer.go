@@ -144,6 +144,8 @@ func newReducer[T comparable](
 }
 
 func (reducer *Reducer[T]) Run() {
+	defer reducer.close()
+
 	go reducer.eofHandler.Run()
 	if err := reducer.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		reducer.handleMessage(msg, ack, nack)
@@ -207,22 +209,17 @@ func (reducer *Reducer[T]) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	if err := reducer.Close(); err != nil {
-		slog.Error("While closing reducer node", "err", err)
+	if err := reducer.inputExchange.StopConsuming(); err != nil {
+		slog.Error("while closing reducer", "err", err)
 	}
 }
 
-func (reducer *Reducer[T]) Close() error {
-	if err := reducer.inputExchange.StopConsuming(); err != nil {
-		return err
-	}
+func (reducer *Reducer[T]) close() error {
+
 	if err := reducer.inputExchange.Close(); err != nil {
 		return err
 	}
 	for _, outputQueue := range reducer.outputQueues {
-		if err := outputQueue.StopConsuming(); err != nil {
-			return err
-		}
 		if err := outputQueue.Close(); err != nil {
 			return err
 		}

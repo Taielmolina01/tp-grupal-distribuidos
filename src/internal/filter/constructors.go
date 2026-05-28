@@ -5,9 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
-	"tp-grupal-distribuidos/internal/common/normalizer"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -73,21 +71,6 @@ func CreateDateRangeAndPaymentMethod(config FilterConfig) (worker.Worker, error)
 func CreateFilterAndSplitter(config filterandsplitter.FilterAndSplitterConfig) (worker.Worker, error) {
 	return filterandsplitter.NewFilterAndSplitter(
 		config,
-	)
-}
-
-func CreateBankDistinctFilter(config FilterConfig) (worker.Worker, error) {
-	return newDistinctFilter(
-		config,
-		func(ac1 account.Account, ac2 account.Account) bool {
-			return ac1.BankId == ac2.BankId
-		},
-		func(ac account.Account) string {
-			return normalizer.NormalizeBankID(ac.BankId)
-		},
-		func(t account.Account) string {
-			return normalizer.NormalizeBankID(t.BankId)
-		},
 	)
 }
 
