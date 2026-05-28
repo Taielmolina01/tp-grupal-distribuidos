@@ -89,16 +89,6 @@ func CreateBankDistinctFilter(config FilterConfig) (worker.Worker, error) {
 	)
 }
 
-func CreateAverageFilter(config FilterConfig) (worker.Worker, error) {
-	return newAverageFilter(
-		config,
-		func(transferAmount float64, avg float64) bool {
-			return transferAmount < avg/100
-		},
-		3,
-	)
-}
-
 func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 	return newConvertedAmountFilter(
 		config,

@@ -1,7 +1,6 @@
 package filter
 
 import (
-	"sync"
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/eofring"
@@ -18,10 +17,8 @@ const (
 	DATE_RANGE              FilterType = "DATE_RANGE"
 	DATE_RANGE_AND_PAYMENT  FilterType = "DATE_RANGE_AND_PAYMENT"
 	COUNT_AND_FILTER        FilterType = "COUNT_AND_FILTER"
-	DATE_RANGE_AND_SPLITTER FilterType = "DATE_RANGE_AND_SPLITTER"
 	TRANSFER_DISTINCT       FilterType = "TRANSFER_DISTINCT"
 	BANK_DISTINCT           FilterType = "BANK_DISTINCT"
-	AVERAGE_FILTER          FilterType = "AVERAGE_FILTER"
 	CONVERTED_AMOUNT_FILTER FilterType = "CONVERTED_AMOUNT_FILTER"
 )
 
@@ -49,8 +46,6 @@ type FilterConfig struct {
 	OutputQueues          []string
 	QueryId               uint8
 	PaymentFormats        []string
-	AvgInputQueue         string
-	AvgExpectedEofs       int
 }
 
 type Filter[T comparable, O comparable] struct {
@@ -82,34 +77,6 @@ type DistinctFilter[T comparable, S comparable] struct {
 	compareFunc   func(T, T) bool
 	keyFunc       func(T) S
 	shardCriteria func(T) string
-}
-
-type AverageFilter struct {
-	id                  uint32
-	queryID             uint8
-	inputTransfersQueue middleware.Middleware
-	inputAvgsQueue      middleware.Middleware
-	outputQueue         middleware.Middleware
-
-	transfersRing    eofring.EofRingAlgorithm
-	transfersMonitor msgmonitor.MessageMonitor
-	transfersEofOut  middleware.Middleware
-
-	avgsExpectedEofs int
-
-	compareFunc func(float64, float64) bool
-
-	state map[int]*avgFilterClientState
-	lock  sync.Mutex
-}
-
-type avgFilterClientState struct {
-	avgs                map[string]float64
-	avgsReady           bool
-	ringeof             bool
-	avgsEofsReceived    int
-	transfersEofPending bool
-	transfersEofRealAmt uint32
 }
 
 type ConvertedAmountFilter[T, S comparable] struct {

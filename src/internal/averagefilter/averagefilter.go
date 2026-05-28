@@ -1,4 +1,4 @@
-package filter
+package averagefilter
 
 import (
 	"bufio"
@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/eofmessage"
@@ -20,80 +21,144 @@ import (
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
-	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-func newAverageFilter(
-	config FilterConfig,
-	compareFunc func(float64, float64) bool,
-	queryID uint8,
-) (worker.Worker, error) {
+const eofRingPrefix = "AVG_FILTER_T_"
+
+const avgFractionThreshold = 100
+
+type AverageFilterConfig struct {
+	Id           int
+	FilterAmount int
+
+	MomHost string
+	MomPort int
+
+	InputTransfersQueue string
+	InputAvgsQueue      string
+	OutputQueue         string
+
+	AvgsExpectedEofs int
+
+	QueryID uint8
+}
+
+type AverageFilter struct {
+	id      uint32
+	queryID uint8
+
+	inputTransfersQueue middleware.Middleware
+	inputAvgsQueue      middleware.Middleware
+	outputQueue         middleware.Middleware
+
+	transfersEofOut  middleware.Middleware
+	transfersEofIn   middleware.Middleware
+	transfersRing    eofring.EofRingAlgorithm
+	transfersMonitor msgmonitor.MessageMonitor
+
+	avgsExpectedEofs int
+
+	lock  sync.Mutex
+	state map[int]*clientState
+}
+
+type clientState struct {
+	avgs                map[string]float64
+	avgsReady           bool
+	ringeof             bool
+	avgsEofsReceived    int
+	transfersEofPending bool
+	transfersEofRealAmt uint32
+}
+
+func getRingNextIndex(config AverageFilterConfig) int {
+	if config.Id == config.FilterAmount-1 {
+		return 0
+	}
+	return config.Id + 1
+}
+
+func NewAverageFilter(config AverageFilterConfig) (_ *AverageFilter, err error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputTransfersQueue, err := middleware.CreateQueueMiddleware(config.InputQueue, connSettings)
+	var (
+		inputTransfersQueue middleware.Middleware
+		inputAvgsQueue      middleware.Middleware
+		outputQueue         middleware.Middleware
+		transfersEofIn      middleware.Middleware
+		transfersEofOut     middleware.Middleware
+	)
+
+	defer func() {
+		if err == nil {
+			return
+		}
+		if transfersEofOut != nil {
+			transfersEofOut.Close()
+		}
+		if transfersEofIn != nil {
+			transfersEofIn.Close()
+		}
+		if outputQueue != nil {
+			outputQueue.Close()
+		}
+		if inputAvgsQueue != nil {
+			inputAvgsQueue.Close()
+		}
+		if inputTransfersQueue != nil {
+			inputTransfersQueue.Close()
+		}
+	}()
+
+	inputTransfersQueue, err = middleware.CreateQueueMiddleware(config.InputTransfersQueue, connSettings)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating input transfers queue: %w", err)
 	}
 
-	inputAvgsQueue, err := middleware.CreateQueueMiddleware(config.AvgInputQueue, connSettings)
+	inputAvgsQueue, err = middleware.CreateQueueMiddleware(config.InputAvgsQueue, connSettings)
 	if err != nil {
-		inputTransfersQueue.Close()
-		return nil, err
+		return nil, fmt.Errorf("creating input avgs queue: %w", err)
 	}
 
-	outputQueue, err := middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
+	outputQueue, err = middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
 	if err != nil {
-		inputTransfersQueue.Close()
-		inputAvgsQueue.Close()
-		return nil, err
+		return nil, fmt.Errorf("creating output queue: %w", err)
 	}
 
-	next := config.Id + 1
-	if config.Id == config.FilterAmount-1 {
-		next = 0
-	}
-
-	transfersEofIn, err := middleware.CreateQueueMiddleware(
-		"AVG_FILTER_T_"+strconv.Itoa(config.Id),
+	transfersEofIn, err = middleware.CreateQueueMiddleware(
+		eofRingPrefix+strconv.Itoa(config.Id),
 		connSettings,
 	)
 	if err != nil {
-		inputTransfersQueue.Close()
-		inputAvgsQueue.Close()
-		outputQueue.Close()
-		return nil, err
+		return nil, fmt.Errorf("creating transfers EOF input queue: %w", err)
 	}
 
-	transfersEofOut, err := middleware.CreateQueueMiddleware(
-		"AVG_FILTER_T_"+strconv.Itoa(next),
+	transfersEofOut, err = middleware.CreateQueueMiddleware(
+		eofRingPrefix+strconv.Itoa(getRingNextIndex(config)),
 		connSettings,
 	)
 	if err != nil {
-		inputTransfersQueue.Close()
-		inputAvgsQueue.Close()
-		outputQueue.Close()
-		transfersEofIn.Close()
-		return nil, err
+		return nil, fmt.Errorf("creating transfers EOF output queue: %w", err)
 	}
 
-	transfersMonitor := msgmonitor.NewMessageMonitor()
-
-	expectedAvgEofs := config.AvgExpectedEofs
+	expectedAvgEofs := config.AvgsExpectedEofs
 	if expectedAvgEofs <= 0 {
 		expectedAvgEofs = 1
 	}
 
+	transfersMonitor := msgmonitor.NewMessageMonitor()
+
 	af := &AverageFilter{
 		id:                  uint32(config.Id),
-		queryID:             queryID,
+		queryID:             config.QueryID,
 		inputTransfersQueue: inputTransfersQueue,
 		inputAvgsQueue:      inputAvgsQueue,
 		outputQueue:         outputQueue,
-		transfersMonitor:    transfersMonitor,
+		transfersEofIn:      transfersEofIn,
 		transfersEofOut:     transfersEofOut,
+		transfersMonitor:    transfersMonitor,
 		avgsExpectedEofs:    expectedAvgEofs,
-		compareFunc:         compareFunc,
-		state:               map[int]*avgFilterClientState{},
+		state:               map[int]*clientState{},
 	}
 
 	af.transfersRing = eofring.CreateEofRingAlgorithm(
@@ -102,28 +167,8 @@ func newAverageFilter(
 		config.FilterAmount,
 		uint32(config.Id),
 		transfersMonitor,
-		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
-			af.lock.Lock()
-			defer af.lock.Unlock()
-
-			state, ok := af.state[clientID]
-			if !ok {
-				return nil
-			}
-
-			state.ringeof = true
-			if !state.avgsReady {
-				return nil
-			}
-
-			af.finalizeClientLocked(clientID, state)
-			if err := af.outputQueue.Send(*msg); err != nil {
-				return err
-			}
-			slog.Info("AverageFilter emitted EOF to results_queue", "filter_id", af.id, "client_id", clientID)
-			return nil
-		},
-		queryID,
+		af.onTransfersRingConverged,
+		config.QueryID,
 	)
 
 	return af, nil
@@ -135,33 +180,108 @@ func (af *AverageFilter) Run() {
 	slog.Info("Starting average-filter consumers", "filter_id", af.id)
 	go af.transfersRing.Run()
 	go af.consumeAvgs()
-	if err := af.inputTransfersQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		af.handleTransferMessage(msg, ack, nack)
+	if err := af.inputTransfersQueue.StartConsuming(func(msg middleware.Message, ack, _ func()) {
+		af.handleTransferInput(msg, ack)
 	}); err != nil {
 		slog.Error("While consuming transfers", "err", err)
 	}
 }
 
 func (af *AverageFilter) consumeAvgs() {
-	if err := af.inputAvgsQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		af.handleAvgMessage(msg, ack, nack)
+	if err := af.inputAvgsQueue.StartConsuming(func(msg middleware.Message, ack, _ func()) {
+		af.handleAvgInput(msg, ack)
 	}); err != nil {
 		slog.Error("While consuming avgs", "err", err)
 	}
 }
 
-func (af *AverageFilter) getOrInitState(clientID int) *avgFilterClientState {
+func (af *AverageFilter) HandleSignals() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	<-signals
+	slog.Info("SIGTERM signal received, stopping consumer")
+
+	af.inputAvgsQueue.StopConsuming()
+	af.inputTransfersQueue.StopConsuming()
+	af.transfersEofIn.StopConsuming()
+}
+
+func (af *AverageFilter) close() {
+	af.lock.Lock()
+	for clientID := range af.state {
+		af.deleteRemainingFiles(clientID)
+	}
+	af.lock.Unlock()
+
+	af.inputTransfersQueue.Close()
+	af.inputAvgsQueue.Close()
+	af.outputQueue.Close()
+	af.transfersRing.Close()
+	af.transfersEofIn.Close()
+	af.transfersEofOut.Close()
+}
+
+func (af *AverageFilter) getOrInitState(clientID int) *clientState {
 	s, ok := af.state[clientID]
 	if !ok {
-		s = &avgFilterClientState{
-			avgs: map[string]float64{},
-		}
+		s = &clientState{avgs: map[string]float64{}}
 		af.state[clientID] = s
 	}
 	return s
 }
 
-func (af *AverageFilter) handleAvgMessage(msg middleware.Message, ack, _ func()) {
+
+func (af *AverageFilter) handleTransferInput(msg middleware.Message, ack func()) {
+	defer ack()
+
+	result, err := inner.DeserializeData[transfer.Transfer](&msg)
+	if err != nil {
+		slog.Error("While deserializing transfer message", "err", err)
+		return
+	}
+
+	if result.IsEOF() {
+		af.handleTransferEOF(*result)
+		return
+	}
+
+	af.handleTransferRecord(result.ClientID, result.Payload)
+}
+
+func (af *AverageFilter) handleTransferRecord(clientID int, t transfer.Transfer) {
+	af.transfersMonitor.AddProcessedMessagesAmountByClientId(clientID, 1)
+
+	af.lock.Lock()
+	defer af.lock.Unlock()
+	state := af.getOrInitState(clientID)
+
+	if _, ok := state.avgs[t.PaymentFormat]; ok {
+		af.processTransferLocked(clientID, t, state)
+		return
+	}
+
+	if state.avgsReady {
+		return
+	}
+
+	af.saveTransferToFile(clientID, t)
+}
+
+func (af *AverageFilter) handleTransferEOF(data inner.DataMsg[transfer.Transfer]) {
+	af.lock.Lock()
+	defer af.lock.Unlock()
+
+	state := af.getOrInitState(data.ClientID)
+	if !state.avgsReady {
+		state.transfersEofPending = true
+		state.transfersEofRealAmt = data.EOF.TotalMessages
+		slog.Info("AverageFilter deferring transfers EOF until avgs ready", "filter_id", af.id, "client_id", data.ClientID, "real_amount", data.EOF.TotalMessages)
+		return
+	}
+	af.fireTransfersRingLocked(data.ClientID, data.EOF.TotalMessages)
+}
+
+func (af *AverageFilter) handleAvgInput(msg middleware.Message, ack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[transfer.AvgByMethod](&msg)
@@ -175,25 +295,7 @@ func (af *AverageFilter) handleAvgMessage(msg middleware.Message, ack, _ func())
 	state := af.getOrInitState(result.ClientID)
 
 	if result.IsEOF() {
-		state.avgsEofsReceived++
-		slog.Info("AverageFilter got avgs EOF", "filter_id", af.id, "client_id", result.ClientID, "count", state.avgsEofsReceived, "expected", af.avgsExpectedEofs)
-		if state.avgsEofsReceived < af.avgsExpectedEofs {
-			return
-		}
-		state.avgsReady = true
-		slog.Info("AverageFilter avgs ready, discarding leftover buffer files", "filter_id", af.id, "client_id", result.ClientID, "avgs", len(state.avgs))
-		af.deleteRemainingFiles(result.ClientID)
-
-		if state.transfersEofPending {
-			af.fireTransfersRingLocked(result.ClientID, state.transfersEofRealAmt)
-			state.transfersEofPending = false
-		}
-
-		if !state.ringeof {
-			return
-		}
-
-		af.finalizeAndEmitEOFLocked(result.ClientID, state)
+		af.handleAvgEOFLocked(result.ClientID, state)
 		return
 	}
 
@@ -202,53 +304,56 @@ func (af *AverageFilter) handleAvgMessage(msg middleware.Message, ack, _ func())
 	af.drainFileForMethod(result.ClientID, method, state)
 }
 
-func (af *AverageFilter) handleTransferMessage(msg middleware.Message, ack, _ func()) {
-	defer ack()
+func (af *AverageFilter) handleAvgEOFLocked(clientID int, state *clientState) {
+	state.avgsEofsReceived++
+	slog.Info("AverageFilter got avgs EOF", "filter_id", af.id, "client_id", clientID, "count", state.avgsEofsReceived, "expected", af.avgsExpectedEofs)
+	if state.avgsEofsReceived < af.avgsExpectedEofs {
+		return
+	}
+	state.avgsReady = true
+	slog.Info("AverageFilter avgs ready, discarding leftover buffer files", "filter_id", af.id, "client_id", clientID, "avgs", len(state.avgs))
+	af.deleteRemainingFiles(clientID)
 
-	result, err := inner.DeserializeData[transfer.Transfer](&msg)
-	if err != nil {
-		slog.Error("While deserializing transfer message", "err", err)
+	if state.transfersEofPending {
+		af.fireTransfersRingLocked(clientID, state.transfersEofRealAmt)
+		state.transfersEofPending = false
+	}
+
+	if !state.ringeof {
 		return
 	}
 
-	if result.IsEOF() {
-		af.lock.Lock()
-		defer af.lock.Unlock()
-		state := af.getOrInitState(result.ClientID)
-		if !state.avgsReady {
-			state.transfersEofPending = true
-			state.transfersEofRealAmt = result.EOF.TotalMessages
-			slog.Info("AverageFilter deferring transfers EOF until avgs ready", "filter_id", af.id, "client_id", result.ClientID, "real_amount", result.EOF.TotalMessages)
-			return
-		}
-		af.fireTransfersRingLocked(result.ClientID, result.EOF.TotalMessages)
-		return
-	}
-
-	af.transfersMonitor.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
-
-	af.lock.Lock()
-	defer af.lock.Unlock()
-	state := af.getOrInitState(result.ClientID)
-
-	if _, ok := state.avgs[result.Payload.PaymentFormat]; ok {
-		af.processTransferLocked(result.ClientID, result.Payload, state)
-		return
-	}
-
-	if state.avgsReady {
-		return
-	}
-
-	af.saveTransferToFile(result.ClientID, result.Payload)
+	af.finalizeAndEmitEOFLocked(clientID, state)
 }
 
-func (af *AverageFilter) processTransferLocked(clientID int, t transfer.Transfer, state *avgFilterClientState) {
+func (af *AverageFilter) onTransfersRingConverged(clientID int, msg *middleware.Message, isCoordinator bool) error {
+	af.lock.Lock()
+	defer af.lock.Unlock()
+
+	state, ok := af.state[clientID]
+	if !ok {
+		return nil
+	}
+
+	state.ringeof = true
+	if !state.avgsReady {
+		return nil
+	}
+
+	af.finalizeClientLocked(clientID, state)
+	if err := af.outputQueue.Send(*msg); err != nil {
+		return err
+	}
+	slog.Info("AverageFilter emitted EOF to results_queue", "filter_id", af.id, "client_id", clientID)
+	return nil
+}
+
+func (af *AverageFilter) processTransferLocked(clientID int, t transfer.Transfer, state *clientState) {
 	avg, ok := state.avgs[t.PaymentFormat]
 	if !ok {
 		return
 	}
-	if !af.compareFunc(t.AmountPaid, avg) {
+	if t.AmountPaid >= avg/avgFractionThreshold {
 		return
 	}
 	out := queryresult.Query3Result{
@@ -293,7 +398,7 @@ func (af *AverageFilter) fireTransfersRingLocked(clientID int, realAmount uint32
 	slog.Info("AverageFilter fired transfers ring", "filter_id", af.id, "client_id", clientID, "real_amount", realAmount, "actual_amount", ringMsg.ActualAmount, "filtered", ringMsg.FilteredAmount)
 }
 
-func (af *AverageFilter) finalizeClientLocked(clientID int, state *avgFilterClientState) {
+func (af *AverageFilter) finalizeClientLocked(clientID int, state *clientState) {
 	for method := range state.avgs {
 		af.drainFileForMethod(clientID, method, state)
 	}
@@ -301,7 +406,7 @@ func (af *AverageFilter) finalizeClientLocked(clientID int, state *avgFilterClie
 	delete(af.state, clientID)
 }
 
-func (af *AverageFilter) finalizeAndEmitEOFLocked(clientID int, state *avgFilterClientState) {
+func (af *AverageFilter) finalizeAndEmitEOFLocked(clientID int, state *clientState) {
 	af.finalizeClientLocked(clientID, state)
 
 	serialized, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: clientID, QueryID: af.queryID})
@@ -347,7 +452,7 @@ func (af *AverageFilter) saveTransferToFile(clientID int, t transfer.Transfer) {
 	}
 }
 
-func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *avgFilterClientState) {
+func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *clientState) {
 	filename := af.bufferFileName(clientID, method)
 	file, err := os.Open(filename)
 	if errors.Is(err, os.ErrNotExist) {
@@ -406,26 +511,4 @@ func (af *AverageFilter) deleteRemainingFiles(clientID int) {
 	if len(matches) > 0 {
 		slog.Info("AverageFilter deleted remaining buffer files", "filter_id", af.id, "client_id", clientID, "count", len(matches))
 	}
-}
-func (af *AverageFilter) HandleSignals() {
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	<-signals
-	slog.Info("SIGTERM signal received, stopping consumer")
-
-	af.inputAvgsQueue.StopConsuming()
-	af.inputTransfersQueue.StopConsuming()
-}
-
-func (af *AverageFilter) close() {
-	af.lock.Lock()
-	for clientID := range af.state {
-		af.deleteRemainingFiles(clientID)
-	}
-	af.lock.Unlock()
-
-	af.inputAvgsQueue.Close()
-	af.outputQueue.Close()
-	af.transfersRing.Close()
-	af.transfersEofOut.Close()
 }

@@ -1,9 +1,13 @@
 package sum
 
 import (
+	"fmt"
 	"log/slog"
+	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
@@ -12,139 +16,158 @@ import (
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
-	"tp-grupal-distribuidos/internal/common/worker"
 )
 
+const eofRingPrefix = "SUM_"
+
 type SumConfig struct {
-	Id                int
-	SumAmount         int
-	MomHost           string
-	MomPort           int
-	InputQueue        string
-	OutputQueues      []string
-	QueryID           uint8
-	InputEofsExpected int
+	Id           int
+	SumAmount    int
+	MomHost      string
+	MomPort      int
+	InputQueue   string
+	OutputQueues []string
+	QueryID      uint8
 }
 
 type SumByPaymentFormat struct {
-	id              int
-	inputQueue      middleware.Middleware
-	outputQueues    []middleware.Middleware
-	outputQueueEof  middleware.Middleware
-	eofHandler      eofring.EofRingAlgorithm
-	handlerMessages msgmonitor.MessageMonitor
-	queryID         uint8
+	id      int
+	queryID uint8
 
+	inputQueue     middleware.Middleware
+	outputQueues   []middleware.Middleware
+	eofInput       middleware.Middleware
+	eofOutput      middleware.Middleware
+	eofHandler     eofring.EofRingAlgorithm
+	msgMonitor     msgmonitor.MessageMonitor
+
+	mu           sync.Mutex
 	acumuladores map[int]map[string]transfer.SumByMethod
-	lock         sync.Mutex
 }
 
-func CreateSumByPaymentFormat(config SumConfig) (worker.Worker, error) {
+func getRingNextIndex(config SumConfig) int {
+	if config.Id == config.SumAmount-1 {
+		return 0
+	}
+	return config.Id + 1
+}
+
+func NewSumByPaymentFormat(config SumConfig) (_ *SumByPaymentFormat, err error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputQueue, err := middleware.CreateQueueMiddleware(config.InputQueue, connSettings)
+	var (
+		inputQueue   middleware.Middleware
+		outputQueues []middleware.Middleware
+		eofInput     middleware.Middleware
+		eofOutput    middleware.Middleware
+	)
+
+	defer func() {
+		if err == nil {
+			return
+		}
+		if eofOutput != nil {
+			eofOutput.Close()
+		}
+		if eofInput != nil {
+			eofInput.Close()
+		}
+		for _, q := range outputQueues {
+			q.Close()
+		}
+		if inputQueue != nil {
+			inputQueue.Close()
+		}
+	}()
+
+	inputQueue, err = middleware.CreateQueueMiddleware(config.InputQueue, connSettings)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating input queue: %w", err)
 	}
 
-	outputQueues := make([]middleware.Middleware, 0, len(config.OutputQueues))
+	outputQueues = make([]middleware.Middleware, 0, len(config.OutputQueues))
 	for _, q := range config.OutputQueues {
-		m, err := middleware.CreateQueueMiddleware(q, connSettings)
-		if err != nil {
+		m, e := middleware.CreateQueueMiddleware(q, connSettings)
+		if e != nil {
+			err = fmt.Errorf("creating output queue %s: %w", q, e)
 			return nil, err
 		}
 		outputQueues = append(outputQueues, m)
 	}
 
-	next := config.Id + 1
-	if config.Id == config.SumAmount-1 {
-		next = 0
-	}
-
-	eofInput, err := middleware.CreateQueueMiddleware(
-		"SUM_"+strconv.Itoa(config.Id),
+	eofInput, err = middleware.CreateQueueMiddleware(
+		eofRingPrefix+strconv.Itoa(config.Id),
 		connSettings,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating EOF input queue: %w", err)
 	}
 
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		"SUM_"+strconv.Itoa(next),
+	eofOutput, err = middleware.CreateQueueMiddleware(
+		eofRingPrefix+strconv.Itoa(getRingNextIndex(config)),
 		connSettings,
 	)
 	if err != nil {
-		eofInput.Close()
-		return nil, err
+		return nil, fmt.Errorf("creating EOF output queue: %w", err)
 	}
 
-	handlerMessages := msgmonitor.NewMessageMonitor()
+	msgMonitor := msgmonitor.NewMessageMonitor()
 
-	sumWorker := &SumByPaymentFormat{
-		id:              config.Id,
-		inputQueue:      inputQueue,
-		outputQueues:    outputQueues,
-		outputQueueEof:  eofOutput,
-		handlerMessages: handlerMessages,
-		queryID:         config.QueryID,
-		acumuladores:    map[int]map[string]transfer.SumByMethod{},
+	s := &SumByPaymentFormat{
+		id:           config.Id,
+		queryID:      config.QueryID,
+		inputQueue:   inputQueue,
+		outputQueues: outputQueues,
+		eofInput:     eofInput,
+		eofOutput:    eofOutput,
+		msgMonitor:   msgMonitor,
+		acumuladores: map[int]map[string]transfer.SumByMethod{},
 	}
 
-	sumWorker.eofHandler = eofring.CreateEofRingAlgorithm(
+	s.eofHandler = eofring.CreateEofRingAlgorithm(
 		eofInput,
 		eofOutput,
 		config.SumAmount,
 		uint32(config.Id),
-		handlerMessages,
-		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
-			sumWorker.lock.Lock()
-			byMethod := sumWorker.acumuladores[clientID]
-			delete(sumWorker.acumuladores, clientID)
-			sumWorker.lock.Unlock()
-
-			for method, partial := range byMethod {
-				out, err := inner.SerializeData(inner.DataMsg[transfer.SumByMethod]{
-					Payload:  partial,
-					ClientID: clientID,
-					QueryID:  sumWorker.queryID,
-				})
-				if err != nil {
-					return err
-				}
-				idx := shard.CalculateIndexForShard(clientID, method, len(sumWorker.outputQueues))
-				slog.Info("Sum sending partial to aggregate", "client_id", clientID, "method", method, "sum", partial.Sum, "amount", partial.Amount, "shard", idx)
-				if err := sumWorker.outputQueues[idx].Send(*out); err != nil {
-					return err
-				}
-			}
-
-			if !isCoordinator {
-				return nil
-			}
-			for _, q := range sumWorker.outputQueues {
-				if err := q.Send(*msg); err != nil {
-					return err
-				}
-			}
-			return nil
-		},
+		msgMonitor,
+		s.onRingConverged,
 		config.QueryID,
 	)
 
-	return sumWorker, nil
+	return s, nil
 }
 
 func (s *SumByPaymentFormat) Run() {
+	defer s.close()
 	slog.Info("Starting sum-by-payment-format consumers", "sum_id", s.id)
 	go s.eofHandler.Run()
-	if err := s.inputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		s.handleMessage(msg, ack, nack)
+	if err := s.inputQueue.StartConsuming(func(msg middleware.Message, ack, _ func()) {
+		s.handleInput(msg, ack)
 	}); err != nil {
 		slog.Error("While consuming from input queue", "err", err)
 	}
 }
 
-func (s *SumByPaymentFormat) handleMessage(msg middleware.Message, ack, nack func()) {
+func (s *SumByPaymentFormat) HandleSignals() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	<-signals
+	slog.Info("SIGTERM signal received, stopping consumer")
+
+	s.inputQueue.StopConsuming()
+	s.eofInput.StopConsuming()
+}
+
+func (s *SumByPaymentFormat) close() {
+	s.inputQueue.Close()
+	s.eofInput.Close()
+	s.eofOutput.Close()
+	for _, q := range s.outputQueues {
+		q.Close()
+	}
+}
+
+func (s *SumByPaymentFormat) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[transfer.Transfer](&msg)
@@ -154,50 +177,88 @@ func (s *SumByPaymentFormat) handleMessage(msg middleware.Message, ack, nack fun
 	}
 
 	if result.IsEOF() {
-		ringMsg := eofmessagetypes.EofRingMessage{
-			RealAmount:     result.EOF.TotalMessages,
-			ActualAmount:   s.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
-			ClientId:       result.ClientID,
-			CoordinatorId:  uint32(s.id),
-			FilteredAmount: s.handlerMessages.GetForwardedMessagesAmountByClientId(result.ClientID),
-		}
-		serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
-		if err != nil {
-			slog.Error("While serializing EOF ring message", "err", err)
-			return
-		}
-		if err := s.outputQueueEof.Send(*serialized); err != nil {
-			slog.Error("While sending EOF message to EOF ring", "err", err)
-		}
-		slog.Info("Sum fired ring", "sum_id", s.id, "client_id", result.ClientID, "real_amount", result.EOF.TotalMessages)
+		s.handleEOF(*result)
 		return
 	}
 
-	t := result.Payload
+	s.handleRecord(result.ClientID, result.Payload)
+}
+
+func (s *SumByPaymentFormat) handleRecord(clientID int, t transfer.Transfer) {
 	method := t.PaymentFormat
 
-	s.lock.Lock()
-	if s.acumuladores[result.ClientID] == nil {
-		s.acumuladores[result.ClientID] = map[string]transfer.SumByMethod{}
+	s.mu.Lock()
+	if s.acumuladores[clientID] == nil {
+		s.acumuladores[clientID] = map[string]transfer.SumByMethod{}
 	}
-	existing, ok := s.acumuladores[result.ClientID][method]
+	existing, ok := s.acumuladores[clientID][method]
 	if !ok {
-		s.acumuladores[result.ClientID][method] = transfer.SumByMethod{
+		s.acumuladores[clientID][method] = transfer.SumByMethod{
 			Sum:    t.AmountPaid,
 			Amount: 1,
 			Method: method,
 		}
-		s.handlerMessages.AddForwardedMessagesAmountByClientId(result.ClientID, 1)
+		s.msgMonitor.AddForwardedMessagesAmountByClientId(clientID, 1)
 	} else {
-		s.acumuladores[result.ClientID][method] = transfer.SumByMethod{
+		s.acumuladores[clientID][method] = transfer.SumByMethod{
 			Sum:    existing.Sum + t.AmountPaid,
 			Amount: existing.Amount + 1,
 			Method: method,
 		}
 	}
-	s.lock.Unlock()
-	s.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
+	s.mu.Unlock()
+	s.msgMonitor.AddProcessedMessagesAmountByClientId(clientID, 1)
 }
 
-func (s *SumByPaymentFormat) HandleSignals() {
+func (s *SumByPaymentFormat) handleEOF(data inner.DataMsg[transfer.Transfer]) {
+	ringMsg := eofmessagetypes.EofRingMessage{
+		RealAmount:     data.EOF.TotalMessages,
+		ActualAmount:   s.msgMonitor.GetProcessedMessagesAmountByClientId(data.ClientID),
+		ClientId:       data.ClientID,
+		CoordinatorId:  uint32(s.id),
+		FilteredAmount: s.msgMonitor.GetForwardedMessagesAmountByClientId(data.ClientID),
+	}
+	serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
+	if err != nil {
+		slog.Error("While serializing EOF ring message", "err", err)
+		return
+	}
+	if err := s.eofOutput.Send(*serialized); err != nil {
+		slog.Error("While sending EOF message to EOF ring", "err", err)
+		return
+	}
+	slog.Info("Sum fired ring", "sum_id", s.id, "client_id", data.ClientID, "real_amount", data.EOF.TotalMessages)
+}
+
+func (s *SumByPaymentFormat) onRingConverged(clientID int, msg *middleware.Message, isCoordinator bool) error {
+	s.mu.Lock()
+	byMethod := s.acumuladores[clientID]
+	delete(s.acumuladores, clientID)
+	s.mu.Unlock()
+
+	for method, partial := range byMethod {
+		out, err := inner.SerializeData(inner.DataMsg[transfer.SumByMethod]{
+			Payload:  partial,
+			ClientID: clientID,
+			QueryID:  s.queryID,
+		})
+		if err != nil {
+			return err
+		}
+		idx := shard.CalculateIndexForShard(clientID, method, len(s.outputQueues))
+		slog.Info("Sum sending partial to aggregate", "client_id", clientID, "method", method, "sum", partial.Sum, "amount", partial.Amount, "shard", idx)
+		if err := s.outputQueues[idx].Send(*out); err != nil {
+			return err
+		}
+	}
+
+	if !isCoordinator {
+		return nil
+	}
+	for _, q := range s.outputQueues {
+		if err := q.Send(*msg); err != nil {
+			return err
+		}
+	}
+	return nil
 }

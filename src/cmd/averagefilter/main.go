@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"os"
 
-	"tp-grupal-distribuidos/internal/sum"
+	"tp-grupal-distribuidos/internal/averagefilter"
 )
 
 func run() int {
@@ -14,9 +14,9 @@ func run() int {
 		return 1
 	}
 
-	server, err := sum.NewSumByPaymentFormat(config)
+	server, err := averagefilter.NewAverageFilter(config)
 	if err != nil {
-		slog.Error("While initializing sum", "err", err)
+		slog.Error("While initializing average filter", "err", err)
 		return 1
 	}
 
