@@ -1,0 +1,18 @@
+src/internal/filter/averagefilter.go
+  h_3c9b41718876fe 12,98-103,105-107,110-114,116,189-208,231
+src/internal/filter/types.go
+  h_3c9b41718876fe 109
+scripts/compose-gen/generator.go
+  h_3c9b41718876fe 94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c9dc8318ad7dd9e61fb072ae8dbcb8678b22d4cb",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
