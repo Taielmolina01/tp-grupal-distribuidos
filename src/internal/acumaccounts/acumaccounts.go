@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"sync"
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/eofmessage"
@@ -47,8 +46,8 @@ type AcumAccounts struct {
 	inputMiddleware  newmiddleware.Middleware
 	outputMiddleware newmiddleware.Middleware
 
-	requiredAmt  int
-	mu           sync.Mutex
+	requiredAmt int
+
 	clientsState map[int]*clientState
 	queryID      int
 }
@@ -123,7 +122,7 @@ func (a *AcumAccounts) close() {
 
 func (a *AcumAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[account.AccountChain](&middleware.Message{Body: msg.Body})
+	m, err := inner.DeserializeData[account.AccountChainBatch](&middleware.Message{Body: msg.Body})
 
 	if err != nil {
 		slog.Error("While deserializing pipeline message", "err", err)
@@ -135,13 +134,12 @@ func (a *AcumAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 		return
 	}
 
-	a.handleRecord(m.ClientID, m.Payload)
+	for _, chain := range m.Payload.Items {
+		a.handleRecord(m.ClientID, chain)
+	}
 }
 
 func (a *AcumAccounts) handleRecord(clientID int, record account.AccountChain) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	state := a.stateFor(clientID)
 
 	key := record.Left.GetKey() + "_" + record.Right.GetKey()
@@ -180,10 +178,7 @@ func (a *AcumAccounts) handleRecord(clientID int, record account.AccountChain) {
 	}
 }
 
-func (a *AcumAccounts) handleEOF(data inner.DataMsg[account.AccountChain]) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
+func (a *AcumAccounts) handleEOF(data inner.DataMsg[account.AccountChainBatch]) {
 	state := a.stateFor(data.ClientID)
 	state.eofAmt++
 
@@ -201,6 +196,7 @@ func (a *AcumAccounts) handleEOF(data inner.DataMsg[account.AccountChain]) {
 		slog.Error("While sending EOF message", "err", err)
 	}
 
+	clear(state.acum)
 	delete(a.clientsState, data.ClientID)
 }
 
