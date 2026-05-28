@@ -30,9 +30,8 @@ type JoinAccountsConfig struct {
 }
 
 type clientState struct {
-	left           map[string]map[string]account.AccountPair
-	right          map[string]map[string]account.AccountPair
-	processedCount int
+	left  map[string]map[string]account.AccountPair
+	right map[string]map[string]account.AccountPair
 }
 
 type JoinAccounts struct {
@@ -131,12 +130,6 @@ func (j *JoinAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 }
 
 func (j *JoinAccounts) handleRecord(clientID int, record transfer.SplittedTransfer) {
-	state := j.stateFor(clientID)
-	state.processedCount++
-	if state.processedCount%10_000 == 0 {
-		slog.Info("joinaccounts progress", "id", j.id, "client_id", clientID, "processed", state.processedCount)
-	}
-
 	var chains []account.AccountChain
 	if record.IsLeftPart {
 		chains = j.handleLeftPartRecord(clientID, record)
