@@ -25,7 +25,7 @@ type AggregateConfig struct {
 }
 
 type partial struct {
-	totalSum   float32
+	totalSum   float64
 	totalCount int
 }
 
@@ -111,7 +111,7 @@ func CreateAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 				}
 				avg := transfer.AvgByMethod{
 					Method: method,
-					Avg:    p.totalSum / float32(p.totalCount),
+					Avg:    p.totalSum / float64(p.totalCount),
 				}
 				out, err := inner.SerializeData(inner.DataMsg[transfer.AvgByMethod]{
 					Payload:  avg,

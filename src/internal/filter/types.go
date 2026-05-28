@@ -40,7 +40,7 @@ type FilterConfig struct {
 	RightInputQueue       string
 	RightInputExchange    string
 	RightInputRoutingKeys []string
-	Amount                float32
+	Amount                float64
 	StartDateRange        time.Time
 	EndDateRange          time.Time
 	Currencies            []string
@@ -97,14 +97,14 @@ type AverageFilter struct {
 
 	avgsExpectedEofs int
 
-	compareFunc func(float32, float32) bool
+	compareFunc func(float64, float64) bool
 
 	state map[int]*avgFilterClientState
 	lock  sync.Mutex
 }
 
 type avgFilterClientState struct {
-	avgs                map[string]float32
+	avgs                map[string]float64
 	avgsReady           bool
 	avgsEofsReceived    int
 	transfersEofPending bool
@@ -119,12 +119,12 @@ type ConvertedAmountFilter[T, S comparable] struct {
 	queryId            uint8
 	leftKeyFunc        func(S) string
 	leftSecondKeyFunc  func(S) string
-	leftValueFunc      func(S) float32
+	leftValueFunc      func(S) float64
 	rightKeyFunc       func(T) string
 	rightsecondKeyFunc func(T) string
-	rightValueFunc     func(T) float32
-	conversionFunc     func(T, float32) S
-	conversionsByDay   map[string]map[string]float32
+	rightValueFunc     func(T) float64
+	conversionFunc     func(T, float64) S
+	conversionsByDay   map[string]map[string]float64
 	toSaveFunc         func(T, int) string
 	fromSaveFunc       func(string) (T, int, error)
 	eofRing            eofring.EofRingAlgorithm

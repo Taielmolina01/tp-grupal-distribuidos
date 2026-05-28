@@ -198,12 +198,12 @@ func (client *Client) sendTransRecords() error {
 			slog.Debug("Error while parsing trans timestamp", "err", err)
 			continue
 		}
-		amountReceived, err := strconv.ParseFloat(columns[5], 32)
+		amountReceived, err := strconv.ParseFloat(columns[5], 64)
 		if err != nil {
 			slog.Debug("Error while parsing trans amount received", "err", err)
 			continue
 		}
-		amountPaid, err := strconv.ParseFloat(columns[7], 32)
+		amountPaid, err := strconv.ParseFloat(columns[7], 64)
 		if err != nil {
 			slog.Debug("Error while parsing trans amount paid", "err", err)
 			continue
@@ -214,9 +214,9 @@ func (client *Client) sendTransRecords() error {
 			FromBankAccount:   columns[2],
 			ToBank:            columns[3],
 			ToBankAccount:     columns[4],
-			AmountReceived:    float32(amountReceived),
+			AmountReceived:    amountReceived,
 			ReceivingCurrency: columns[6],
-			AmountPaid:        float32(amountPaid),
+			AmountPaid:        amountPaid,
 			PaymentCurrency:   columns[8],
 			PaymentFormat:     columns[9],
 			IsLaundering:      columns[10] == "1",

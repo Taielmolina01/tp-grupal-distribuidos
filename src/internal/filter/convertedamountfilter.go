@@ -45,11 +45,11 @@ func newConvertedAmountFilter[T, S comparable](
 	compareFunc func(t T, s S) bool,
 	leftKeyFunc func(S) string,
 	leftSecondKeyFunc func(S) string,
-	leftValueFunc func(S) float32,
+	leftValueFunc func(S) float64,
 	rightKeyFunc func(T) string,
 	rightsecondKeyFunc func(T) string,
-	rightValueFunc func(T) float32,
-	conversionFunc func(T, float32) S,
+	rightValueFunc func(T) float64,
+	conversionFunc func(T, float64) S,
 	toSaveFunc func(T, int) string,
 	fromSaveFunc func(string) (T, int, error),
 ) (worker.Worker, error) {
@@ -147,7 +147,7 @@ func newConvertedAmountFilter[T, S comparable](
 		outputQueue:        outputQueue,
 		compareFunc:        compareFunc,
 		queryId:            config.QueryId,
-		conversionsByDay:   make(map[string]map[string]float32),
+		conversionsByDay:   make(map[string]map[string]float64),
 		leftKeyFunc:        leftKeyFunc,
 		leftSecondKeyFunc:  leftSecondKeyFunc,
 		leftValueFunc:      leftValueFunc,
@@ -207,7 +207,7 @@ func (filter *ConvertedAmountFilter[T, S]) consumeLeft(msg middleware.Message, a
 	}
 
 	if _, ok := filter.conversionsByDay[filter.leftKeyFunc(result.Payload)]; !ok {
-		filter.conversionsByDay[filter.leftKeyFunc(result.Payload)] = make(map[string]float32)
+		filter.conversionsByDay[filter.leftKeyFunc(result.Payload)] = make(map[string]float64)
 	}
 	filter.conversionsByDay[filter.leftKeyFunc(result.Payload)][datasetToFrank[filter.leftSecondKeyFunc(result.Payload)]] = filter.leftValueFunc(result.Payload)
 	filter.CheckTransfersWithoutConversion(result.Payload)

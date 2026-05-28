@@ -36,7 +36,6 @@ const (
 
 var validFormatsQ5 = map[string]bool{"Wire": true, "ACH": true}
 
-
 type tx struct {
 	Timestamp       string
 	FromBank        string
@@ -57,7 +56,6 @@ type bankAcc struct {
 	Bank    string
 	Account string
 }
-
 
 var btcRatesUSD = map[string]float64{
 	"2022-09-01": 19793.1,
@@ -274,9 +272,9 @@ func query2(txs []tx, accs []account, outPath string) error {
 		if t.PaymentCurrency != usdCurrency {
 			continue
 		}
-		cur, ok := maxes[t.FromBank]
+		cur, ok := maxes[normalizeBank(t.FromBank)]
 		if !ok || t.AmountPaid > cur.amt {
-			maxes[t.FromBank] = entry{t.AmountPaid, t}
+			maxes[normalizeBank(t.FromBank)] = entry{t.AmountPaid, t}
 		}
 	}
 
@@ -466,7 +464,6 @@ func query5(txs []tx, outPath string) error {
 	return err
 }
 
-
 func hashDataset(n int) (string, error) {
 	h := md5.New()
 	for _, name := range []string{
@@ -572,7 +569,6 @@ func build() error {
 	return nil
 }
 
-
 func sortedLines(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -595,7 +591,7 @@ func sortedLines(path string) ([]string, error) {
 func diffSorted(a, b []string) []string {
 	var out []string
 	i, j := 0, 0
-	for i < len(a) && j < len(b){
+	for i < len(a) && j < len(b) {
 		switch {
 		case a[i] == b[j]:
 			i++
@@ -690,7 +686,6 @@ func verify() error {
 	os.Exit(1)
 	return nil
 }
-
 
 func main() {
 	log.SetFlags(log.LstdFlags)

@@ -21,7 +21,7 @@ import (
 
 func newAverageFilter(
 	config FilterConfig,
-	compareFunc func(float32, float32) bool,
+	compareFunc func(float64, float64) bool,
 	queryID uint8,
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
@@ -134,7 +134,7 @@ func (af *AverageFilter) getOrInitState(clientID int) *avgFilterClientState {
 	s, ok := af.state[clientID]
 	if !ok {
 		s = &avgFilterClientState{
-			avgs: map[string]float32{},
+			avgs: map[string]float64{},
 		}
 		af.state[clientID] = s
 	}
@@ -327,7 +327,7 @@ func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *
 			slog.Error("While parsing transfer from file: unexpected column count", "filter_id", af.id)
 			continue
 		}
-		amount, err := strconv.ParseFloat(cols[3], 32)
+		amount, err := strconv.ParseFloat(cols[3], 64)
 		if err != nil {
 			slog.Error("While parsing amount from file", "filter_id", af.id, "err", err)
 			continue
@@ -336,7 +336,7 @@ func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *
 			PaymentFormat:   cols[0],
 			FromBank:        cols[1],
 			FromBankAccount: cols[2],
-			AmountPaid:      float32(amount),
+			AmountPaid:      amount,
 		}
 		af.processTransferLocked(clientID, t, state)
 		drained++

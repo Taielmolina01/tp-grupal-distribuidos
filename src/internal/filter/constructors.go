@@ -111,7 +111,7 @@ func CreateBankDistinctFilter(config FilterConfig) (worker.Worker, error) {
 func CreateAverageFilter(config FilterConfig) (worker.Worker, error) {
 	return newAverageFilter(
 		config,
-		func(transferAmount float32, avg float32) bool {
+		func(transferAmount float64, avg float64) bool {
 			return transferAmount < avg/100
 		},
 		3,
@@ -130,7 +130,7 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 		func(f fetcherresponse.FetcherResponse) string {
 			return f.Quote
 		},
-		func(f fetcherresponse.FetcherResponse) float32 {
+		func(f fetcherresponse.FetcherResponse) float64 {
 			return f.Rate
 		},
 		func(t transfer.Transfer) string {
@@ -139,10 +139,10 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 		func(t transfer.Transfer) string {
 			return t.ReceivingCurrency
 		},
-		func(t transfer.Transfer) float32 {
+		func(t transfer.Transfer) float64 {
 			return t.AmountPaid
 		},
-		func(t transfer.Transfer, rate float32) fetcherresponse.FetcherResponse {
+		func(t transfer.Transfer, rate float64) fetcherresponse.FetcherResponse {
 			return fetcherresponse.FetcherResponse{
 				Date:  t.Timestamp.Format(DATE_LAYOUT),
 				Quote: t.ReceivingCurrency,
@@ -174,11 +174,11 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 			if err != nil {
 				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing timestamp: %w", err)
 			}
-			amountReceived, err := strconv.ParseFloat(columns[5], 32)
+			amountReceived, err := strconv.ParseFloat(columns[5], 64)
 			if err != nil {
 				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing amount received: %w", err)
 			}
-			amountPaid, err := strconv.ParseFloat(columns[7], 32)
+			amountPaid, err := strconv.ParseFloat(columns[7], 64)
 			if err != nil {
 				return transfer.Transfer{}, -1, fmt.Errorf("error while parsing amount paid: %w", err)
 			}
@@ -192,9 +192,9 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 				FromBankAccount:   columns[2],
 				ToBank:            columns[3],
 				ToBankAccount:     columns[4],
-				AmountReceived:    float32(amountReceived),
+				AmountReceived:    amountReceived,
 				ReceivingCurrency: columns[6],
-				AmountPaid:        float32(amountPaid),
+				AmountPaid:        amountPaid,
 				PaymentCurrency:   columns[8],
 				PaymentFormat:     columns[9],
 				IsLaundering:      columns[10] == "true",

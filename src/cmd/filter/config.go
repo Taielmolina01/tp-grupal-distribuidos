@@ -121,7 +121,7 @@ func loadAmountVenv(config *filter.FilterConfig) error {
 	if err != nil {
 		return errors.New("AMOUNT environment variable is required if FILTER_TYPE is AMOUNT or CONVERTED_AMOUNT_FILTER")
 	}
-	config.Amount = float32(amount)
+	config.Amount = float64(amount)
 	return nil
 }
 

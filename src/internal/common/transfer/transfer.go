@@ -8,9 +8,9 @@ type Transfer struct {
 	FromBankAccount   string    `json:"from_bank_account"`
 	ToBank            string    `json:"to_bank"`
 	ToBankAccount     string    `json:"to_bank_account"`
-	AmountReceived    float32   `json:"amount_received"`
+	AmountReceived    float64   `json:"amount_received"`
 	ReceivingCurrency string    `json:"receiving_currency"`
-	AmountPaid        float32   `json:"amount_paid"`
+	AmountPaid        float64   `json:"amount_paid"`
 	PaymentCurrency   string    `json:"payment_currency"`
 	PaymentFormat     string    `json:"payment_format"`
 	IsLaundering      bool      `json:"is_laundering"`
@@ -22,13 +22,13 @@ type SplittedTransfer struct {
 }
 
 type SumByMethod struct {
-	Sum    float32 `json:"sum"`
+	Sum    float64 `json:"sum"`
 	Amount int     `json:"amount"`
 	Method string  `json:"method"`
 }
 
 type AvgByMethod struct {
-	Avg    float32 `json:"average"`
+	Avg    float64 `json:"average"`
 	Method string  `json:"method"`
 }
 

@@ -117,7 +117,6 @@ func newReducer[T comparable](
 				if err != nil {
 					return err
 				}
-				slog.Info("Reducer sending message to output exchange", "client_id", clientID, "payload", v)
 				if err := reducer.outputQueues[shard.CalculateIndexForShard(
 					clientID,
 					keyFunc(v),

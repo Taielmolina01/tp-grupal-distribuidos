@@ -35,7 +35,7 @@ test:
 .PHONY: test
 
 compose:
-	@cd scripts/compose-gen && go run . $(if $(CONFIG),-config $(CONFIG),)
+	@cd scripts/compose-gen && GOWORK=off go run . $(if $(CONFIG),-config $(CONFIG),)
 .PHONY: compose
 
 switch:
@@ -52,11 +52,11 @@ switch:
 EXPECTED_ENV = INPUT_DIR=$(PWD)/$(INPUT_DIR) EXPECTED_DIR=$(PWD)/$(EXPECTED_DIR) OUTPUT_DIR=$(PWD)/$(OUTPUT_DIR) N_CLIENTS=$(N_CLIENTS)
 
 build-expected:
-	@cd scripts/expected-output && $(EXPECTED_ENV) go run . build
+	@cd scripts/expected-output && GOWORK=off $(EXPECTED_ENV) go run . build
 .PHONY: build-expected
 
 verify-output:
-	@cd scripts/expected-output && $(EXPECTED_ENV) go run . verify
+	@cd scripts/expected-output && GOWORK=off $(EXPECTED_ENV) go run . verify
 .PHONY: verify-output
 
 output-test: build-expected verify-output
