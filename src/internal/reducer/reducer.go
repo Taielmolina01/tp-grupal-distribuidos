@@ -166,7 +166,6 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 	if result.IsEOF() {
 		reducer.inputEofCount[result.ClientID]++
 		reducer.totalRealAmount[result.ClientID] = result.EOF.TotalMessages
-		// slog.Info("input EOF received", "client_id", result.ClientID, "count", reducer.inputEofCount[result.ClientID], "expected", reducer.inputEofsExpected)
 
 		eofRingMessage := eofmessagetypes.EofRingMessage{
 			RealAmount:     reducer.totalRealAmount[result.ClientID],
@@ -190,7 +189,6 @@ func (reducer *Reducer[T]) handleMessage(msg middleware.Message, ack func(), nac
 		); err != nil {
 			slog.Error("While sending EOF message to EOF ring", "err", err)
 		}
-		// slog.Info("EOF message sent to EOF ring", "reducer_id", reducer.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
 	} else {
 		key := reducer.keyFunc(result.Payload)
 

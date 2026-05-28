@@ -273,7 +273,6 @@ func (filter *ConvertedAmountFilter[T, S]) consumeRight(msg middleware.Message, 
 			payload,
 			conversion,
 		)) || filter.rightValueFunc(payload) < filter.amountThreshold {
-			slog.Info("to output", "msg", payload)
 			filter.handlerMessages.AddForwardedMessagesAmountByClientId(result.ClientID, 1)
 			msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
 				ClientID: result.ClientID,
@@ -336,7 +335,6 @@ func (filter *ConvertedAmountFilter[T, S]) CheckTransfersWithoutConversion(s S) 
 			}
 
 			if filter.compareFunc(transfer, s) {
-				slog.Info("to output", "msg", transfer)
 				msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
 					ClientID: clientID,
 					QueryID:  filter.queryId,

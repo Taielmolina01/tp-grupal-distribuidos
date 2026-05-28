@@ -170,7 +170,6 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (_ *DateRangeSplitter,
 				if err := s.outputQueues[idx].Send(*msg); err != nil {
 					return err
 				}
-				slog.Info("DateRangeSplitter emitted EOF to output queue", "splitter_id", s.id, "client_id", clientID, "output_idx", idx)
 				return nil
 			},
 			config.QueryID,

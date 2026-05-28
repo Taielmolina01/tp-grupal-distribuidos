@@ -177,7 +177,6 @@ func NewAverageFilter(config AverageFilterConfig) (_ *AverageFilter, err error) 
 func (af *AverageFilter) Run() {
 	defer af.close()
 
-	slog.Info("Starting average-filter consumers", "filter_id", af.id)
 	go af.transfersRing.Run()
 	go af.consumeAvgs()
 	if err := af.inputTransfersQueue.StartConsuming(func(msg middleware.Message, ack, _ func()) {
@@ -230,7 +229,6 @@ func (af *AverageFilter) getOrInitState(clientID int) *clientState {
 	return s
 }
 
-
 func (af *AverageFilter) handleTransferInput(msg middleware.Message, ack func()) {
 	defer ack()
 
@@ -275,7 +273,6 @@ func (af *AverageFilter) handleTransferEOF(data inner.DataMsg[transfer.Transfer]
 	if !state.avgsReady {
 		state.transfersEofPending = true
 		state.transfersEofRealAmt = data.EOF.TotalMessages
-		slog.Info("AverageFilter deferring transfers EOF until avgs ready", "filter_id", af.id, "client_id", data.ClientID, "real_amount", data.EOF.TotalMessages)
 		return
 	}
 	af.fireTransfersRingLocked(data.ClientID, data.EOF.TotalMessages)
@@ -306,12 +303,10 @@ func (af *AverageFilter) handleAvgInput(msg middleware.Message, ack func()) {
 
 func (af *AverageFilter) handleAvgEOFLocked(clientID int, state *clientState) {
 	state.avgsEofsReceived++
-	slog.Info("AverageFilter got avgs EOF", "filter_id", af.id, "client_id", clientID, "count", state.avgsEofsReceived, "expected", af.avgsExpectedEofs)
 	if state.avgsEofsReceived < af.avgsExpectedEofs {
 		return
 	}
 	state.avgsReady = true
-	slog.Info("AverageFilter avgs ready, discarding leftover buffer files", "filter_id", af.id, "client_id", clientID, "avgs", len(state.avgs))
 	af.deleteRemainingFiles(clientID)
 
 	if state.transfersEofPending {
@@ -344,7 +339,6 @@ func (af *AverageFilter) onTransfersRingConverged(clientID int, msg *middleware.
 	if err := af.outputQueue.Send(*msg); err != nil {
 		return err
 	}
-	slog.Info("AverageFilter emitted EOF to results_queue", "filter_id", af.id, "client_id", clientID)
 	return nil
 }
 
@@ -395,7 +389,6 @@ func (af *AverageFilter) fireTransfersRingLocked(clientID int, realAmount uint32
 		slog.Error("While sending EOF to transfers ring", "err", err)
 		return
 	}
-	slog.Info("AverageFilter fired transfers ring", "filter_id", af.id, "client_id", clientID, "real_amount", realAmount, "actual_amount", ringMsg.ActualAmount, "filtered", ringMsg.FilteredAmount)
 }
 
 func (af *AverageFilter) finalizeClientLocked(clientID int, state *clientState) {
@@ -491,9 +484,6 @@ func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *
 		af.processTransferLocked(clientID, t, state)
 		drained++
 	}
-	if drained > 0 {
-		slog.Info("AverageFilter drained file for method", "filter_id", af.id, "client_id", clientID, "method", method, "drained", drained)
-	}
 }
 
 func (af *AverageFilter) deleteRemainingFiles(clientID int) {
@@ -507,8 +497,5 @@ func (af *AverageFilter) deleteRemainingFiles(clientID int) {
 		if err := os.Remove(f); err != nil {
 			slog.Error("While removing buffer file", "filter_id", af.id, "file", f, "err", err)
 		}
-	}
-	if len(matches) > 0 {
-		slog.Info("AverageFilter deleted remaining buffer files", "filter_id", af.id, "client_id", clientID, "count", len(matches))
 	}
 }

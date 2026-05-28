@@ -229,7 +229,6 @@ func (a *AvgAggregator) handleEOF(data inner.DataMsg[transfer.SumByMethod]) {
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 		return
 	}
-	slog.Info("Aggregate fired ring", "aggregate_id", a.id, "client_id", data.ClientID, "real_amount", data.EOF.TotalMessages)
 }
 
 func (a *AvgAggregator) onRingConverged(clientID int, msg *middleware.Message, isCoordinator bool) error {
@@ -254,7 +253,6 @@ func (a *AvgAggregator) onRingConverged(clientID int, msg *middleware.Message, i
 		if err != nil {
 			return err
 		}
-		slog.Info("Aggregate broadcasting avg", "client_id", clientID, "method", method, "avg", avg.Avg, "count", p.totalCount)
 		for _, q := range a.outputQueues {
 			if err := q.Send(*out); err != nil {
 				return err
