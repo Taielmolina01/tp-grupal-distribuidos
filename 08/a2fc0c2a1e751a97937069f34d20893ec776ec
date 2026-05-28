@@ -1,0 +1,39 @@
+src/internal/acumaccounts/acumaccounts.go
+  s_30eab8c8183144::t_1f648444e09312 5
+  s_30eab8c8183144::t_ea5e44f9874ae2 9,20-23,39-42,46-47,61-64,101-105,115-117,159-162,165-167,172-178,180-185,187-200,203-205,207-218,221-229,232-235,237,240-241,245-249,251,255-256,260-262,264-273,276-278
+  s_30eab8c8183144::t_3394dcafa115b8 274-275,279-284
+src/cmd/acumaccounts/config.go
+  s_30eab8c8183144::t_e0cd12f355b5d0 57-65,76-78,81-89
+src/internal/acumaccounts/spiller_test.go
+  s_30eab8c8183144::t_a4b204b1c2856d 1-116
+src/internal/acumaccounts/spiller.go
+  s_30eab8c8183144::t_0cfe24f8fb1e32 1-84,86-227
+  s_30eab8c8183144::t_1f9a2820775d9e 85
+.claude/settings.local.json
+  s_30eab8c8183144::t_dba758c99a4d93 1-7
+docker-compose.yaml
+  s_30eab8c8183144::t_83edfc07ab733a 436-438,463-465
+duplicate_datasets.sh
+  h_3c9b41718876fe 15-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "08a2fc0c2a1e751a97937069f34d20893ec776ec",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_30eab8c8183144": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8bf51544-aee4-432e-9f70-3fbaf9b30937",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
