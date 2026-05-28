@@ -80,7 +80,7 @@ func newTwoInputJoin[L, R, O any](
 		id:                config.Id,
 		joinAmount:        config.Amount,
 		queryID:           config.QueryID,
-		join:              newJoin[L, R, O](output, leftKey, rightKey, combine, leftCombine, config.QueryID),
+		join:              newJoin(output, leftKey, rightKey, combine, leftCombine, config.QueryID),
 		leftInput:         leftInput,
 		rightInput:        rightInput,
 		output:            output,
@@ -168,78 +168,6 @@ func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
 	}
 	if err := a.output.Send(*msgOut); err != nil {
 		slog.Error("while sending join EOF downstream", "err", err)
-	}
-}
-
-type SingleInputAdapter[T, O any] struct {
-	join   *Join[T, T, O]
-	input  middleware.Middleware
-	isLeft func(T) bool
-}
-
-func newSingleInputJoin[T, O any](
-	config JoinConfig,
-	isLeft func(T) bool,
-	leftKey func(T) string,
-	rightKey func(T) string,
-	combine func(T, T) O,
-) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-
-	input, err := middleware.CreateQueueMiddleware(config.LeftInputQueue, connSettings)
-	if err != nil {
-		return nil, err
-	}
-
-	output, err := middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
-	if err != nil {
-		if err := input.Close(); err != nil {
-			slog.Error("while closing input", "err", err)
-		}
-		return nil, err
-	}
-
-	return &SingleInputAdapter[T, O]{
-		join:   newJoin[T, T, O](output, leftKey, rightKey, combine, nil, config.QueryID),
-		input:  input,
-		isLeft: isLeft,
-	}, nil
-}
-
-func (a *SingleInputAdapter[T, O]) Run() {
-	if err := a.input.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		defer ack()
-		data, err := inner.DeserializeData[T](&msg)
-		if err != nil {
-			slog.Error("while deserializing message", "err", err)
-			return
-		}
-		if data.IsEOF() {
-			a.join.HandleQueryEOF(data.ClientID)
-			return
-		}
-		if a.isLeft(data.Payload) {
-			a.join.HandleLeft(data.ClientID, data.Payload)
-		} else {
-			a.join.HandleRight(data.ClientID, data.Payload)
-		}
-	}); err != nil {
-		slog.Error("while consuming input", "err", err)
-	}
-}
-
-func (a *SingleInputAdapter[T, O]) HandleSignals() {
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	<-signals
-	if err := a.input.StopConsuming(); err != nil {
-		slog.Error("while stopping input", "err", err)
-	}
-	if err := a.input.Close(); err != nil {
-		slog.Error("while closing input", "err", err)
-	}
-	if err := a.join.output.Close(); err != nil {
-		slog.Error("while closing output", "err", err)
 	}
 }
 

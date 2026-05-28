@@ -333,7 +333,7 @@ func query3(txs []tx, outPath string) error {
 		if t.PaymentCurrency != usdCurrency {
 			continue
 		}
-		if !(t.Timestamp >= "2022/09/06" && t.Timestamp <= "2022/09/15") {
+		if !(t.Timestamp >= "2022/09/06" && t.Timestamp < "2022/09/16") {
 			continue
 		}
 		a, ok := avg[t.PaymentFormat]
@@ -350,60 +350,55 @@ func query3(txs []tx, outPath string) error {
 func query4(txs []tx, outPath string) error {
 	var p1 []tx
 	for _, t := range txs {
-		if t.PaymentCurrency == usdCurrency && t.Timestamp >= "2022/09/01" && t.Timestamp <= "2022/09/06" {
+		if t.PaymentCurrency == usdCurrency &&
+			t.Timestamp >= "2022/09/01" && t.Timestamp < "2022/09/06" {
 			p1 = append(p1, t)
 		}
 	}
 
-	distinct := map[bankAcc]map[bankAcc]bool{}
-	for _, t := range p1 {
-		src := bankAcc{t.FromBank, t.FromAccount}
-		dst := bankAcc{t.ToBank, t.ToAccount}
-		if distinct[src] == nil {
-			distinct[src] = map[bankAcc]bool{}
-		}
-		distinct[src][dst] = true
-	}
-	scatterSrcs := map[bankAcc]bool{}
-	for src, dsts := range distinct {
-		if len(dsts) > minScatterQ4 {
-			scatterSrcs[src] = true
-		}
-	}
-
-	type edge struct{ Src, Dst bankAcc }
-	var edges []edge
-	for _, t := range p1 {
-		src := bankAcc{t.FromBank, t.FromAccount}
-		if scatterSrcs[src] {
-			edges = append(edges, edge{src, bankAcc{t.ToBank, t.ToAccount}})
-		}
-	}
-
-	countSM := map[bankAcc]map[bankAcc]int{}
-	for _, e := range edges {
-		if countSM[e.Src] == nil {
-			countSM[e.Src] = map[bankAcc]int{}
-		}
-		countSM[e.Src][e.Dst]++
-	}
+	left := map[bankAcc]map[bankAcc]bool{}
+	right := map[bankAcc]map[bankAcc]bool{}
 
 	type pair struct{ A, C bankAcc }
-	paths := map[pair]int{}
-	for a, midMap := range countSM {
-		for mid, ab := range midMap {
-			for c, bc := range countSM[mid] {
-				if a == c {
-					continue
-				}
-				paths[pair{a, c}] += ab * bc
+	middles := map[pair]map[bankAcc]bool{}
+
+	addTo := func(m map[bankAcc]map[bankAcc]bool, k, v bankAcc) bool {
+		if m[k] == nil {
+			m[k] = map[bankAcc]bool{}
+		}
+		if m[k][v] {
+			return false
+		}
+		m[k][v] = true
+		return true
+	}
+	addMiddle := func(p pair, mid bankAcc) {
+		if middles[p] == nil {
+			middles[p] = map[bankAcc]bool{}
+		}
+		middles[p][mid] = true
+	}
+
+	for _, t := range p1 {
+		a := bankAcc{t.FromBank, t.FromAccount}
+		b := bankAcc{t.ToBank, t.ToAccount}
+
+		if addTo(left, a, b) {
+			for x := range right[a] {
+				addMiddle(pair{x, b}, a)
+			}
+		}
+
+		if addTo(right, b, a) {
+			for c := range left[b] {
+				addMiddle(pair{a, c}, b)
 			}
 		}
 	}
 
 	unique := map[bankAcc]bool{}
-	for p, n := range paths {
-		if n > minScatterQ4 {
+	for p, ms := range middles {
+		if len(ms) >= minScatterQ4 {
 			unique[p.A] = true
 			unique[p.C] = true
 		}

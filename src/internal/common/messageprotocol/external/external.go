@@ -375,14 +375,19 @@ func deserializeQuery3Result(r io.Reader) (queryresult.Query3Result, error) {
 	if err != nil {
 		return queryresult.Query3Result{}, err
 	}
+	paymentFormat, err := readString(r)
+	if err != nil {
+		return queryresult.Query3Result{}, err
+	}
 	amount, err := readFloat64(r)
 	if err != nil {
 		return queryresult.Query3Result{}, err
 	}
 	return queryresult.Query3Result{
-		FromBank:    fromBank,
-		FromAccount: fromAccount,
-		Amount:      amount,
+		FromBank:      fromBank,
+		FromAccount:   fromAccount,
+		PaymentFormat: paymentFormat,
+		Amount:        amount,
 	}, nil
 }
 
@@ -426,6 +431,7 @@ func serializeQuery2Result(r *queryresult.Query2Result) []byte {
 func serializeQuery3Result(r *queryresult.Query3Result) []byte {
 	msg := serializer.SerializeString(r.FromBank)
 	msg = append(msg, serializer.SerializeString(r.FromAccount)...)
+	msg = append(msg, serializer.SerializeString(r.PaymentFormat)...)
 	msg = append(msg, serializer.SerializeFloat64(r.Amount)...)
 	return msg
 }

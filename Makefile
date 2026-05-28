@@ -4,7 +4,7 @@ PWD := $(shell pwd)
 INPUT_DIR    ?= ./input
 OUTPUT_DIR   ?= ./output
 EXPECTED_DIR ?= ./expected_output
-N_CLIENTS    ?= 5
+N_CLIENTS    ?= 1
 
 LIME  := \033[38;2;138;206;0m
 RED   := \033[31m

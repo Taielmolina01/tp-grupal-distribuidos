@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"os"
 
-	"tp-grupal-distribuidos/internal/sum"
+	"tp-grupal-distribuidos/internal/daterangesplitter"
 )
 
 func run() int {
@@ -14,9 +14,9 @@ func run() int {
 		return 1
 	}
 
-	server, err := sum.NewSumByPaymentFormat(config)
+	server, err := daterangesplitter.NewDateRangeSplitter(config)
 	if err != nil {
-		slog.Error("While initializing sum", "err", err)
+		slog.Error("While initializing date range splitter", "err", err)
 		return 1
 	}
 

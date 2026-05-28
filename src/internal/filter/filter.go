@@ -125,7 +125,7 @@ func (filter *Filter[T, O]) Run() {
 	}
 }
 
-func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, nack func()) {
+func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, _ func()) {
 	ack()
 
 	result, err := inner.DeserializeData[T](&msg)

@@ -24,6 +24,10 @@ type AccountChain struct {
 	Right  AccountIdentifier `json:"right"`
 }
 
+type AccountChainBatch struct {
+	Items []AccountChain `json:"items"`
+}
+
 type AccountPair struct {
 	// Left -> Right
 	Left  AccountIdentifier `json:"left"`
@@ -37,6 +41,10 @@ type AccountIdentifier struct {
 
 func (a AccountIdentifier) GetKey() string {
 	return a.BankID + "_" + a.AccountNumber
+}
+
+type AccountIdentifierBatch struct {
+	Items []AccountIdentifier `json:"items"`
 }
 
 type Bank struct {

@@ -1,9 +1,13 @@
 package aggregate
 
 import (
+	"fmt"
 	"log/slog"
+	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
@@ -11,8 +15,9 @@ import (
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
-	"tp-grupal-distribuidos/internal/common/worker"
 )
+
+const eofRingPrefix = "AGGREGATE_"
 
 type AggregateConfig struct {
 	Id              int
@@ -30,132 +35,143 @@ type partial struct {
 }
 
 type AvgAggregator struct {
-	id              int
-	inputQueue      middleware.Middleware
-	outputQueues    []middleware.Middleware
-	outputQueueEof  middleware.Middleware
-	eofHandler      eofring.EofRingAlgorithm
-	handlerMessages msgmonitor.MessageMonitor
-	queryID         uint8
+	id      int
+	queryID uint8
 
+	inputQueue   middleware.Middleware
+	outputQueues []middleware.Middleware
+	eofInput     middleware.Middleware
+	eofOutput    middleware.Middleware
+	eofHandler   eofring.EofRingAlgorithm
+	msgMonitor   msgmonitor.MessageMonitor
+
+	mu           sync.Mutex
 	acumuladores map[int]map[string]partial
-	lock         sync.Mutex
 }
 
-func CreateAvgAggregator(config AggregateConfig) (worker.Worker, error) {
+func getRingNextIndex(config AggregateConfig) int {
+	if config.Id == config.AggregateAmount-1 {
+		return 0
+	}
+	return config.Id + 1
+}
+
+func NewAvgAggregator(config AggregateConfig) (_ *AvgAggregator, err error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputQueue, err := middleware.CreateQueueMiddleware(config.InputQueue, connSettings)
+	var (
+		inputQueue   middleware.Middleware
+		outputQueues []middleware.Middleware
+		eofInput     middleware.Middleware
+		eofOutput    middleware.Middleware
+	)
+
+	defer func() {
+		if err == nil {
+			return
+		}
+		if eofOutput != nil {
+			eofOutput.Close()
+		}
+		if eofInput != nil {
+			eofInput.Close()
+		}
+		for _, q := range outputQueues {
+			q.Close()
+		}
+		if inputQueue != nil {
+			inputQueue.Close()
+		}
+	}()
+
+	inputQueue, err = middleware.CreateQueueMiddleware(config.InputQueue, connSettings)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating input queue: %w", err)
 	}
 
-	outputQueues := make([]middleware.Middleware, 0, len(config.OutputQueues))
+	outputQueues = make([]middleware.Middleware, 0, len(config.OutputQueues))
 	for _, q := range config.OutputQueues {
-		m, err := middleware.CreateQueueMiddleware(q, connSettings)
-		if err != nil {
+		m, e := middleware.CreateQueueMiddleware(q, connSettings)
+		if e != nil {
+			err = fmt.Errorf("creating output queue %s: %w", q, e)
 			return nil, err
 		}
 		outputQueues = append(outputQueues, m)
 	}
 
-	next := config.Id + 1
-	if config.Id == config.AggregateAmount-1 {
-		next = 0
-	}
-
-	eofInput, err := middleware.CreateQueueMiddleware(
-		"AGGREGATE_"+strconv.Itoa(config.Id),
+	eofInput, err = middleware.CreateQueueMiddleware(
+		eofRingPrefix+strconv.Itoa(config.Id),
 		connSettings,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating EOF input queue: %w", err)
 	}
 
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		"AGGREGATE_"+strconv.Itoa(next),
+	eofOutput, err = middleware.CreateQueueMiddleware(
+		eofRingPrefix+strconv.Itoa(getRingNextIndex(config)),
 		connSettings,
 	)
 	if err != nil {
-		eofInput.Close()
-		return nil, err
+		return nil, fmt.Errorf("creating EOF output queue: %w", err)
 	}
 
-	handlerMessages := msgmonitor.NewMessageMonitor()
+	msgMonitor := msgmonitor.NewMessageMonitor()
 
-	agg := &AvgAggregator{
-		id:              config.Id,
-		inputQueue:      inputQueue,
-		outputQueues:    outputQueues,
-		outputQueueEof:  eofOutput,
-		handlerMessages: handlerMessages,
-		queryID:         config.QueryID,
-		acumuladores:    map[int]map[string]partial{},
+	a := &AvgAggregator{
+		id:           config.Id,
+		queryID:      config.QueryID,
+		inputQueue:   inputQueue,
+		outputQueues: outputQueues,
+		eofInput:     eofInput,
+		eofOutput:    eofOutput,
+		msgMonitor:   msgMonitor,
+		acumuladores: map[int]map[string]partial{},
 	}
 
-	agg.eofHandler = eofring.CreateEofRingAlgorithm(
+	a.eofHandler = eofring.CreateEofRingAlgorithm(
 		eofInput,
 		eofOutput,
 		config.AggregateAmount,
 		uint32(config.Id),
-		handlerMessages,
-		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
-			agg.lock.Lock()
-			byMethod := agg.acumuladores[clientID]
-			delete(agg.acumuladores, clientID)
-			agg.lock.Unlock()
-
-			for method, p := range byMethod {
-				if p.totalCount == 0 {
-					continue
-				}
-				avg := transfer.AvgByMethod{
-					Method: method,
-					Avg:    p.totalSum / float64(p.totalCount),
-				}
-				out, err := inner.SerializeData(inner.DataMsg[transfer.AvgByMethod]{
-					Payload:  avg,
-					ClientID: clientID,
-					QueryID:  agg.queryID,
-				})
-				if err != nil {
-					return err
-				}
-				slog.Info("Aggregate broadcasting avg", "client_id", clientID, "method", method, "avg", avg.Avg, "count", p.totalCount)
-				for _, q := range agg.outputQueues {
-					if err := q.Send(*out); err != nil {
-						return err
-					}
-				}
-			}
-
-			if !isCoordinator {
-				return nil
-			}
-			for _, q := range agg.outputQueues {
-				if err := q.Send(*msg); err != nil {
-					return err
-				}
-			}
-			return nil
-		},
+		msgMonitor,
+		a.onRingConverged,
 		config.QueryID,
 	)
 
-	return agg, nil
+	return a, nil
 }
 
 func (a *AvgAggregator) Run() {
+	defer a.close()
 	slog.Info("Starting avg-aggregator consumers", "aggregate_id", a.id)
 	go a.eofHandler.Run()
-	if err := a.inputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		a.handleMessage(msg, ack, nack)
+	if err := a.inputQueue.StartConsuming(func(msg middleware.Message, ack, _ func()) {
+		a.handleInput(msg, ack)
 	}); err != nil {
 		slog.Error("While consuming from input queue", "err", err)
 	}
 }
 
-func (a *AvgAggregator) handleMessage(msg middleware.Message, ack, nack func()) {
+func (a *AvgAggregator) HandleSignals() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	<-signals
+	slog.Info("SIGTERM signal received, stopping consumer")
+
+	a.inputQueue.StopConsuming()
+	a.eofInput.StopConsuming()
+}
+
+func (a *AvgAggregator) close() {
+	a.inputQueue.Close()
+	a.eofInput.Close()
+	a.eofOutput.Close()
+	for _, q := range a.outputQueues {
+		q.Close()
+	}
+}
+
+func (a *AvgAggregator) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
 
 	result, err := inner.DeserializeData[transfer.SumByMethod](&msg)
@@ -165,48 +181,94 @@ func (a *AvgAggregator) handleMessage(msg middleware.Message, ack, nack func()) 
 	}
 
 	if result.IsEOF() {
-		ringMsg := eofmessagetypes.EofRingMessage{
-			RealAmount:     result.EOF.TotalMessages,
-			ActualAmount:   a.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
-			ClientId:       result.ClientID,
-			CoordinatorId:  uint32(a.id),
-			FilteredAmount: a.handlerMessages.GetForwardedMessagesAmountByClientId(result.ClientID),
-		}
-		serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
-		if err != nil {
-			slog.Error("While serializing EOF ring message", "err", err)
-			return
-		}
-		if err := a.outputQueueEof.Send(*serialized); err != nil {
-			slog.Error("While sending EOF message to EOF ring", "err", err)
-		}
-		slog.Info("Aggregate fired ring", "aggregate_id", a.id, "client_id", result.ClientID, "real_amount", result.EOF.TotalMessages)
+		a.handleEOF(*result)
 		return
 	}
 
-	p := result.Payload
+	a.handleRecord(result.ClientID, result.Payload)
+}
+
+func (a *AvgAggregator) handleRecord(clientID int, p transfer.SumByMethod) {
 	method := p.Method
 
-	a.lock.Lock()
-	if a.acumuladores[result.ClientID] == nil {
-		a.acumuladores[result.ClientID] = map[string]partial{}
+	a.mu.Lock()
+	if a.acumuladores[clientID] == nil {
+		a.acumuladores[clientID] = map[string]partial{}
 	}
-	existing, ok := a.acumuladores[result.ClientID][method]
+	existing, ok := a.acumuladores[clientID][method]
 	if !ok {
-		a.acumuladores[result.ClientID][method] = partial{
+		a.acumuladores[clientID][method] = partial{
 			totalSum:   p.Sum,
 			totalCount: p.Amount,
 		}
-		a.handlerMessages.AddForwardedMessagesAmountByClientId(result.ClientID, 1)
+		a.msgMonitor.AddForwardedMessagesAmountByClientId(clientID, 1)
 	} else {
-		a.acumuladores[result.ClientID][method] = partial{
+		a.acumuladores[clientID][method] = partial{
 			totalSum:   existing.totalSum + p.Sum,
 			totalCount: existing.totalCount + p.Amount,
 		}
 	}
-	a.lock.Unlock()
-	a.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
+	a.mu.Unlock()
+	a.msgMonitor.AddProcessedMessagesAmountByClientId(clientID, 1)
 }
 
-func (a *AvgAggregator) HandleSignals() {
+func (a *AvgAggregator) handleEOF(data inner.DataMsg[transfer.SumByMethod]) {
+	ringMsg := eofmessagetypes.EofRingMessage{
+		RealAmount:     data.EOF.TotalMessages,
+		ActualAmount:   a.msgMonitor.GetProcessedMessagesAmountByClientId(data.ClientID),
+		ClientId:       data.ClientID,
+		CoordinatorId:  uint32(a.id),
+		FilteredAmount: a.msgMonitor.GetForwardedMessagesAmountByClientId(data.ClientID),
+	}
+	serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
+	if err != nil {
+		slog.Error("While serializing EOF ring message", "err", err)
+		return
+	}
+	if err := a.eofOutput.Send(*serialized); err != nil {
+		slog.Error("While sending EOF message to EOF ring", "err", err)
+		return
+	}
+	slog.Info("Aggregate fired ring", "aggregate_id", a.id, "client_id", data.ClientID, "real_amount", data.EOF.TotalMessages)
+}
+
+func (a *AvgAggregator) onRingConverged(clientID int, msg *middleware.Message, isCoordinator bool) error {
+	a.mu.Lock()
+	byMethod := a.acumuladores[clientID]
+	delete(a.acumuladores, clientID)
+	a.mu.Unlock()
+
+	for method, p := range byMethod {
+		if p.totalCount == 0 {
+			continue
+		}
+		avg := transfer.AvgByMethod{
+			Method: method,
+			Avg:    p.totalSum / float64(p.totalCount),
+		}
+		out, err := inner.SerializeData(inner.DataMsg[transfer.AvgByMethod]{
+			Payload:  avg,
+			ClientID: clientID,
+			QueryID:  a.queryID,
+		})
+		if err != nil {
+			return err
+		}
+		slog.Info("Aggregate broadcasting avg", "client_id", clientID, "method", method, "avg", avg.Avg, "count", p.totalCount)
+		for _, q := range a.outputQueues {
+			if err := q.Send(*out); err != nil {
+				return err
+			}
+		}
+	}
+
+	if !isCoordinator {
+		return nil
+	}
+	for _, q := range a.outputQueues {
+		if err := q.Send(*msg); err != nil {
+			return err
+		}
+	}
+	return nil
 }
