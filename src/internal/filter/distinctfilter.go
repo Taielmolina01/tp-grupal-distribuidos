@@ -77,7 +77,7 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 		distinctfilter.alreadySeen[deserializedMsg.ClientID] = map[S]bool{}
 	}
 	key := distinctfilter.keyFunc(deserializedMsg.Payload)
-	if _, ok :=  distinctfilter.alreadySeen[deserializedMsg.ClientID][key]; !ok {
+	if _, ok := distinctfilter.alreadySeen[deserializedMsg.ClientID][key]; !ok {
 		if err := distinctfilter.outputQueues[shard.CalculateIndexForShard(
 			deserializedMsg.ClientID,
 			distinctfilter.shardCriteria(deserializedMsg.Payload),

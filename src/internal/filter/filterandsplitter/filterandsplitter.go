@@ -262,5 +262,4 @@ func (f *FilterAndSplitter) handleEOF(data inner.DataMsg[transfer.TransferAfterC
 	if err := f.eofOutput.Send(*serializedEofRingMessage); err != nil {
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 	}
-	slog.Info("EOF message sent to EOF ring", "filter_id", f.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
 }

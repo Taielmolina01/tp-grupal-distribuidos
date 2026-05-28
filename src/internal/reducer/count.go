@@ -52,6 +52,7 @@ func newCountReducer(
 }
 
 func (count *CountReducer) Run() {
+	defer count.close()
 	if err := count.inputQueue.StartConsuming(count.handleMessage); err != nil {
 		slog.Error("while consuming from input queue", "err", err)
 	}
@@ -64,8 +65,6 @@ func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func(
 		slog.Error("while deserializing message", "err", err)
 		return
 	}
-
-	slog.Info("message received", "deserialized", deserialized)
 
 	if !deserialized.IsEOF() {
 		count.countByClient[deserialized.ClientID]++
@@ -116,13 +115,13 @@ func (count *CountReducer) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	count.close()
-}
-
-func (count *CountReducer) close() {
 	if err := count.inputQueue.StopConsuming(); err != nil {
 		slog.Error("while stopping consuming from input queue", "err", err)
 	}
+}
+
+func (count *CountReducer) close() {
+
 	if err := count.inputQueue.Close(); err != nil {
 		slog.Error("while closing input queue", "err", err)
 	}

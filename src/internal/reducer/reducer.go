@@ -145,7 +145,9 @@ func newReducer[T, O comparable](
 	return reducer, nil
 }
 
+
 func (reducer *Reducer[T, O]) Run() {
+	defer reducer.close()
 	go reducer.eofHandler.Run()
 	if err := reducer.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		reducer.handleMessage(msg, ack, nack)
@@ -168,7 +170,6 @@ func (reducer *Reducer[T, O]) handleMessage(msg middleware.Message, ack func(), 
 	if result.IsEOF() {
 		reducer.inputEofCount[result.ClientID]++
 		reducer.totalRealAmount[result.ClientID] = result.EOF.TotalMessages
-		// slog.Info("input EOF received", "client_id", result.ClientID, "count", reducer.inputEofCount[result.ClientID], "expected", reducer.inputEofsExpected)
 
 		eofRingMessage := eofmessagetypes.EofRingMessage{
 			RealAmount:     reducer.totalRealAmount[result.ClientID],
@@ -192,7 +193,6 @@ func (reducer *Reducer[T, O]) handleMessage(msg middleware.Message, ack func(), 
 		); err != nil {
 			slog.Error("While sending EOF message to EOF ring", "err", err)
 		}
-		// slog.Info("EOF message sent to EOF ring", "reducer_id", reducer.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
 	} else {
 		key := reducer.keyFunc(result.Payload)
 
@@ -211,22 +211,17 @@ func (reducer *Reducer[T, O]) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	if err := reducer.Close(); err != nil {
-		slog.Error("While closing reducer node", "err", err)
+	if err := reducer.inputExchange.StopConsuming(); err != nil {
+		slog.Error("while closing reducer", "err", err)
 	}
 }
 
-func (reducer *Reducer[T, O]) Close() error {
-	if err := reducer.inputExchange.StopConsuming(); err != nil {
-		return err
-	}
+
+func (reducer *Reducer[T, O]) close() error {
 	if err := reducer.inputExchange.Close(); err != nil {
 		return err
 	}
 	for _, outputQueue := range reducer.outputQueues {
-		if err := outputQueue.StopConsuming(); err != nil {
-			return err
-		}
 		if err := outputQueue.Close(); err != nil {
 			return err
 		}

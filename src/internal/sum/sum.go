@@ -227,7 +227,6 @@ func (s *SumByPaymentFormat) handleEOF(data inner.DataMsg[transfer.TransferForQ3
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 		return
 	}
-	slog.Info("Sum fired ring", "sum_id", s.id, "client_id", data.ClientID, "real_amount", data.EOF.TotalMessages)
 }
 
 func (s *SumByPaymentFormat) onRingConverged(clientID int, msg *middleware.Message, isCoordinator bool) error {
@@ -246,7 +245,6 @@ func (s *SumByPaymentFormat) onRingConverged(clientID int, msg *middleware.Messa
 			return err
 		}
 		idx := shard.CalculateIndexForShard(clientID, method, len(s.outputQueues))
-		slog.Info("Sum sending partial to aggregate", "client_id", clientID, "method", method, "sum", partial.Sum, "amount", partial.Amount, "shard", idx)
 		if err := s.outputQueues[idx].Send(*out); err != nil {
 			return err
 		}

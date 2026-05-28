@@ -29,14 +29,6 @@ func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 		Port:     config.MomPort,
 	}
 
-	slog.Info("Initializing fetcher",
-		"config.inputexchange",
-		config.InputExchange,
-		"config.InputQueue",
-		config.InputQueue,
-		"config.inputroutingkeys",
-		config.InputRoutingKeys,
-	)
 	inputQueue, err := middleware.CreateExchangeMiddleware(
 		config.InputExchange,
 		config.InputQueue,
@@ -72,6 +64,8 @@ func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 }
 
 func (fetcher *Fetcher) Run() {
+	defer fetcher.close()
+
 	if err := fetcher.inputQueue.StartConsuming(fetcher.consume); err != nil {
 		slog.Error("while starting consuming from input queue", "err", err)
 		return
@@ -166,14 +160,13 @@ func (fetcher *Fetcher) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	fetcher.close()
-}
 
-func (fetcher *Fetcher) close() {
 	if err := fetcher.inputQueue.StopConsuming(); err != nil {
 		slog.Error("while stopping consuming from input queue", "err", err)
 	}
+}
 
+func (fetcher *Fetcher) close() {
 	if err := fetcher.inputQueue.Close(); err != nil {
 		slog.Error("while closing input queue", "err", err)
 	}

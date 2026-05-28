@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"sync"
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/eofring"
@@ -16,6 +17,8 @@ const (
 	AMOUNT                  FilterType = "AMOUNT"
 	DATE_RANGE              FilterType = "DATE_RANGE"
 	DATE_RANGE_AND_PAYMENT  FilterType = "DATE_RANGE_AND_PAYMENT"
+	DATE_RANGE_AND_SPLITTER FilterType = "DATE_RANGE_AND_SPLITTER"
+	AVERAGE_FILTER          FilterType = "AVERAGE_FILTER"
 	COUNT_AND_FILTER        FilterType = "COUNT_AND_FILTER"
 	TRANSFER_DISTINCT       FilterType = "TRANSFER_DISTINCT"
 	BANK_DISTINCT           FilterType = "BANK_DISTINCT"
@@ -46,6 +49,7 @@ type FilterConfig struct {
 	OutputQueues          []string
 	QueryId               uint8
 	PaymentFormats        []string
+	Quote                 string
 }
 
 type Filter[T comparable, O comparable] struct {
@@ -99,4 +103,9 @@ type ConvertedAmountFilter[T, S comparable] struct {
 	eofOutputQueue     middleware.Middleware
 	handlerMessages    msgmonitor.MessageMonitor
 	id                 uint32
+	toIgnoreFunc       func(T) bool
+	quote              string
+	amountThreshold    float64
+	fileMutex          sync.Mutex
+	mapMutex           sync.Mutex
 }

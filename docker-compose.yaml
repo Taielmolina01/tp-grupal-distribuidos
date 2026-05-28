@@ -280,7 +280,7 @@ services:
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=results_queue
       - LEFT_EOFS_EXPECTED=2
-      - RIGHT_EOFS_EXPECTED=1
+      - RIGHT_EOFS_EXPECTED=2
       - JOIN_AMOUNT=2
       - ID=0
     logging:
@@ -307,7 +307,7 @@ services:
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=results_queue
       - LEFT_EOFS_EXPECTED=2
-      - RIGHT_EOFS_EXPECTED=1
+      - RIGHT_EOFS_EXPECTED=2
       - JOIN_AMOUNT=2
       - ID=1
     logging:
@@ -513,7 +513,7 @@ services:
   filter_range_q3_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/daterangesplitter/Dockerfile
     container_name: filter_range_q3_0
     depends_on:
       rabbitmq:
@@ -527,13 +527,12 @@ services:
       - INPUT_ROUTING_KEYS=transfers_q1234
       - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
       - FILTER_AMOUNT=2
-      - FILTER_TYPE=DATE_RANGE_AND_SPLITTER
       - QUERY_ID=3
 
   filter_range_q3_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/daterangesplitter/Dockerfile
     container_name: filter_range_q3_1
     depends_on:
       rabbitmq:
@@ -547,7 +546,6 @@ services:
       - INPUT_ROUTING_KEYS=transfers_q1234
       - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
       - FILTER_AMOUNT=2
-      - FILTER_TYPE=DATE_RANGE_AND_SPLITTER
       - QUERY_ID=3
 
   sum_q3_0:
@@ -621,7 +619,7 @@ services:
   average_filter_q3_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/averagefilter/Dockerfile
     container_name: average_filter_q3_0
     depends_on:
       rabbitmq:
@@ -630,7 +628,6 @@ services:
       - ID=0
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - FILTER_TYPE=AVERAGE_FILTER
       - FILTER_AMOUNT=2
       - INPUT_QUEUE=transfers_filter_period_q
       - AVG_INPUT_QUEUE=filter2_avg_q3_0
@@ -641,7 +638,7 @@ services:
   average_filter_q3_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/averagefilter/Dockerfile
     container_name: average_filter_q3_1
     depends_on:
       rabbitmq:
@@ -650,7 +647,6 @@ services:
       - ID=1
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - FILTER_TYPE=AVERAGE_FILTER
       - FILTER_AMOUNT=2
       - INPUT_QUEUE=transfers_filter_period_q
       - AVG_INPUT_QUEUE=filter2_avg_q3_1
@@ -746,6 +742,7 @@ services:
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
       - QUERY_ID=5
+      - QUOTE=US Dollar
 
   filter_amt_q5_1:
     build:
@@ -768,6 +765,7 @@ services:
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
       - QUERY_ID=5
+      - QUOTE=US Dollar
 
   count_reducer_q5:
     build:

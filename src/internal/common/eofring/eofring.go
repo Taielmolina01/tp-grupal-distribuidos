@@ -49,7 +49,6 @@ func CreateEofRingAlgorithm(
 }
 
 func (eofring *eofRingAlgorithmImpl) Run() {
-	slog.Info("Starting EOF ring consumer", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id)
 	if err := eofring.inputQueue.StartConsuming(eofring.handleEofMessageFromQueue); err != nil {
 		slog.Error("While consuming from EOF ring queue", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "err", err)
 	}
@@ -80,7 +79,6 @@ func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Me
 			slog.Error("Error handling EOF commit", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingCommitMessage.ClientID, "err", err)
 			nack()
 		} else {
-			slog.Info("EOF commit sent to aggregation", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingCommitMessage.ClientID)
 			ack()
 		}
 		return
@@ -100,7 +98,6 @@ func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Me
 		// Si soy el líder y la cantidad de todos los mensajes enviados por el cliente (contados por el gateway) y la suma de lo que cada uno
 		// de los nodos me dice que proceso, entonces envio el commit otra vez en forma de anillo para que cada uno le pase al exchange de los
 		// aggregations sus mensajes.
-		slog.Info("EOF commit sent to replicas", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId)
 		eofring.sendEofCommitToReplicas(eofRingMessage, ack, nack)
 	} else {
 		value := eofring.messagesMonitor.GetProcessedMessagesAmountByClientId(eofRingMessage.ClientId)
@@ -109,20 +106,12 @@ func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Me
 			// de los nodos me dice que proceso no coinciden, simplemente inicio el anillo de nuevo. Esto porque estoy asumiendo que lo único que paso
 			// es que un nodo no había terminado de procesar los mensajes de un cliente en particular. Como asumimos que no hay caida, eventualmente va a converger
 			// al primer caso.
-			if !hola {
-				slog.Info("Restarting EOF ring because not all messages were processed", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
-				hola = true
-			}
 			eofRingMessage.ActualAmount = value
 			eofRingMessage.FilteredAmount = eofring.messagesMonitor.GetForwardedMessagesAmountByClientId(eofRingMessage.ClientId)
 		} else {
 			// Si no soy el líder simplemente sumo los mensajes que yo leí del cliente X y lo sumo al mensaje del ring y lo forwardeo.
 			eofRingMessage.ActualAmount += value
 			eofRingMessage.FilteredAmount += eofring.messagesMonitor.GetForwardedMessagesAmountByClientId(eofRingMessage.ClientId)
-			if !hola2 {
-				slog.Info("Forwarding EOF ring message with updated counts", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "real_amount", eofRingMessage.RealAmount, "actual_amount", eofRingMessage.ActualAmount)
-				hola2 = true
-			}
 		}
 
 		eofring.sendEofMessageToQueue(eofRingMessage, ack)
@@ -146,7 +135,6 @@ func (eofring *eofRingAlgorithmImpl) sendEofCommitToReplicas(eofRingMessage *eof
 		nack()
 		return
 	}
-	slog.Info("EOF commit sent to ring", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId)
 	ack()
 }
 
