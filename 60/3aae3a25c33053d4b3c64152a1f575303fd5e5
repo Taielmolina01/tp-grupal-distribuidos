@@ -1,0 +1,14 @@
+src/internal/joinaccounts/joinaccounts.go
+  h_3c9b41718876fe 133,135-137,139,142-143,147,163-164,166,170,173,175,177,180-181,185,201-202,204,206,208,211-228,231,234,237-238,254-258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "603aae3a25c33053d4b3c64152a1f575303fd5e5",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
