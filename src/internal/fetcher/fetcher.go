@@ -75,7 +75,7 @@ func (fetcher *Fetcher) Run() {
 func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[transfer.Transfer](&msg)
+	result, err := inner.DeserializeData[transfer.TransferForQ5](&msg)
 	if err != nil {
 		slog.Error("while deserializing transfer", "err", err)
 		return
@@ -124,7 +124,7 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 
 }
 
-func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.Transfer) error {
+func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.TransferForQ5) error {
 	response, err := http.Get(fmt.Sprintf(FULL_ENDPOINT, fetcher.quote, transfer.Timestamp.Format("2006-01-02")))
 	if err != nil {
 		return err

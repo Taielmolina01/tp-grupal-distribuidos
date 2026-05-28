@@ -60,7 +60,7 @@ func (count *CountReducer) Run() {
 
 func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func()) {
 	defer ack()
-	deserialized, err := inner.DeserializeData[transfer.Transfer](&msg) // no está el generic aca
+	deserialized, err := inner.DeserializeData[transfer.FinalTransferForQ5](&msg)
 	if err != nil {
 		slog.Error("while deserializing message", "err", err)
 		return
