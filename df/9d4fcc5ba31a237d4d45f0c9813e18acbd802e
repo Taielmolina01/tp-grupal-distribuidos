@@ -1,0 +1,14 @@
+scripts/compose-gen/generator.go
+  h_3c9b41718876fe 327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "df9d4fcc5ba31a237d4d45f0c9813e18acbd802e",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
