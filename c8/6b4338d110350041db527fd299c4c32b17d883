@@ -1,0 +1,32 @@
+docker-compose.yaml
+  h_3c9b41718876fe 51-52
+  s_b646c3ba0e96bd::t_63dff0db61e389 54
+src/internal/common/messageprotocol/external/batch_builder.go
+  s_b646c3ba0e96bd::t_8380628075cb6e 7-8,13,16-19,24-25,28-29,33,36-42,48,56,62-63,71,73-75,78-80,85,89,93,97,101,105-106,109-110
+src/internal/gateway/gateway.go
+  s_b646c3ba0e96bd::t_bc34c89a32ef5b 509-510
+  s_b646c3ba0e96bd::t_24becbaeb62bab 220-221,224,232,252,260
+  s_b646c3ba0e96bd::t_9193b534636cad 4,7
+  s_b646c3ba0e96bd::t_84aad663e7eec1 482-483
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c86b4338d110350041db527fd299c4c32b17d883",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_b646c3ba0e96bd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d18f504d-2325-4efd-b5d7-4a2c577289a4",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
