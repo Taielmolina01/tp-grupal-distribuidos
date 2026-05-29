@@ -1,0 +1,59 @@
+src/internal/filter/types.go
+  s_537e6b031f3e63::t_d8a381bd8f6f5f 67-68
+  s_537e6b031f3e63::t_8f133bc3f1cdbc 8
+  s_537e6b031f3e63::t_ae17507bda7523 56
+src/internal/common/messageprotocol/inner/records/records.go
+  s_537e6b031f3e63::t_d8430955b7a3b8 121-135
+  s_537e6b031f3e63::t_a93412d822b853 10
+  s_537e6b031f3e63::t_dfea72ed02951b 29-120
+  s_537e6b031f3e63::t_d2c9ba1044693a 6
+src/internal/filter/constructors.go
+  s_537e6b031f3e63::t_092d39d99828cd 61-62
+  s_537e6b031f3e63::t_0bbe1a98314dbd 47-48
+  s_537e6b031f3e63::t_a8ed49803ffe68 73-74
+  s_537e6b031f3e63::t_8a5f01849043b3 10
+  s_537e6b031f3e63::t_15f00863b47368 27-28
+src/internal/common/messageprotocol/external/serializer/serializer.go
+  s_537e6b031f3e63::t_205c844bad0a31 42-53
+src/internal/common/messageprotocol/inner/batch/batch.go
+  s_537e6b031f3e63::t_2a8390e5f64bfa 22,27
+  s_537e6b031f3e63::t_c684034ad73fef 39,45,48
+src/internal/common/messageprotocol/inner/channels/splittransfer/splittransfer.go
+  s_537e6b031f3e63::t_57e2ac599dd754 20-24,27,35
+src/internal/common/messageprotocol/inner/channels/daterange/daterange.go
+  s_537e6b031f3e63::t_912042126652c7 19-23,26,34
+src/internal/common/messageprotocol/inner/wire/wire.go
+  s_537e6b031f3e63::t_6d592d864fabea 35
+  s_537e6b031f3e63::t_fe1694af246ce1 17-22
+  s_537e6b031f3e63::t_8812538d23136c 6
+  s_537e6b031f3e63::t_f5440ff5d38154 120,122-124,126-127
+  s_537e6b031f3e63::t_f156e599d40a94 121,125
+src/internal/filter/filter.go
+  s_537e6b031f3e63::t_e2743ecec14461 13-14
+  s_537e6b031f3e63::t_c175d618121584 22
+  s_537e6b031f3e63::t_8f2360c820467f 26-27
+  h_3c9b41718876fe 139,141,145-146,150-155,163,177
+  s_537e6b031f3e63::t_6f89c6038cbd8b 120-121
+  s_537e6b031f3e63::t_3d6968045a799a 147-149,158-162,164-176,178-184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ce46ea9ce71bf88e62191b784144458702e08ab5",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_537e6b031f3e63": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d9487c34-8f16-4c6f-8267-2ec038ecd516",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
