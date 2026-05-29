@@ -1,0 +1,39 @@
+src/internal/reducer/count.go
+  s_537e6b031f3e63::t_7bd53e866d2d44 8-9
+  s_537e6b031f3e63::t_69b9cea575a9c4 63,65,69-72,74-76,78-86,88-90,93
+src/internal/filter/convertedamountfilter.go
+  s_537e6b031f3e63::t_945b0d2d45cba5 62-64
+  s_537e6b031f3e63::t_072728d22bdc12 259,261,265-266,268-270,272,279,285-288,290-291,293,297,303-305,308
+  s_537e6b031f3e63::t_7407b3e1d5cebe 16-17
+  s_537e6b031f3e63::t_dba44840295817 231,233,236-239,244-252
+  s_537e6b031f3e63::t_34f18b7037d036 136,162-208
+src/internal/filter/types.go
+  s_537e6b031f3e63::t_c324dad3747b64 118-123
+src/internal/fetcher/fetcher.go
+  s_537e6b031f3e63::t_ae10dace7c1797 79,81,85-86,88,95-101,103,105,108,112-120,123
+  s_537e6b031f3e63::t_cfd58848419f3f 12-13
+src/internal/common/messageprotocol/inner/records/records.go
+  s_537e6b031f3e63::t_02a5e3f73659ab 5
+  s_537e6b031f3e63::t_3fc349137382dd 270-295
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3fb99d902561f1f069d77a32b5f27823e7d4c88b",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_537e6b031f3e63": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d9487c34-8f16-4c6f-8267-2ec038ecd516",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
