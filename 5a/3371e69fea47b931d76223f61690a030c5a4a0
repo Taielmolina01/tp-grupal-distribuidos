@@ -1,0 +1,63 @@
+src/internal/common/messageprotocol/inner/records/records.go
+  s_537e6b031f3e63::t_f8ba4d1cf4db78 4
+  s_537e6b031f3e63::t_ed4c718cbecfe9 155-169,171-250
+src/internal/daterangesplitter/daterangesplitter.go
+  s_537e6b031f3e63::t_fe68424e2ff1d5 272
+  s_537e6b031f3e63::t_aba39c4f995a8c 174
+  s_537e6b031f3e63::t_3b4e915086b17e 267
+src/internal/filter/constructors.go
+  s_537e6b031f3e63::t_e1bff40e46d4f4 96
+src/internal/common/messageprotocol/inner/channels/daterange/daterange.go
+  s_537e6b031f3e63::t_e8b32fbecd9ac2 25-26,29-30
+src/internal/filter/filter.go
+  s_537e6b031f3e63::t_b131e4ae1aefc5 163
+  s_537e6b031f3e63::t_c51aab0bf0f000 109
+src/internal/filter/types.go
+  s_537e6b031f3e63::t_19250b6712c5df 87-88
+src/internal/reducer/reducer.go
+  s_537e6b031f3e63::t_1b769ba34d562b 126
+  s_537e6b031f3e63::t_3494e2330344ff 132
+src/internal/filter/distinctfilter.go
+  s_537e6b031f3e63::t_d2fb6f5c14486a 6-7,20
+  s_537e6b031f3e63::t_44895136997909 47-48
+  s_537e6b031f3e63::t_bc23cbb789d39a 64,66,70-71,73,80,82-83,85-97,99-106
+src/internal/gateway/gateway.go
+  s_537e6b031f3e63::t_1dada8bc8b8e43 18-20
+  s_537e6b031f3e63::t_0b860630ad7344 15
+  s_537e6b031f3e63::t_672f6a91ba5a9e 465-466,469-470,484-485,491-496,510-513,522,528
+  s_537e6b031f3e63::t_0c5b4f8bd04bb3 289,291,296,298,303,305-306,310,321-322,327,332-334,341-342,344,346,348,350,352,354,358-380
+src/internal/common/messageprotocol/inner/channels/q3filter/q3filter.go
+  s_537e6b031f3e63::t_90a6c9d4e3b9f8 18-19,22-23
+src/internal/common/messageprotocol/inner/channels/splittransfer/splittransfer.go
+  s_537e6b031f3e63::t_d650e5bdf1fc35 26-27,30-31
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 41,59,236
+  s_537e6b031f3e63::t_1e0437d9f9ea7d 136
+src/cmd/filterandsplitter/config.go
+  h_3c9b41718876fe 74
+src/internal/common/messageprotocol/inner/envelope/envelope.go
+  s_537e6b031f3e63::t_424c50170a2adf 7,13,20
+src/internal/common/messageprotocol/inner/batch/batch.go
+  s_537e6b031f3e63::t_267cd8ca01ad12 17,23-30,32,40,42,47,53,57,59,61-87,89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5a3371e69fea47b931d76223f61690a030c5a4a0",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_537e6b031f3e63": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d9487c34-8f16-4c6f-8267-2ec038ecd516",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
