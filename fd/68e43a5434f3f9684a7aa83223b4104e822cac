@@ -1,0 +1,55 @@
+src/internal/reducer/reducer.go
+  s_537e6b031f3e63::t_f82258a8252668 195
+src/cmd/averagefilter/config.go
+  s_537e6b031f3e63::t_3488197172c71c 9,62
+src/internal/common/eofring/eofring.go
+  s_537e6b031f3e63::t_96fbc8f1e487bb 185-186
+  s_537e6b031f3e63::t_df35916432610d 169,175
+  s_537e6b031f3e63::t_ca13f224d96224 117
+  s_537e6b031f3e63::t_d691cc97dbc191 8,13-60
+  s_537e6b031f3e63::t_daecf144a99202 204
+src/internal/gateway/gateway.go
+  s_537e6b031f3e63::t_5a0d984c4cd1e7 22
+  s_537e6b031f3e63::t_e832a24907b731 343,345,347,349,351
+src/internal/filter/filter.go
+  s_537e6b031f3e63::t_4e86876332fde7 177
+src/internal/common/queryresult/queryresult.go
+  s_537e6b031f3e63::t_31afdb3666561b 3-9
+src/internal/aggregate/aggregate.go
+  s_537e6b031f3e63::t_2a01bdce8c2e83 226
+src/internal/filter/convertedamountfilter.go
+  s_537e6b031f3e63::t_190c318d158d2d 273
+src/internal/sum/sum.go
+  s_537e6b031f3e63::t_53405f3f05e657 224
+src/internal/daterangesplitter/daterangesplitter.go
+  s_537e6b031f3e63::t_be1994506a924e 286
+src/internal/averagefilter/averagefilter.go
+  s_537e6b031f3e63::t_24eb1ae1b0c5f6 378
+src/cmd/daterangesplitter/config.go
+  s_537e6b031f3e63::t_3488197172c71c 10,59
+src/internal/join/constructors.go
+  s_537e6b031f3e63::t_e832a24907b731 13
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_537e6b031f3e63::t_a8b2963c7757e0 250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "fd68e43a5434f3f9684a7aa83223b4104e822cac",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_537e6b031f3e63": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d9487c34-8f16-4c6f-8267-2ec038ecd516",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
