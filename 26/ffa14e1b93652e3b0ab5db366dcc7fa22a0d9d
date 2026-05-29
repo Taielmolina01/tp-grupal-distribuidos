@@ -1,0 +1,64 @@
+src/cmd/prefilterq4/config.go
+  s_0a0a68369f0082::t_6ab57d513c0a38 1-56
+src/internal/gateway/gateway.go
+  s_10a4aed97b79b1::t_97f8b7ad2920f1 451,455
+  s_10a4aed97b79b1::t_27fd13d8a17a31 516-517
+  s_10a4aed97b79b1::t_5d1c23c3f8e503 518-520
+scripts/compose-gen/config.go
+  s_0a0a68369f0082::t_ed54969a29d23b 27
+src/cmd/prefilterq4/main.go
+  s_0a0a68369f0082::t_0ef1abef62c679 1-30
+src/internal/common/messageprotocol/inner/channels/qualifiedaccount/qualifiedaccount.go
+  s_0a0a68369f0082::t_920dd3c3b6655c 1-49
+src/internal/joinaccounts/joinaccounts.go
+  s_0a0a68369f0082::t_09eb0374e9eeca 9,11,14,30-34,40,43-46,54-58,60,69-71,79-81,96-101,108-115,121,130-137,144,150,162-164,166,171,175-193,195,197-201,203-205,209,220,223,225,228,239,242,244-252,254-263,265-266,268-279,281-283,285-293,296-300,302-307
+  h_3c9b41718876fe 38-39,41-42,194,196,222,241,280,284,331-334
+src/cmd/joinaccounts/config.go
+  s_0a0a68369f0082::t_456a6beb2ae8b6 47-56,64-65
+src/internal/acumaccounts/acumaccounts.go
+  h_3c9b41718876fe 36,153,155,159,161,199
+src/cmd/prefilterq4/Dockerfile
+  s_0a0a68369f0082::t_0b2a9e5fc12164 1-15
+scripts/compose-gen/generator.go
+  s_0a0a68369f0082::t_bcc0905d359a56 336-356,372-373
+  s_0a0a68369f0082::t_205b03d23f1df5 28
+scripts/compose-gen/compose-config.yaml
+  s_0a0a68369f0082::t_460fd0192f33fa 16
+src/internal/prefilterq4/prefilterq4.go
+  s_0a0a68369f0082::t_834001d900aad7 15,33,133,137-149,151-153,156,158-160,162,164-197,199-201
+  h_3c9b41718876fe 34-35,39,150,154-155,157,161,163,198
+  s_0a0a68369f0082::t_b6f8d45c3a748e 1-14,16-32,36-38,40-132,134-136,202
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  h_3c9b41718876fe 50,184
+docker-compose.yaml
+  s_0a0a68369f0082::t_91eb141b5f34fc 374-417,433-434,457-458
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "26ffa14e1b93652e3b0ab5db366dcc7fa22a0d9d",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_0a0a68369f0082": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7762e0e-b437-4c62-9607-f9571c179dfe",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    },
+    "s_10a4aed97b79b1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "539feb60-f857-44dc-9167-ee00b165eebf",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
