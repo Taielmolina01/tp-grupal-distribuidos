@@ -1,0 +1,20 @@
+src/internal/filter/convertedamountfilter.go
+  s_537e6b031f3e63::t_462231be44bff9 459
+  s_537e6b031f3e63::t_8cda7eba7fb52a 354
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e41bb4c73a52e36f343aa1acb26fa67505361a7e",
+  "prompts": {},
+  "sessions": {
+    "s_537e6b031f3e63": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d9487c34-8f16-4c6f-8267-2ec038ecd516",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
