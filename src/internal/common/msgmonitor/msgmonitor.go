@@ -13,20 +13,17 @@ type MessageMonitor interface {
 	Close()
 }
 
-type proccesedAndFiltered struct {
-	processedMessages uint32
-	forwardedMessages uint32
-}
-
 type messageMonitorImpl struct {
-	messagesByClient       map[int]proccesedAndFiltered
+	processedByClient      map[int]uint32
+	forwardedByClient      map[int]uint32
 	processedMessagesMutex sync.Mutex
 	forwardedMessagesMutex sync.Mutex
 }
 
 func NewMessageMonitor() MessageMonitor {
 	return &messageMonitorImpl{
-		messagesByClient:       map[int]proccesedAndFiltered{},
+		processedByClient:      map[int]uint32{},
+		forwardedByClient:      map[int]uint32{},
 		processedMessagesMutex: sync.Mutex{},
 		forwardedMessagesMutex: sync.Mutex{},
 	}
@@ -36,7 +33,7 @@ func (monitor *messageMonitorImpl) GetProcessedMessagesAmountByClientId(clientID
 	monitor.processedMessagesMutex.Lock()
 	defer monitor.processedMessagesMutex.Unlock()
 
-	amount := monitor.messagesByClient[clientID].processedMessages
+	amount := monitor.processedByClient[clientID]
 	return amount
 }
 
@@ -44,16 +41,16 @@ func (monitor *messageMonitorImpl) AddProcessedMessagesAmountByClientId(clientID
 	monitor.processedMessagesMutex.Lock()
 	defer monitor.processedMessagesMutex.Unlock()
 
-	actual := monitor.messagesByClient[clientID]
-	actual.processedMessages += amount
-	monitor.messagesByClient[clientID] = actual
+	actual := monitor.processedByClient[clientID]
+	actual += amount
+	monitor.processedByClient[clientID] = actual
 }
 
 func (monitor *messageMonitorImpl) GetForwardedMessagesAmountByClientId(clientID int) uint32 {
 	monitor.forwardedMessagesMutex.Lock()
 	defer monitor.forwardedMessagesMutex.Unlock()
 
-	amount := monitor.messagesByClient[clientID].forwardedMessages
+	amount := monitor.forwardedByClient[clientID]
 	return amount
 }
 
@@ -61,20 +58,20 @@ func (monitor *messageMonitorImpl) AddForwardedMessagesAmountByClientId(clientID
 	monitor.forwardedMessagesMutex.Lock()
 	defer monitor.forwardedMessagesMutex.Unlock()
 
-	actual := monitor.messagesByClient[clientID]
-	actual.forwardedMessages += amount
-	monitor.messagesByClient[clientID] = actual
+	actual := monitor.forwardedByClient[clientID]
+	actual += amount
+	monitor.forwardedByClient[clientID] = actual
 }
 
 func (monitor *messageMonitorImpl) RemoveClient(clientID int) {
 	monitor.processedMessagesMutex.Lock()
 	defer monitor.processedMessagesMutex.Unlock()
-	delete(monitor.messagesByClient, clientID)
+	delete(monitor.processedByClient, clientID)
 }
 
 func (monitor *messageMonitorImpl) Close() {
 	monitor.processedMessagesMutex.Lock()
 	defer monitor.processedMessagesMutex.Unlock()
 
-	clear(monitor.messagesByClient)
+	clear(monitor.processedByClient)
 }
