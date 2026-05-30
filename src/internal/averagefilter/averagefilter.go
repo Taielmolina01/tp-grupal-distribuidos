@@ -72,6 +72,7 @@ type clientState struct {
 	transfersEofPending bool
 	transfersEofRealAmt uint32
 	pending             []queryresult.Query3Result
+	bufferFiles         map[string]*os.File
 }
 
 func getRingNextIndex(config AverageFilterConfig) int {
@@ -226,7 +227,7 @@ func (af *AverageFilter) close() {
 func (af *AverageFilter) getOrInitState(clientID int) *clientState {
 	s, ok := af.state[clientID]
 	if !ok {
-		s = &clientState{avgs: map[string]float64{}}
+		s = &clientState{avgs: map[string]float64{}, bufferFiles: map[string]*os.File{}}
 		af.state[clientID] = s
 	}
 	return s
@@ -434,29 +435,36 @@ func (af *AverageFilter) bufferFileName(clientID int, method string) string {
 }
 
 func (af *AverageFilter) saveTransferToFile(clientID int, t transfer.TransferForQ3Filter) {
-	filename := af.bufferFileName(clientID, t.PaymentFormat)
-	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		slog.Error("While opening buffer file", "filter_id", af.id, "err", err)
-		return
+	state := af.state[clientID]
+	file, ok := state.bufferFiles[t.PaymentFormat]
+	if !ok {
+		filename := af.bufferFileName(clientID, t.PaymentFormat)
+		f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			slog.Error("While opening buffer file", "filter_id", af.id, "err", err)
+			return
+		}
+		state.bufferFiles[t.PaymentFormat] = f
+		file = f
 	}
-	defer file.Close()
 
-	writer := bufio.NewWriter(file)
 	line := fmt.Sprintf("%s,%s,%s,%s\n",
 		t.PaymentFormat, t.FromBank, t.FromBankAccount,
 		strconv.FormatFloat(t.AmountPaid, 'f', -1, 64),
 	)
-	if _, err := writer.WriteString(line); err != nil {
+	if _, err := file.WriteString(line); err != nil {
 		slog.Error("While writing transfer to file", "err", err)
-		return
-	}
-	if err := writer.Flush(); err != nil {
-		slog.Error("While flushing buffer file", "err", err)
 	}
 }
 
 func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *clientState) {
+	if wf, ok := state.bufferFiles[method]; ok {
+		if err := wf.Close(); err != nil {
+			slog.Error("While closing buffer file before drain", "filter_id", af.id, "err", err)
+		}
+		delete(state.bufferFiles, method)
+	}
+
 	filename := af.bufferFileName(clientID, method)
 	file, err := os.Open(filename)
 	if errors.Is(err, os.ErrNotExist) {
@@ -498,6 +506,15 @@ func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *
 }
 
 func (af *AverageFilter) deleteRemainingFiles(clientID int) {
+	if state, ok := af.state[clientID]; ok {
+		for method, f := range state.bufferFiles {
+			if err := f.Close(); err != nil {
+				slog.Error("While closing buffer file", "filter_id", af.id, "method", method, "err", err)
+			}
+			delete(state.bufferFiles, method)
+		}
+	}
+
 	pattern := fmt.Sprintf("avg_filter_%d_client_%d_*.csv", af.id, clientID)
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
