@@ -2,7 +2,6 @@ package internal
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"slices"
 	"sort"
@@ -13,7 +12,7 @@ const (
 	_USD_CURRENCY                   = "US Dollar"
 	_QUERY1_AMOUNT_THRESHOLD        = 50.0
 	_QUERY3_AVG_FRACTION            = 0.01
-	_QUERY4_MIN_SCATTER             = 3
+	_QUERY4_MIN_SCATTER             = 5
 	_QUERY5_AMOUNT_THRESHOLD        = 1.0
 	_QUERY3_FIRST_RANGE_START_DATE  = "2022/09/01"
 	_QUERY3_FIRST_RANGE_END_DATE    = "2022/09/06"
@@ -207,30 +206,12 @@ func getQuery4Result(inputDir string, n int, outPath string) error {
 		}
 	}
 
-	maxMids := 0
-	var maxPair pair
-	for p, mids := range chainMiddles {
-		if len(mids) > maxMids {
-			maxMids = len(mids)
-			maxPair = p
-		}
-	}
-	log.Printf("[Q4] máximo intermediarias en un par: %d, A=%v C=%v", maxMids, maxPair.S, maxPair.D)
-	if maxMids > 0 {
-		log.Printf("[Q4] Bi del par máximo:")
-		for bi := range chainMiddles[maxPair] {
-			log.Printf("[Q4]   %v", bi)
-		}
-	}
-
 	for p, mids := range chainMiddles {
 		if len(mids) >= _QUERY4_MIN_SCATTER {
 			unique[p.S] = true
 			unique[p.D] = true
 		}
 	}
-
-	log.Printf("[Q4] Cuentas únicas en resultado: %d", len(unique))
 
 	accs := make([]BankAcc, 0, len(unique))
 	for a := range unique {
