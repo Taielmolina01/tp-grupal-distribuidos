@@ -54,6 +54,16 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		return joinaccounts.JoinAccountsConfig{}, errors.New("PREFILTER_AMOUNT environment variable is required and must be a number")
 	}
 
+	maxBatchSize, err := strconv.Atoi(os.Getenv("MAX_BATCH_SIZE"))
+	if err != nil {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("MAX_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	maxBatchBytes, err := strconv.Atoi(os.Getenv("MAX_BATCH_BYTES"))
+	if err != nil {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("MAX_BATCH_BYTES environment variable is required and must be a number")
+	}
+
 	return joinaccounts.JoinAccountsConfig{
 		Id:                     id,
 		OutputMiddlewareAmount: outputAmount,
@@ -64,5 +74,7 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		QualifiedInputExchange: qualifiedInputExchange,
 		PreFilterAmount:        preFilterAmount,
 		QueryID:                queryID,
+		MaxBatchSize:           maxBatchSize,
+		MaxBatchBytes:          maxBatchBytes,
 	}, nil
 }

@@ -28,6 +28,10 @@ func Read(body []byte) (Msg, error) {
 	return batch.Read(body, codec)
 }
 
+func NewBatchBuilder(maxCount, maxBytes int) *batch.Builder[account.AccountChain] {
+	return batch.NewBuilder(maxCount, maxBytes, codec)
+}
+
 func marshalRecord(w *wire.Writer, c *account.AccountChain) {
 	records.MarshalAccountIdentifier(w, &c.Left)
 	records.MarshalAccountIdentifier(w, &c.Middle)

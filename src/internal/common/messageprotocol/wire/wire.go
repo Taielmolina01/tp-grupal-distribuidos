@@ -35,7 +35,10 @@ func (w *Writer) String(v string)   { w.buf = byteconv.AppendString(w.buf, v) }
 func (w *Writer) Bool(v bool)       { w.buf = byteconv.AppendBool(w.buf, v) }
 func (w *Writer) Time(t time.Time)  { w.buf = byteconv.AppendInt64(w.buf, t.Unix()) }
 
-func (w *Writer) Bytes() []byte { return w.buf }
+func (w *Writer) Bytes() []byte    { return w.buf }
+func (w *Writer) Len() int         { return len(w.buf) }
+func (w *Writer) Truncate(n int)   { w.buf = w.buf[:n] }
+func (w *Writer) Reset()           { w.buf = w.buf[:0] }
 
 type Reader struct {
 	data []byte

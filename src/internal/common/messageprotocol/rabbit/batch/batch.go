@@ -12,6 +12,43 @@ const (
 	typeEOF
 )
 
+type Builder[T any] struct {
+	w        *wire.Writer
+	count    int
+	maxCount int
+	maxBytes int
+	codec    wire.Codec[T]
+}
+
+func NewBuilder[T any](maxCount, maxBytes int, codec wire.Codec[T]) *Builder[T] {
+	return &Builder[T]{
+		w:        wire.NewWriter(),
+		maxCount: maxCount,
+		maxBytes: maxBytes,
+		codec:    codec,
+	}
+}
+
+func (b *Builder[T]) TryAdd(record *T) bool {
+	start := b.w.Len()
+	b.codec.Marshal(b.w, record)
+	if b.count > 0 && (b.count >= b.maxCount || b.w.Len() > b.maxBytes) {
+		b.w.Truncate(start)
+		return false
+	}
+	b.count++
+	return true
+}
+
+func (b *Builder[T]) IsEmpty() bool { return b.count == 0 }
+
+func (b *Builder[T]) Flush(clientID int, queryID uint8) []byte {
+	msg := WriteRaw(clientID, queryID, uint16(b.count), b.w.Bytes())
+	b.w.Reset()
+	b.count = 0
+	return msg
+}
+
 type Msg[T any] struct {
 	ClientID int
 	QueryID  uint8
