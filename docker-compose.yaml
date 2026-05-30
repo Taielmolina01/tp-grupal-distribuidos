@@ -28,9 +28,9 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ACCOUNT_QUEUES=accounts_0,accounts_1
+      - ACCOUNT_QUEUES=Q2_accounts_0,Q2_accounts_1
       - TRANSFERS_EXCHANGE=transfers_exchange
-      - TRANSFERS_ROUTING_KEYS=TRANSFERS_Q5_KEY,TRANSFERS_Q1234_KEY
+      - TRANSFERS_ROUTING_KEYS=Q5_TRANSFERS_KEY,Q1234_TRANSFERS_KEY
       - RESULTS_QUEUE=results_queue
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
@@ -48,10 +48,10 @@ services:
     environment:
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
-      - INPUT_FILE_TRANS=/input/transactions_0.csv
+      - INPUT_FILE_ACCOUNTS=/input/HI-Large_accounts.csv
+      - INPUT_FILE_TRANS=/input/HI-Large_Trans.csv
       - OUTPUT_FILE_PREFIX=/output/output_0
-      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_SIZE=5000
     volumes:
       - ./input:/input
       - ./output:/output
@@ -59,11 +59,11 @@ services:
 
   # Query 1
 
-  filter_currency_0:
+  q1234_filter_currency_0:
     build:
       context: ./src/
       dockerfile: cmd/filter/Dockerfile
-    container_name: filter_currency_0
+    container_name: q1234_filter_currency_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -72,11 +72,11 @@ services:
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
       - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_QUEUE=transfers_queue_q1234
-      - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
-      - OUTPUT_EXCHANGE=filtered_transfers_exchange
-      - OUTPUT_QUEUE=filtered_transfers_q
-      - OUTPUT_ROUTING_KEYS=transfers_q1234
+      - INPUT_QUEUE=Q1234_transfers_queue
+      - INPUT_ROUTING_KEYS=Q1234_TRANSFERS_KEY
+      - OUTPUT_EXCHANGE=Q1234_filtered_exchange
+      - OUTPUT_QUEUE=Q1234_filtered_q
+      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
       - CURRENCIES=US Dollar
       - FILTER_TYPE=CURRENCY
       - FILTER_AMOUNT=2
@@ -87,11 +87,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  filter_currency_1:
+  q1234_filter_currency_1:
     build:
       context: ./src/
       dockerfile: cmd/filter/Dockerfile
-    container_name: filter_currency_1
+    container_name: q1234_filter_currency_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -100,11 +100,11 @@ services:
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
       - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_QUEUE=transfers_queue_q1234
-      - INPUT_ROUTING_KEYS=TRANSFERS_Q1234_KEY
-      - OUTPUT_EXCHANGE=filtered_transfers_exchange
-      - OUTPUT_QUEUE=filtered_transfers_q
-      - OUTPUT_ROUTING_KEYS=transfers_q1234
+      - INPUT_QUEUE=Q1234_transfers_queue
+      - INPUT_ROUTING_KEYS=Q1234_TRANSFERS_KEY
+      - OUTPUT_EXCHANGE=Q1234_filtered_exchange
+      - OUTPUT_QUEUE=Q1234_filtered_q
+      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
       - CURRENCIES=US Dollar
       - FILTER_TYPE=CURRENCY
       - FILTER_AMOUNT=2
@@ -115,11 +115,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  filter_amount_0:
+  q1_filter_amount_0:
     build:
       context: ./src/
       dockerfile: cmd/filter/Dockerfile
-    container_name: filter_amount_0
+    container_name: q1_filter_amount_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -127,9 +127,9 @@ services:
       - ID=0
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=filtered_transfers_q
-      - INPUT_ROUTING_KEYS=transfers_q1234
+      - INPUT_EXCHANGE=Q1234_filtered_exchange
+      - INPUT_QUEUE=Q1234_filtered_q
+      - INPUT_ROUTING_KEYS=Q1234_filtered_key
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=results_queue
@@ -143,11 +143,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  filter_amount_1:
+  q1_filter_amount_1:
     build:
       context: ./src/
       dockerfile: cmd/filter/Dockerfile
-    container_name: filter_amount_1
+    container_name: q1_filter_amount_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -155,9 +155,9 @@ services:
       - ID=1
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=filtered_transfers_q
-      - INPUT_ROUTING_KEYS=transfers_q1234
+      - INPUT_EXCHANGE=Q1234_filtered_exchange
+      - INPUT_QUEUE=Q1234_filtered_q
+      - INPUT_ROUTING_KEYS=Q1234_filtered_key
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=results_queue
@@ -174,11 +174,11 @@ services:
 
   # Query 2
 
-  reducer_q2_0:
+  q2_reducer_0:
     build:
       context: ./src/
       dockerfile: cmd/reducer/Dockerfile
-    container_name: reducer_q2_0
+    container_name: q2_reducer_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -187,11 +187,11 @@ services:
       - REDUCER_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=reducer_q2_in_q
-      - INPUT_ROUTING_KEYS=transfers_q1234
-      - OUTPUT_QUEUES=reduced_transfers_q2_0,reduced_transfers_q2_1
-      - OUTPUT_ROUTING_KEYS=transfers_q1234
+      - INPUT_EXCHANGE=Q1234_filtered_exchange
+      - INPUT_QUEUE=Q2_reducer_in_q
+      - INPUT_ROUTING_KEYS=Q1234_filtered_key
+      - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
+      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
       - QUERY_ID=2
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
@@ -200,11 +200,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  reducer_q2_1:
+  q2_reducer_1:
     build:
       context: ./src/
       dockerfile: cmd/reducer/Dockerfile
-    container_name: reducer_q2_1
+    container_name: q2_reducer_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -213,11 +213,11 @@ services:
       - REDUCER_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=reducer_q2_in_q
-      - INPUT_ROUTING_KEYS=transfers_q1234
-      - OUTPUT_QUEUES=reduced_transfers_q2_0,reduced_transfers_q2_1
-      - OUTPUT_ROUTING_KEYS=transfers_q1234
+      - INPUT_EXCHANGE=Q1234_filtered_exchange
+      - INPUT_QUEUE=Q2_reducer_in_q
+      - INPUT_ROUTING_KEYS=Q1234_filtered_key
+      - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
+      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
       - QUERY_ID=2
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
@@ -226,11 +226,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  filter_bank_id_already_seen_0:
+  q2_filter_bank_distinct_0:
     build:
       context: ./src/
       dockerfile: cmd/filter/Dockerfile
-    container_name: filter_bank_id_already_seen_0
+    container_name: q2_filter_bank_distinct_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -238,17 +238,17 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - ID=0
-      - INPUT_QUEUE=accounts_0
-      - OUTPUT_QUEUES=join_q2_accounts_q_0,join_q2_accounts_q_1
+      - INPUT_QUEUE=Q2_accounts_0
+      - OUTPUT_QUEUES=Q2_join_accounts_q_0,Q2_join_accounts_q_1
       - FILTER_AMOUNT=2
       - FILTER_TYPE=BANK_DISTINCT
       - QUERY_ID=2
 
-  filter_bank_id_already_seen_1:
+  q2_filter_bank_distinct_1:
     build:
       context: ./src/
       dockerfile: cmd/filter/Dockerfile
-    container_name: filter_bank_id_already_seen_1
+    container_name: q2_filter_bank_distinct_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -256,17 +256,17 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - ID=1
-      - INPUT_QUEUE=accounts_1
-      - OUTPUT_QUEUES=join_q2_accounts_q_0,join_q2_accounts_q_1
+      - INPUT_QUEUE=Q2_accounts_1
+      - OUTPUT_QUEUES=Q2_join_accounts_q_0,Q2_join_accounts_q_1
       - FILTER_AMOUNT=2
       - FILTER_TYPE=BANK_DISTINCT
       - QUERY_ID=2
 
-  join_q2_0:
+  q2_join_0:
     build:
       context: ./src/
       dockerfile: cmd/join/Dockerfile
-    container_name: join_q2_0
+    container_name: q2_join_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -274,8 +274,8 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - JOIN_TYPE=transfer_account_by_bank
-      - LEFT_INPUT_QUEUE=reduced_transfers_q2_0
-      - RIGHT_INPUT_QUEUE=join_q2_accounts_q_0
+      - LEFT_INPUT_QUEUE=Q2_reduced_transfers_0
+      - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_0
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=results_queue
@@ -289,11 +289,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  join_q2_1:
+  q2_join_1:
     build:
       context: ./src/
       dockerfile: cmd/join/Dockerfile
-    container_name: join_q2_1
+    container_name: q2_join_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -301,8 +301,8 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - JOIN_TYPE=transfer_account_by_bank
-      - LEFT_INPUT_QUEUE=reduced_transfers_q2_1
-      - RIGHT_INPUT_QUEUE=join_q2_accounts_q_1
+      - LEFT_INPUT_QUEUE=Q2_reduced_transfers_1
+      - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_1
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - OUTPUT_ROUTING_KEYS=results_queue
@@ -319,11 +319,11 @@ services:
 
   # Query 4
 
-  filter_and_splitter_q4_0:
+  q4_filter_and_splitter_0:
     build:
       context: ./src/
       dockerfile: cmd/filterandsplitter/Dockerfile
-    container_name: filter_and_splitter_q4_0
+    container_name: q4_filter_and_splitter_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -333,10 +333,10 @@ services:
       - MOM_PORT=5672
       - FILTER_AMOUNT=2
       - OUTPUT_AMOUNT=2
-      - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=filter_range_q4_in
-      - INPUT_ROUTING_KEYS=transfers_q1234
+      - OUTPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - INPUT_EXCHANGE=Q1234_filtered_exchange
+      - INPUT_QUEUE=Q4_filter_range_in
+      - INPUT_ROUTING_KEYS=Q1234_filtered_key
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - QUERY_ID=4
     logging:
@@ -345,11 +345,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  filter_and_splitter_q4_1:
+  q4_filter_and_splitter_1:
     build:
       context: ./src/
       dockerfile: cmd/filterandsplitter/Dockerfile
-    container_name: filter_and_splitter_q4_1
+    container_name: q4_filter_and_splitter_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -359,10 +359,10 @@ services:
       - MOM_PORT=5672
       - FILTER_AMOUNT=2
       - OUTPUT_AMOUNT=2
-      - OUTPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=filter_range_q4_in
-      - INPUT_ROUTING_KEYS=transfers_q1234
+      - OUTPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - INPUT_EXCHANGE=Q1234_filtered_exchange
+      - INPUT_QUEUE=Q4_filter_range_in
+      - INPUT_ROUTING_KEYS=Q1234_filtered_key
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - QUERY_ID=4
     logging:
@@ -371,11 +371,55 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  join_accounts_q4_0:
+  q4_pre_filter_0:
+    build:
+      context: ./src/
+      dockerfile: cmd/prefilterq4/Dockerfile
+    container_name: q4_pre_filter_0
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=0
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - OUTPUT_EXCHANGE=Q4_prefilter_out
+      - THRESHOLD=5
+      - QUERY_ID=4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  q4_pre_filter_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/prefilterq4/Dockerfile
+    container_name: q4_pre_filter_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=1
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - OUTPUT_EXCHANGE=Q4_prefilter_out
+      - THRESHOLD=5
+      - QUERY_ID=4
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  q4_join_accounts_0:
     build:
       context: ./src/
       dockerfile: cmd/joinaccounts/Dockerfile
-    container_name: join_accounts_q4_0
+    container_name: q4_join_accounts_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -384,8 +428,10 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - OUTPUT_AMOUNT=2
-      - OUTPUT_MIDDLEWARE_PREFIX=join_accounts_q4
-      - INPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
+      - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
+      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - QUALIFIED_INPUT_EXCHANGE=Q4_prefilter_out
+      - PREFILTER_AMOUNT=2
       - QUERY_ID=4
     logging:
       driver: json-file
@@ -393,11 +439,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  join_accounts_q4_1:
+  q4_join_accounts_1:
     build:
       context: ./src/
       dockerfile: cmd/joinaccounts/Dockerfile
-    container_name: join_accounts_q4_1
+    container_name: q4_join_accounts_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -406,8 +452,10 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - OUTPUT_AMOUNT=2
-      - OUTPUT_MIDDLEWARE_PREFIX=join_accounts_q4
-      - INPUT_MIDDLEWARE_PREFIX=filter_splitter_q4
+      - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
+      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - QUALIFIED_INPUT_EXCHANGE=Q4_prefilter_out
+      - PREFILTER_AMOUNT=2
       - QUERY_ID=4
     logging:
       driver: json-file
@@ -415,11 +463,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  acum_accounts_q4_0:
+  q4_acum_accounts_0:
     build:
       context: ./src/
       dockerfile: cmd/acumaccounts/Dockerfile
-    container_name: acum_accounts_q4_0
+    container_name: q4_acum_accounts_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -428,8 +476,8 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - OUTPUT_AMOUNT=2
-      - OUTPUT_MIDDLEWARE_PREFIX=acum_accounts_q4
-      - INPUT_MIDDLEWARE_PREFIX=join_accounts_q4
+      - OUTPUT_MIDDLEWARE_PREFIX=Q4_AcumAccounts
+      - INPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
       - EXPECTED_EOFS=2
       - REQUIRED_AMT=5
       - QUERY_ID=4
@@ -439,11 +487,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  acum_accounts_q4_1:
+  q4_acum_accounts_1:
     build:
       context: ./src/
       dockerfile: cmd/acumaccounts/Dockerfile
-    container_name: acum_accounts_q4_1
+    container_name: q4_acum_accounts_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -452,8 +500,8 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - OUTPUT_AMOUNT=2
-      - OUTPUT_MIDDLEWARE_PREFIX=acum_accounts_q4
-      - INPUT_MIDDLEWARE_PREFIX=join_accounts_q4
+      - OUTPUT_MIDDLEWARE_PREFIX=Q4_AcumAccounts
+      - INPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
       - EXPECTED_EOFS=2
       - REQUIRED_AMT=5
       - QUERY_ID=4
@@ -463,11 +511,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  filter_account_seen_q4_0:
+  q4_filter_account_seen_0:
     build:
       context: ./src/
       dockerfile: cmd/filteraccountseen/Dockerfile
-    container_name: filter_account_seen_q4_0
+    container_name: q4_filter_account_seen_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -475,7 +523,7 @@ services:
       - ID=0
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_MIDDLEWARE_PREFIX=acum_accounts_q4
+      - INPUT_MIDDLEWARE_PREFIX=Q4_AcumAccounts
       - OUTPUT_MIDDLEWARE=results_queue
       - EXPECTED_EOFS=2
       - QUERY_ID=4
@@ -485,11 +533,11 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  filter_account_seen_q4_1:
+  q4_filter_account_seen_1:
     build:
       context: ./src/
       dockerfile: cmd/filteraccountseen/Dockerfile
-    container_name: filter_account_seen_q4_1
+    container_name: q4_filter_account_seen_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -497,7 +545,7 @@ services:
       - ID=1
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_MIDDLEWARE_PREFIX=acum_accounts_q4
+      - INPUT_MIDDLEWARE_PREFIX=Q4_AcumAccounts
       - OUTPUT_MIDDLEWARE=results_queue
       - EXPECTED_EOFS=2
       - QUERY_ID=4
@@ -510,11 +558,11 @@ services:
 
   # Query 3
 
-  filter_range_q3_0:
+  q3_filter_range_0:
     build:
       context: ./src/
       dockerfile: cmd/daterangesplitter/Dockerfile
-    container_name: filter_range_q3_0
+    container_name: q3_filter_range_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -522,18 +570,18 @@ services:
       - ID=0
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=filter_range_q3_in
-      - INPUT_ROUTING_KEYS=transfers_q1234
-      - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
+      - INPUT_EXCHANGE=Q1234_filtered_exchange
+      - INPUT_QUEUE=Q3_filter_range_in
+      - INPUT_ROUTING_KEYS=Q1234_filtered_key
+      - OUTPUT_QUEUES=Q3_transfers_avg_period_q,Q3_transfers_filter_period_q
       - FILTER_AMOUNT=2
       - QUERY_ID=3
 
-  filter_range_q3_1:
+  q3_filter_range_1:
     build:
       context: ./src/
       dockerfile: cmd/daterangesplitter/Dockerfile
-    container_name: filter_range_q3_1
+    container_name: q3_filter_range_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -541,18 +589,18 @@ services:
       - ID=1
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_EXCHANGE=filtered_transfers_exchange
-      - INPUT_QUEUE=filter_range_q3_in
-      - INPUT_ROUTING_KEYS=transfers_q1234
-      - OUTPUT_QUEUES=transfers_avg_period_q,transfers_filter_period_q
+      - INPUT_EXCHANGE=Q1234_filtered_exchange
+      - INPUT_QUEUE=Q3_filter_range_in
+      - INPUT_ROUTING_KEYS=Q1234_filtered_key
+      - OUTPUT_QUEUES=Q3_transfers_avg_period_q,Q3_transfers_filter_period_q
       - FILTER_AMOUNT=2
       - QUERY_ID=3
 
-  sum_q3_0:
+  q3_sum_0:
     build:
       context: ./src/
       dockerfile: cmd/sum/Dockerfile
-    container_name: sum_q3_0
+    container_name: q3_sum_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -561,15 +609,15 @@ services:
       - SUM_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=transfers_avg_period_q
-      - OUTPUT_QUEUES=sum_aggregate_q3_0,sum_aggregate_q3_1
+      - INPUT_QUEUE=Q3_transfers_avg_period_q
+      - OUTPUT_QUEUES=Q3_sum_aggregate_0,Q3_sum_aggregate_1
       - QUERY_ID=3
 
-  sum_q3_1:
+  q3_sum_1:
     build:
       context: ./src/
       dockerfile: cmd/sum/Dockerfile
-    container_name: sum_q3_1
+    container_name: q3_sum_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -578,15 +626,15 @@ services:
       - SUM_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=transfers_avg_period_q
-      - OUTPUT_QUEUES=sum_aggregate_q3_0,sum_aggregate_q3_1
+      - INPUT_QUEUE=Q3_transfers_avg_period_q
+      - OUTPUT_QUEUES=Q3_sum_aggregate_0,Q3_sum_aggregate_1
       - QUERY_ID=3
 
-  aggregate_q3_0:
+  q3_aggregate_0:
     build:
       context: ./src/
       dockerfile: cmd/aggregate/Dockerfile
-    container_name: aggregate_q3_0
+    container_name: q3_aggregate_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -595,15 +643,15 @@ services:
       - AGGREGATE_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=sum_aggregate_q3_0
-      - OUTPUT_QUEUES=filter2_avg_q3_0,filter2_avg_q3_1
+      - INPUT_QUEUE=Q3_sum_aggregate_0
+      - OUTPUT_QUEUES=Q3_filter2_avg_0,Q3_filter2_avg_1
       - QUERY_ID=3
 
-  aggregate_q3_1:
+  q3_aggregate_1:
     build:
       context: ./src/
       dockerfile: cmd/aggregate/Dockerfile
-    container_name: aggregate_q3_1
+    container_name: q3_aggregate_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -612,15 +660,15 @@ services:
       - AGGREGATE_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=sum_aggregate_q3_1
-      - OUTPUT_QUEUES=filter2_avg_q3_0,filter2_avg_q3_1
+      - INPUT_QUEUE=Q3_sum_aggregate_1
+      - OUTPUT_QUEUES=Q3_filter2_avg_0,Q3_filter2_avg_1
       - QUERY_ID=3
 
-  average_filter_q3_0:
+  q3_average_filter_0:
     build:
       context: ./src/
       dockerfile: cmd/averagefilter/Dockerfile
-    container_name: average_filter_q3_0
+    container_name: q3_average_filter_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -629,17 +677,17 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - FILTER_AMOUNT=2
-      - INPUT_QUEUE=transfers_filter_period_q
-      - AVG_INPUT_QUEUE=filter2_avg_q3_0
+      - INPUT_QUEUE=Q3_transfers_filter_period_q
+      - AVG_INPUT_QUEUE=Q3_filter2_avg_0
       - AVG_EXPECTED_EOFS=2
       - OUTPUT_QUEUE=results_queue
       - QUERY_ID=3
 
-  average_filter_q3_1:
+  q3_average_filter_1:
     build:
       context: ./src/
       dockerfile: cmd/averagefilter/Dockerfile
-    container_name: average_filter_q3_1
+    container_name: q3_average_filter_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -648,8 +696,8 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - FILTER_AMOUNT=2
-      - INPUT_QUEUE=transfers_filter_period_q
-      - AVG_INPUT_QUEUE=filter2_avg_q3_1
+      - INPUT_QUEUE=Q3_transfers_filter_period_q
+      - AVG_INPUT_QUEUE=Q3_filter2_avg_1
       - AVG_EXPECTED_EOFS=2
       - OUTPUT_QUEUE=results_queue
       - QUERY_ID=3
@@ -657,11 +705,11 @@ services:
 
   # Query 5
 
-  filter_date_and_payment_0:
+  q5_filter_date_and_payment_0:
     build:
       context: ./src/
       dockerfile: cmd/filter/Dockerfile
-    container_name: filter_date_and_payment_0
+    container_name: q5_filter_date_and_payment_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -670,21 +718,21 @@ services:
       - MOM_PORT=5672
       - ID=0
       - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
-      - INPUT_QUEUE=transfers_queue_q5
-      - OUTPUT_EXCHANGE=filtered_date_and_payment_exchange
-      - OUTPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
+      - INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
+      - INPUT_QUEUE=Q5_transfers_queue
+      - OUTPUT_EXCHANGE=Q5_filtered_exchange
+      - OUTPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
       - FILTER_AMOUNT=2
       - FILTER_TYPE=DATE_RANGE_AND_PAYMENT
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - PAYMENT_FORMATS=ACH,Wire
       - QUERY_ID=5
 
-  filter_date_and_payment_1:
+  q5_filter_date_and_payment_1:
     build:
       context: ./src/
       dockerfile: cmd/filter/Dockerfile
-    container_name: filter_date_and_payment_1
+    container_name: q5_filter_date_and_payment_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -693,39 +741,39 @@ services:
       - MOM_PORT=5672
       - ID=1
       - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
-      - INPUT_QUEUE=transfers_queue_q5
-      - OUTPUT_EXCHANGE=filtered_date_and_payment_exchange
-      - OUTPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
+      - INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
+      - INPUT_QUEUE=Q5_transfers_queue
+      - OUTPUT_EXCHANGE=Q5_filtered_exchange
+      - OUTPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
       - FILTER_AMOUNT=2
       - FILTER_TYPE=DATE_RANGE_AND_PAYMENT
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - PAYMENT_FORMATS=ACH,Wire
       - QUERY_ID=5
 
-  fetcher:
+  q5_fetcher:
     build:
       context: ./src/
       dockerfile: cmd/fetcher/Dockerfile
-    container_name: fetcher
+    container_name: q5_fetcher
     depends_on:
       rabbitmq:
         condition: service_healthy
     environment:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=filtered_transfers_q5_fetcher
-      - INPUT_EXCHANGE=filtered_date_and_payment_exchange
-      - INPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
-      - OUTPUT_QUEUES=fetcher_output_0,fetcher_output_1
+      - INPUT_QUEUE=Q5_filtered_fetcher_q
+      - INPUT_EXCHANGE=Q5_filtered_exchange
+      - INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
+      - OUTPUT_QUEUES=Q5_fetcher_output_0,Q5_fetcher_output_1
       - QUERY_ID=5
       - QUOTE=USD
 
-  filter_amt_q5_0:
+  q5_filter_amount_0:
     build:
       context: ./src/
       dockerfile: cmd/filter/Dockerfile
-    container_name: filter_amt_q5_0
+    container_name: q5_filter_amount_0
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -734,21 +782,21 @@ services:
       - MOM_PORT=5672
       - ID=0
       - AMOUNT=1
-      - LEFT_INPUT_QUEUE=fetcher_output_0
-      - RIGHT_INPUT_QUEUE=filtered_transfers_q5_filter
-      - RIGHT_INPUT_EXCHANGE=filtered_date_and_payment_exchange
-      - RIGHT_INPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
-      - OUTPUT_QUEUE=filtered_to_count_q5
+      - LEFT_INPUT_QUEUE=Q5_fetcher_output_0
+      - RIGHT_INPUT_QUEUE=Q5_filtered_filter_q
+      - RIGHT_INPUT_EXCHANGE=Q5_filtered_exchange
+      - RIGHT_INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
+      - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
       - QUERY_ID=5
       - QUOTE=US Dollar
 
-  filter_amt_q5_1:
+  q5_filter_amount_1:
     build:
       context: ./src/
       dockerfile: cmd/filter/Dockerfile
-    container_name: filter_amt_q5_1
+    container_name: q5_filter_amount_1
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -757,21 +805,21 @@ services:
       - MOM_PORT=5672
       - ID=1
       - AMOUNT=1
-      - LEFT_INPUT_QUEUE=fetcher_output_1
-      - RIGHT_INPUT_QUEUE=filtered_transfers_q5_filter
-      - RIGHT_INPUT_EXCHANGE=filtered_date_and_payment_exchange
-      - RIGHT_INPUT_ROUTING_KEYS=TRANSFERS_Q5_KEY
-      - OUTPUT_QUEUE=filtered_to_count_q5
+      - LEFT_INPUT_QUEUE=Q5_fetcher_output_1
+      - RIGHT_INPUT_QUEUE=Q5_filtered_filter_q
+      - RIGHT_INPUT_EXCHANGE=Q5_filtered_exchange
+      - RIGHT_INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
+      - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
       - QUERY_ID=5
       - QUOTE=US Dollar
 
-  count_reducer_q5:
+  q5_count_reducer:
     build:
       context: ./src/
       dockerfile: cmd/reducer/Dockerfile
-    container_name: count_reducer_q5
+    container_name: q5_count_reducer
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -781,7 +829,7 @@ services:
       - ID=0
       - REDUCER_AMOUNT=1
       - INPUT_EOFS_EXPECTED=2
-      - INPUT_QUEUE=filtered_to_count_q5
+      - INPUT_QUEUE=Q5_filtered_to_count_q
       - OUTPUT_QUEUES=results_queue
       - REDUCER_TYPE=COUNT
       - QUERY_ID=5

@@ -1,6 +1,7 @@
 package reducer
 
 import (
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/normalizer"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -18,6 +19,8 @@ func CreateReducerMaxAmountFromBank(config ReducerConfig) (worker.Worker, error)
 		},
 		func(t transfer.TransferAfterCurrency) string { return normalizer.NormalizeBankID(t.FromBank) },
 		transfer.ProjectForQ2,
+		records.TransferAfterCurrencyCodec,
+		records.TransferForQ2Codec,
 		config.QueryId,
 	)
 }

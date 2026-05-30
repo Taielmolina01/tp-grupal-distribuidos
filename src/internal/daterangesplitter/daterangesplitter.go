@@ -11,7 +11,10 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/daterange"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/q3filter"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -163,11 +166,11 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (_ *DateRangeSplitter,
 			config.SplitterAmount,
 			uint32(config.Id),
 			monitors[idx],
-			func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+			func(clientID int, total uint32, isCoordinator bool) error {
 				if !isCoordinator {
 					return nil
 				}
-				if err := s.outputQueues[idx].Send(*msg); err != nil {
+				if err := s.outputQueues[idx].Send(middleware.Message{Body: string(batch.WriteEOF(clientID, s.queryID, total))}); err != nil {
 					return err
 				}
 				return nil
@@ -221,84 +224,70 @@ func (s *DateRangeSplitter) close() {
 func (s *DateRangeSplitter) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[transfer.TransferAfterCurrency](&msg)
+	input, err := batch.Read([]byte(msg.Body), records.TransferAfterCurrencyCodec)
 	if err != nil {
-		slog.Error("While deserializing message", "err", err)
+		slog.Error("While deserializing input batch", "err", err)
 		return
 	}
 
-	if result.IsEOF() {
-		s.handleEOF(*result)
+	if input.EOF {
+		s.handleEOF(input.ClientID, input.Total)
 		return
 	}
 
-	s.handleRecord(result.ClientID, result.Payload)
+	s.handleBatch(input.ClientID, input.Records)
 }
 
-func (s *DateRangeSplitter) handleRecord(clientID int, record transfer.TransferAfterCurrency) {
-	for _, m := range s.monitors {
-		m.AddProcessedMessagesAmountByClientId(clientID, 1)
-	}
+func (s *DateRangeSplitter) handleBatch(clientID int, recs []transfer.TransferAfterCurrency) {
+	var avg []transfer.TransferForQ3Avg
+	var filter []transfer.TransferForQ3Filter
 
-	idx := s.periodIndex(record)
-	if idx < 0 {
-		return
-	}
-	if idx >= len(s.outputQueues) {
-		slog.Error("DateRangeSplitter: route index out of range", "idx", idx, "outputs", len(s.outputQueues))
-		return
-	}
-
-	s.monitors[idx].AddForwardedMessagesAmountByClientId(clientID, 1)
-
-	var outMsg *middleware.Message
-	var err error
-	switch idx {
-	case 0:
-		outMsg, err = inner.SerializeData(inner.DataMsg[transfer.TransferForQ3Avg]{
-			ClientID: clientID,
-			QueryID:  s.queryID,
-			Payload:  transfer.ProjectForQ3Avg(record),
-		})
-	case 1:
-		outMsg, err = inner.SerializeData(inner.DataMsg[transfer.TransferForQ3Filter]{
-			ClientID: clientID,
-			QueryID:  s.queryID,
-			Payload:  transfer.ProjectForQ3Filter(record),
-		})
-	default:
-		slog.Error("DateRangeSplitter: unknown output idx", "idx", idx)
-		return
-	}
-	if err != nil {
-		slog.Error("While serializing output message", "idx", idx, "err", err)
-		return
-	}
-
-	if err := s.outputQueues[idx].Send(*outMsg); err != nil {
-		slog.Error("While sending message to output queue", "idx", idx, "err", err)
-	}
-}
-
-func (s *DateRangeSplitter) handleEOF(data inner.DataMsg[transfer.TransferAfterCurrency]) {
-	for idx, eofOut := range s.eofOutputs {
-		ringMsg := eofmessagetypes.EofRingMessage{
-			RealAmount:     data.EOF.TotalMessages,
-			ActualAmount:   s.monitors[idx].GetProcessedMessagesAmountByClientId(data.ClientID),
-			ClientId:       data.ClientID,
-			CoordinatorId:  uint32(s.id),
-			FilteredAmount: s.monitors[idx].GetForwardedMessagesAmountByClientId(data.ClientID),
+	for i := range recs {
+		record := recs[i]
+		for _, m := range s.monitors {
+			m.AddProcessedMessagesAmountByClientId(clientID, 1)
 		}
-		serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
-		if err != nil {
-			slog.Error("While serializing EOF ring message", "err", err)
+
+		idx := s.periodIndex(record)
+		if idx < 0 || idx >= len(s.outputQueues) {
 			continue
 		}
-		if err := eofOut.Send(*serialized); err != nil {
+		s.monitors[idx].AddForwardedMessagesAmountByClientId(clientID, 1)
+
+		switch idx {
+		case 0:
+			avg = append(avg, transfer.ProjectForQ3Avg(record))
+		case 1:
+			filter = append(filter, transfer.ProjectForQ3Filter(record))
+		}
+	}
+
+	if len(avg) > 0 {
+		if err := s.outputQueues[0].Send(middleware.Message{Body: string(daterange.WriteBatch(clientID, s.queryID, avg))}); err != nil {
+			slog.Error("While sending Q3 avg batch", "err", err)
+		}
+	}
+	if len(filter) > 0 {
+		if err := s.outputQueues[1].Send(middleware.Message{Body: string(q3filter.WriteBatch(clientID, s.queryID, filter))}); err != nil {
+			slog.Error("While sending Q3 filter batch", "err", err)
+		}
+	}
+}
+
+func (s *DateRangeSplitter) handleEOF(clientID int, total uint32) {
+	for idx, eofOut := range s.eofOutputs {
+		ringMsg := eofmessagetypes.EofRingMessage{
+			RealAmount:     total,
+			ActualAmount:   s.monitors[idx].GetProcessedMessagesAmountByClientId(clientID),
+			ClientId:       clientID,
+			CoordinatorId:  uint32(s.id),
+			FilteredAmount: s.monitors[idx].GetForwardedMessagesAmountByClientId(clientID),
+		}
+		if err := eofOut.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(ringMsg))}); err != nil {
 			slog.Error("While sending EOF message to EOF ring", "err", err)
 			continue
 		}
-		slog.Info("DateRangeSplitter fired ring", "splitter_id", s.id, "client_id", data.ClientID, "output_idx", idx)
+		slog.Info("DateRangeSplitter fired ring", "splitter_id", s.id, "client_id", clientID, "output_idx", idx)
 	}
 }
 

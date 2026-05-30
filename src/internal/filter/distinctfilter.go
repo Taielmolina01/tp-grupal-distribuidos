@@ -3,7 +3,8 @@ package filter
 import (
 	"log/slog"
 
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -16,6 +17,7 @@ func newDistinctFilter[T comparable, S comparable](
 	compareFunc func(T, T) bool,
 	keyFunc func(T) S,
 	shardCriteria func(T) string,
+	codec wire.Codec[T],
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
@@ -42,6 +44,8 @@ func newDistinctFilter[T comparable, S comparable](
 		compareFunc:   compareFunc,
 		keyFunc:       keyFunc,
 		shardCriteria: shardCriteria,
+		codec:         codec,
+		queryId:       config.QueryId,
 	}, nil
 }
 
@@ -57,36 +61,50 @@ func (distinctfilter *DistinctFilter[T, S]) Run() {
 func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message, ack, nack func()) {
 	defer ack()
 
-	deserializedMsg, err := inner.DeserializeData[T](&msg)
+	input, err := batch.Read([]byte(msg.Body), distinctfilter.codec)
 	if err != nil {
-		slog.Error("While deserializing message", "err", err)
+		slog.Error("While deserializing input batch", "err", err)
 		return
 	}
 
-	if deserializedMsg.IsEOF() {
+	if input.EOF {
+		eofBody := batch.WriteEOF(input.ClientID, distinctfilter.queryId, input.Total)
 		for _, outputQueue := range distinctfilter.outputQueues {
-			if err := outputQueue.Send(msg); err != nil {
+			if err := outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 				slog.Error("While broadcasting EOF to output queue", "err", err)
 			}
 		}
 		return
 	}
 
-	_, ok := distinctfilter.alreadySeen[deserializedMsg.ClientID]
+	seen, ok := distinctfilter.alreadySeen[input.ClientID]
 	if !ok {
-		distinctfilter.alreadySeen[deserializedMsg.ClientID] = map[S]bool{}
+		seen = map[S]bool{}
+		distinctfilter.alreadySeen[input.ClientID] = seen
 	}
-	key := distinctfilter.keyFunc(deserializedMsg.Payload)
-	if _, ok := distinctfilter.alreadySeen[deserializedMsg.ClientID][key]; !ok {
-		if err := distinctfilter.outputQueues[shard.CalculateIndexForShard(
-			deserializedMsg.ClientID,
-			distinctfilter.shardCriteria(deserializedMsg.Payload),
-			len(distinctfilter.outputQueues),
-		)].Send(msg); err != nil {
-			slog.Error("While sending message to output exchange", "err", err)
-			return
+
+	// Keep only records not seen before, grouped by output shard.
+	byShard := make(map[int][]T)
+	for i := range input.Records {
+		record := input.Records[i]
+		key := distinctfilter.keyFunc(record)
+		if seen[key] {
+			continue
 		}
-		distinctfilter.alreadySeen[deserializedMsg.ClientID][key] = true
+		seen[key] = true
+		idx := shard.CalculateIndexForShard(
+			input.ClientID,
+			distinctfilter.shardCriteria(record),
+			len(distinctfilter.outputQueues),
+		)
+		byShard[idx] = append(byShard[idx], record)
+	}
+
+	for idx, group := range byShard {
+		body := batch.Write(input.ClientID, distinctfilter.queryId, group, distinctfilter.codec)
+		if err := distinctfilter.outputQueues[idx].Send(middleware.Message{Body: string(body)}); err != nil {
+			slog.Error("While sending output batch", "err", err)
+		}
 	}
 }
 

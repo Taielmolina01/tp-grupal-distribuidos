@@ -39,6 +39,18 @@ func DeserializeUint32(bytes []byte) uint32 {
 	return binary.BigEndian.Uint32(bytes)
 }
 
+const INT64_SIZE uint32 = 8
+
+func SerializeInt64(value int64) []byte {
+	data := make([]byte, INT64_SIZE)
+	binary.BigEndian.PutUint64(data, uint64(value))
+	return data
+}
+
+func DeserializeInt64(bytes []byte) int64 {
+	return int64(binary.BigEndian.Uint64(bytes))
+}
+
 func SerializeString(value string) []byte {
 	data := []byte(value)
 	return append(SerializeUint16(uint16(len(data))), data...)

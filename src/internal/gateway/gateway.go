@@ -1,9 +1,10 @@
 package gateway
 
 import (
-	"encoding/json"
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -13,8 +14,11 @@ import (
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/clientregistry"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/external"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/normalizer"
 	"tp-grupal-distribuidos/internal/common/queryresult"
@@ -47,7 +51,7 @@ type Gateway struct {
 	transfersCount    map[int]uint32
 	queryEOFsByClient map[int]map[uint8]int
 	buildersMu        sync.Mutex
-	resultBuilders    map[int]*external.ResultBatchBuilder
+	resultBuilders    map[int]*tcpproto.ResultBatchBuilder
 	maxBatchSize      int
 	queryEOFsExpected map[uint8]int
 }
@@ -120,7 +124,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		accountsCount:     map[int]uint32{},
 		transfersCount:    map[int]uint32{},
 		queryEOFsByClient: map[int]map[uint8]int{},
-		resultBuilders:    map[int]*external.ResultBatchBuilder{},
+		resultBuilders:    map[int]*tcpproto.ResultBatchBuilder{},
 		maxBatchSize:      config.MaxBatchSize,
 		queryEOFsExpected: config.QueryEOFsExpected,
 	}
@@ -213,22 +217,24 @@ func (gateway *Gateway) handleClientRequest(client clientregistry.ClientState) {
 		}
 	}()
 
+	r := bufio.NewReaderSize(client.Conn, 64*1024)
+
 accountsLoop:
 	for {
-		msgType, err := external.ReadMsgType(client.Conn)
+		msgType, err := tcpproto.ReadMsgType(r)
 		if err != nil {
 			slog.Debug("While reading message type (accounts phase)", "err", err)
 			return
 		}
 
 		switch msgType {
-		case external.AccountBatch:
-			if err := gateway.handleAccountBatch(client); err != nil {
+		case tcpproto.AccountBatch:
+			if err := gateway.handleAccountBatch(client, r); err != nil {
 				slog.Debug("While handling account batch", "err", err)
 				return
 			}
 
-		case external.EndOfRecords:
+		case tcpproto.EndOfRecords:
 			if err := gateway.handleEndOfAccounts(client); err != nil {
 				slog.Debug("While handling EOF accounts", "err", err)
 				return
@@ -243,20 +249,20 @@ accountsLoop:
 
 transfersLoop:
 	for {
-		msgType, err := external.ReadMsgType(client.Conn)
+		msgType, err := tcpproto.ReadMsgType(r)
 		if err != nil {
 			slog.Debug("While reading message type (transfers phase)", "err", err)
 			return
 		}
 
 		switch msgType {
-		case external.TransBatch:
-			if err := gateway.handleTransBatch(client); err != nil {
+		case tcpproto.TransBatch:
+			if err := gateway.handleTransBatch(client, r); err != nil {
 				slog.Debug("While handling trans batch", "err", err)
 				return
 			}
 
-		case external.EndOfRecords:
+		case tcpproto.EndOfRecords:
 			if err := gateway.handleEndOfTransfers(client); err != nil {
 				slog.Debug("While handling EOF transfers", "err", err)
 				return
@@ -272,40 +278,40 @@ transfersLoop:
 	completed = true
 }
 
-func (gateway *Gateway) getOrCreateBuilder(clientID int) *external.ResultBatchBuilder {
+func (gateway *Gateway) getOrCreateBuilder(clientID int) *tcpproto.ResultBatchBuilder {
 	gateway.buildersMu.Lock()
 	defer gateway.buildersMu.Unlock()
 	if b, ok := gateway.resultBuilders[clientID]; ok {
 		return b
 	}
-	b := external.NewResultBatchBuilder(gateway.maxBatchSize)
+	b := tcpproto.NewResultBatchBuilder(gateway.maxBatchSize)
 	gateway.resultBuilders[clientID] = b
 	return b
 }
 
 func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
-	env, err := inner.DeserializeData[json.RawMessage](&msg)
+	reader, info, err := batch.ReadHeader([]byte(msg.Body))
 	if err != nil {
-		slog.Error("While deserializing result envelope", "err", err)
+		slog.Error("While deserializing result header", "err", err)
 		nack()
 		return
 	}
 
-	client, ok := gateway.findClient(env.ClientID)
+	client, ok := gateway.findClient(info.ClientID)
 	if !ok {
-		slog.Warn("Result for unknown client", "client_id", env.ClientID)
+		slog.Warn("Result for unknown client", "client_id", info.ClientID)
 		ack()
 		return
 	}
 
-	builder := gateway.getOrCreateBuilder(env.ClientID)
+	builder := gateway.getOrCreateBuilder(info.ClientID)
 
-	if env.IsEOF() {
-		shouldWrite, shouldClose := gateway.markQueryEOF(env.ClientID, env.QueryID)
+	if info.EOF {
+		shouldWrite, shouldClose := gateway.markQueryEOF(info.ClientID, info.QueryID)
 
 		if !builder.IsEmpty() {
 			if err := builder.Flush(client.Conn); err != nil {
-				slog.Error("While flushing batch before QueryEOF", "client_id", env.ClientID, "err", err)
+				slog.Error("While flushing batch before QueryEOF", "client_id", info.ClientID, "err", err)
 				nack()
 				return
 			}
@@ -316,79 +322,66 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 			return
 		}
 
-		if err := external.WriteQueryEOF(client.Conn, env.QueryID); err != nil {
-			slog.Error("While writing QueryEOF", "client_id", env.ClientID, "query_id", env.QueryID, "err", err)
+		if err := tcpproto.WriteQueryEOF(client.Conn, info.QueryID); err != nil {
+			slog.Error("While writing QueryEOF", "client_id", info.ClientID, "query_id", info.QueryID, "err", err)
 			nack()
 			return
 		}
 		if shouldClose {
-			gateway.closeClient(env.ClientID)
+			gateway.closeClient(info.ClientID)
 		}
 		ack()
 		return
 	}
-	added, err := addResultToBuilder(builder, env)
-	if err != nil {
-		slog.Error("While adding result to batch", "client_id", env.ClientID, "query_id", env.QueryID, "err", err)
+
+	if err := gateway.addResultBatch(client, builder, info.QueryID, reader); err != nil {
+		slog.Error("While adding result batch", "client_id", info.ClientID, "query_id", info.QueryID, "err", err)
 		nack()
 		return
-	}
-	if !added {
-		if err := builder.Flush(client.Conn); err != nil {
-			slog.Error("While flushing full batch", "client_id", env.ClientID, "err", err)
-			nack()
-			return
-		}
-		added, err := addResultToBuilder(builder, env)
-		if err != nil {
-			slog.Error("While adding result to batch after flush", "client_id", env.ClientID, "err", err)
-			nack()
-			return
-		}
-		if !added {
-			slog.Error("Result too large to fit in empty batch", "client_id", env.ClientID, "query_id", env.QueryID)
-			nack()
-			return
-		}
 	}
 	ack()
 }
 
-func addResultToBuilder(builder *external.ResultBatchBuilder, env *inner.DataMsg[json.RawMessage]) (bool, error) {
-	switch env.QueryID {
-	case inner.Query1ID:
-		r, err := inner.Deserialize[queryresult.Query1Result](env.Payload)
-		if err != nil {
-			return false, err
-		}
-		return builder.TryAddQuery1(r), nil
-	case inner.Query2ID:
-		r, err := inner.Deserialize[queryresult.Query2Result](env.Payload)
-		if err != nil {
-			return false, err
-		}
-		return builder.TryAddQuery2(r), nil
-	case inner.Query3ID:
-		r, err := inner.Deserialize[queryresult.Query3Result](env.Payload)
-		if err != nil {
-			return false, err
-		}
-		return builder.TryAddQuery3(r), nil
-	case inner.Query4ID:
-		r, err := inner.Deserialize[queryresult.Query4Result](env.Payload)
-		if err != nil {
-			return false, err
-		}
-		return builder.TryAddQuery4(r), nil
-	case inner.Query5ID:
-		r, err := inner.Deserialize[queryresult.Query5Result](env.Payload)
-		if err != nil {
-			return false, err
-		}
-		return builder.TryAddQuery5(r), nil
+func (gateway *Gateway) addResultBatch(client clientregistry.ClientState, builder *tcpproto.ResultBatchBuilder, queryID uint8, r *wire.Reader) error {
+	switch queryID {
+	case queryresult.Query1ID:
+		return addRecords(client, builder, r, records.Query1ResultCodec, (*tcpproto.ResultBatchBuilder).TryAddQuery1)
+	case queryresult.Query2ID:
+		return addRecords(client, builder, r, records.Query2ResultCodec, (*tcpproto.ResultBatchBuilder).TryAddQuery2)
+	case queryresult.Query3ID:
+		return addRecords(client, builder, r, records.Query3ResultCodec, (*tcpproto.ResultBatchBuilder).TryAddQuery3)
+	case queryresult.Query4ID:
+		return addRecords(client, builder, r, records.Query4ResultCodec, (*tcpproto.ResultBatchBuilder).TryAddQuery4)
+	case queryresult.Query5ID:
+		return addRecords(client, builder, r, records.Query5ResultCodec, (*tcpproto.ResultBatchBuilder).TryAddQuery5)
 	default:
-		return false, fmt.Errorf("unknown query id: %d", env.QueryID)
+		return fmt.Errorf("unknown query id: %d", queryID)
 	}
+}
+
+func addRecords[T any](
+	client clientregistry.ClientState,
+	builder *tcpproto.ResultBatchBuilder,
+	r *wire.Reader,
+	codec wire.Codec[T],
+	tryAdd func(*tcpproto.ResultBatchBuilder, T) bool,
+) error {
+	recs, err := batch.ReadRecords(r, codec)
+	if err != nil {
+		return err
+	}
+	for _, rec := range recs {
+		if tryAdd(builder, rec) {
+			continue
+		}
+		if err := builder.Flush(client.Conn); err != nil {
+			return err
+		}
+		if !tryAdd(builder, rec) {
+			return fmt.Errorf("result too large to fit in empty batch")
+		}
+	}
+	return nil
 }
 
 func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite bool, shouldClose bool) {
@@ -459,14 +452,11 @@ func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bo
 	return found, ok
 }
 
-func wrapForClient[T any](clientID int, record T) (*middleware.Message, error) {
-	return inner.SerializeData(inner.DataMsg[T]{ClientID: clientID, Payload: record})
-}
-
-func (gateway *Gateway) addCount(counts map[int]uint32, clientID int, n uint32) {
+func (gateway *Gateway) addCount(counts map[int]uint32, clientID int, n uint32) uint32 {
 	gateway.countsMu.Lock()
 	defer gateway.countsMu.Unlock()
 	counts[clientID] += n
+	return counts[clientID]
 }
 
 func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
@@ -477,46 +467,38 @@ func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
 	return total
 }
 
-func (gateway *Gateway) sendEOF(client clientregistry.ClientState, kind string, total uint32, targets ...middleware.Middleware) error {
-	msg, err := inner.SerializeData(inner.DataMsg[any]{
-		ClientID: client.ID,
-		EOF:      &inner.EOFInfo{Kind: kind, TotalMessages: total},
-	})
-	if err != nil {
-		slog.Debug("While serializing EOF", "kind", kind, "err", err)
-		return err
-	}
+func (gateway *Gateway) sendEOF(clientID int, total uint32, targets ...middleware.Middleware) error {
+	body := batch.WriteEOF(clientID, 0, total)
 	var errs []error
 	for _, t := range targets {
-		if err := t.Send(*msg); err != nil {
-			slog.Error("While sending EOF", "kind", kind, "err", err)
+		if err := t.Send(middleware.Message{Body: string(body)}); err != nil {
+			slog.Error("While sending EOF", "err", err)
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
 }
 
-func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) error {
-	accounts, err := external.ReadAccountBatch(client.Conn)
+func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState, r io.Reader) error {
+	accounts, err := tcpproto.ReadAccountBatch(r)
 	if err != nil {
 		slog.Debug("While reading ACCOUNT_BATCH", "err", err)
 		return err
 	}
-	for _, acc := range accounts {
-		msg, err := wrapForClient(client.ID, acc)
-		if err != nil {
-			slog.Debug("While serializing account", "err", err)
-			return err
-		}
 
+	byShard := make(map[int][]account.Account)
+	for _, acc := range accounts {
 		idx := shard.CalculateIndexForShard(
 			client.ID,
 			normalizer.NormalizeBankID(acc.BankId),
 			len(gateway.accountQueues),
 		)
-
-		if err := gateway.accountQueues[idx].Send(*msg); err != nil {
-			slog.Debug("While sending account to accounts exchange", "err", err)
+		byShard[idx] = append(byShard[idx], acc)
+	}
+	for idx, group := range byShard {
+		body := batch.Write(client.ID, 0, group, records.AccountCodec)
+		if err := gateway.accountQueues[idx].Send(middleware.Message{Body: string(body)}); err != nil {
+			slog.Debug("While sending accounts batch", "err", err)
 			return err
 		}
 	}
@@ -524,35 +506,30 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState) er
 	return nil
 }
 
-func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState) error {
-	trans, err := external.ReadTransBatch(client.Conn)
+func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io.Reader) error {
+	count, payload, err := tcpproto.ReadRawTransBatch(r)
 	if err != nil {
 		slog.Debug("While reading TRANS_BATCH", "err", err)
 		return err
 	}
-	for _, t := range trans {
-		msg, err := wrapForClient(client.ID, t)
-		if err != nil {
-			slog.Debug("While serializing transfer", "err", err)
-			return err
-		}
-		if err := gateway.transfersExchange.Send(*msg); err != nil {
-			slog.Debug("While sending transfer to transfers exchange", "err", err)
-			return err
-		}
+	body := batch.WriteRaw(client.ID, 0, count, payload)
+	if err := gateway.transfersExchange.Send(middleware.Message{Body: string(body)}); err != nil {
+		slog.Debug("While sending transfers batch", "err", err)
+		return err
 	}
-	gateway.addCount(gateway.transfersCount, client.ID, uint32(len(trans)))
+	gateway.addCount(gateway.transfersCount, client.ID, uint32(count))
+
 	return nil
 }
 
 func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState) error {
 	total := gateway.takeCount(gateway.accountsCount, client.ID)
 	slog.Info("Received EOF message", "kind", "accounts", "client_id", client.ID, "total", total)
-	return gateway.sendEOF(client, "accounts", total, gateway.accountQueues...)
+	return gateway.sendEOF(client.ID, total, gateway.accountQueues...)
 }
 
 func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState) error {
 	total := gateway.takeCount(gateway.transfersCount, client.ID)
 	slog.Info("Received EOF message", "kind", "transfers", "client_id", client.ID, "total", total)
-	return gateway.sendEOF(client, "transfers", total, gateway.transfersExchange)
+	return gateway.sendEOF(client.ID, total, gateway.transfersExchange)
 }

@@ -11,7 +11,8 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/daterange"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/summethod"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/shard"
@@ -170,18 +171,20 @@ func (s *SumByPaymentFormat) close() {
 func (s *SumByPaymentFormat) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[transfer.TransferForQ3Avg](&msg)
+	input, err := daterange.Read([]byte(msg.Body))
 	if err != nil {
-		slog.Error("While deserializing message", "err", err)
+		slog.Error("While deserializing input batch", "err", err)
 		return
 	}
 
-	if result.IsEOF() {
-		s.handleEOF(*result)
+	if input.EOF {
+		s.handleEOF(input.ClientID, input.Total)
 		return
 	}
 
-	s.handleRecord(result.ClientID, result.Payload)
+	for i := range input.Records {
+		s.handleRecord(input.ClientID, input.Records[i])
+	}
 }
 
 func (s *SumByPaymentFormat) handleRecord(clientID int, t transfer.TransferForQ3Avg) {
@@ -210,42 +213,34 @@ func (s *SumByPaymentFormat) handleRecord(clientID int, t transfer.TransferForQ3
 	s.msgMonitor.AddProcessedMessagesAmountByClientId(clientID, 1)
 }
 
-func (s *SumByPaymentFormat) handleEOF(data inner.DataMsg[transfer.TransferForQ3Avg]) {
+func (s *SumByPaymentFormat) handleEOF(clientID int, total uint32) {
 	ringMsg := eofmessagetypes.EofRingMessage{
-		RealAmount:     data.EOF.TotalMessages,
-		ActualAmount:   s.msgMonitor.GetProcessedMessagesAmountByClientId(data.ClientID),
-		ClientId:       data.ClientID,
+		RealAmount:     total,
+		ActualAmount:   s.msgMonitor.GetProcessedMessagesAmountByClientId(clientID),
+		ClientId:       clientID,
 		CoordinatorId:  uint32(s.id),
-		FilteredAmount: s.msgMonitor.GetForwardedMessagesAmountByClientId(data.ClientID),
+		FilteredAmount: s.msgMonitor.GetForwardedMessagesAmountByClientId(clientID),
 	}
-	serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
-	if err != nil {
-		slog.Error("While serializing EOF ring message", "err", err)
-		return
-	}
-	if err := s.eofOutput.Send(*serialized); err != nil {
+	if err := s.eofOutput.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(ringMsg))}); err != nil {
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 		return
 	}
 }
 
-func (s *SumByPaymentFormat) onRingConverged(clientID int, msg *middleware.Message, isCoordinator bool) error {
+func (s *SumByPaymentFormat) onRingConverged(clientID int, total uint32, isCoordinator bool) error {
 	s.mu.Lock()
 	byMethod := s.acumuladores[clientID]
 	delete(s.acumuladores, clientID)
 	s.mu.Unlock()
 
+	byShard := make(map[int][]transfer.SumByMethod)
 	for method, partial := range byMethod {
-		out, err := inner.SerializeData(inner.DataMsg[transfer.SumByMethod]{
-			Payload:  partial,
-			ClientID: clientID,
-			QueryID:  s.queryID,
-		})
-		if err != nil {
-			return err
-		}
 		idx := shard.CalculateIndexForShard(clientID, method, len(s.outputQueues))
-		if err := s.outputQueues[idx].Send(*out); err != nil {
+		byShard[idx] = append(byShard[idx], partial)
+	}
+	for idx, group := range byShard {
+		body := summethod.WriteBatch(clientID, s.queryID, group)
+		if err := s.outputQueues[idx].Send(middleware.Message{Body: string(body)}); err != nil {
 			return err
 		}
 	}
@@ -253,8 +248,9 @@ func (s *SumByPaymentFormat) onRingConverged(clientID int, msg *middleware.Messa
 	if !isCoordinator {
 		return nil
 	}
+	eofBody := summethod.WriteEOF(clientID, s.queryID, total)
 	for _, q := range s.outputQueues {
-		if err := q.Send(*msg); err != nil {
+		if err := q.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 			return err
 		}
 	}

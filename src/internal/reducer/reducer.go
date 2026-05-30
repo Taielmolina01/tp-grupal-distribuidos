@@ -8,7 +8,8 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/shard"
@@ -22,6 +23,8 @@ func newReducer[T, O comparable](
 	reducerFunction func(T, T) T,
 	keyFunc func(T) string,
 	projectFunc func(T) O,
+	inputCodec wire.Codec[T],
+	outputCodec wire.Codec[O],
 	queryId uint8,
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
@@ -100,6 +103,8 @@ func newReducer[T, O comparable](
 		inputEofsExpected: config.InputEofsExpected,
 		inputEofCount:     map[int]int{},
 		totalRealAmount:   map[int]uint32{},
+		inputCodec:        inputCodec,
+		outputCodec:       outputCodec,
 	}
 
 	eofHandler := eofring.CreateEofRingAlgorithm(
@@ -108,27 +113,24 @@ func newReducer[T, O comparable](
 		config.ReducerAmount,
 		uint32(config.Id),
 		handlerMessages,
-		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+		func(clientID int, total uint32, isCoordinator bool) error {
 			values := reducer.reducerMonitor.GetValuesCopyByClientIdAndDelete(clientID)
+
+			byShard := make(map[int][]O)
 			for _, v := range values {
-				msgOutput, err := inner.SerializeData(inner.DataMsg[O]{
-					Payload:  projectFunc(v),
-					ClientID: clientID,
-					QueryID:  reducer.queryId,
-				})
-				if err != nil {
-					return err
-				}
-				if err := reducer.outputQueues[shard.CalculateIndexForShard(
-					clientID,
-					keyFunc(v),
-					len(reducer.outputQueues))].Send(*msgOutput); err != nil {
+				idx := shard.CalculateIndexForShard(clientID, keyFunc(v), len(reducer.outputQueues))
+				byShard[idx] = append(byShard[idx], projectFunc(v))
+			}
+			for idx, group := range byShard {
+				body := batch.Write(clientID, reducer.queryId, group, reducer.outputCodec)
+				if err := reducer.outputQueues[idx].Send(middleware.Message{Body: string(body)}); err != nil {
 					return err
 				}
 			}
 
+			eofBody := batch.WriteEOF(clientID, reducer.queryId, total)
 			for _, outputQueue := range reducer.outputQueues {
-				if err := outputQueue.Send(*msg); err != nil {
+				if err := outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 					return err
 				}
 			}
@@ -145,7 +147,6 @@ func newReducer[T, O comparable](
 	return reducer, nil
 }
 
-
 func (reducer *Reducer[T, O]) Run() {
 	defer reducer.close()
 	go reducer.eofHandler.Run()
@@ -159,51 +160,41 @@ func (reducer *Reducer[T, O]) Run() {
 func (reducer *Reducer[T, O]) handleMessage(msg middleware.Message, ack func(), nack func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[T](&msg)
-
+	input, err := batch.Read([]byte(msg.Body), reducer.inputCodec)
 	if err != nil {
-		slog.Error("While deserializing message", "err", err)
+		slog.Error("While deserializing input batch", "err", err)
 		nack()
 		return
 	}
 
-	if result.IsEOF() {
-		reducer.inputEofCount[result.ClientID]++
-		reducer.totalRealAmount[result.ClientID] = result.EOF.TotalMessages
+	if input.EOF {
+		reducer.handleEOF(input.ClientID, input.Total)
+		return
+	}
 
-		eofRingMessage := eofmessagetypes.EofRingMessage{
-			RealAmount:     reducer.totalRealAmount[result.ClientID],
-			ActualAmount:   reducer.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
-			ClientId:       result.ClientID,
-			CoordinatorId:  uint32(reducer.id),
-			FilteredAmount: reducer.handlerMessages.GetForwardedMessagesAmountByClientId(result.ClientID),
-		}
-		delete(reducer.inputEofCount, result.ClientID)
-		delete(reducer.totalRealAmount, result.ClientID)
-
-		serializedEofRingMessage, err := inner.SerializeEofFromQueueMsg(eofRingMessage)
-
-		if err != nil {
-			slog.Error("While serializing EOF message", "err", err)
-			return
-		}
-
-		if err := reducer.outputQueueEof.Send(
-			*serializedEofRingMessage,
-		); err != nil {
-			slog.Error("While sending EOF message to EOF ring", "err", err)
-		}
-	} else {
-		key := reducer.keyFunc(result.Payload)
-
+	for i := range input.Records {
+		record := input.Records[i]
 		reducer.reducerMonitor.AddValue(
-			result.ClientID,
-			key,
-			result.Payload,
+			input.ClientID,
+			reducer.keyFunc(record),
+			record,
 			reducer.reducerFunction,
 		)
 	}
+}
 
+func (reducer *Reducer[T, O]) handleEOF(clientID int, total uint32) {
+	eofRingMessage := eofmessagetypes.EofRingMessage{
+		RealAmount:     total,
+		ActualAmount:   reducer.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
+		ClientId:       clientID,
+		CoordinatorId:  uint32(reducer.id),
+		FilteredAmount: reducer.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
+	}
+
+	if err := reducer.outputQueueEof.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(eofRingMessage))}); err != nil {
+		slog.Error("While sending EOF message to EOF ring", "err", err)
+	}
 }
 
 func (reducer *Reducer[T, O]) HandleSignals() {
@@ -215,7 +206,6 @@ func (reducer *Reducer[T, O]) HandleSignals() {
 		slog.Error("while closing reducer", "err", err)
 	}
 }
-
 
 func (reducer *Reducer[T, O]) close() error {
 	if err := reducer.inputExchange.Close(); err != nil {

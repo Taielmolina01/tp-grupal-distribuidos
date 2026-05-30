@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/eofring"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -52,7 +53,7 @@ type FilterConfig struct {
 	Quote                 string
 }
 
-type Filter[T comparable, O comparable] struct {
+type Filter[T any, O any] struct {
 	id              uint32
 	inputExchange   middleware.Middleware
 	outputExchange  middleware.Middleware
@@ -63,6 +64,8 @@ type Filter[T comparable, O comparable] struct {
 	filterType      FilterType
 	outputTransform func(T) O
 	queryId         uint8
+	inputCodec      wire.Codec[T]
+	outputCodec     wire.Codec[O]
 }
 
 type FilterAndSplitter struct {
@@ -81,6 +84,8 @@ type DistinctFilter[T comparable, S comparable] struct {
 	compareFunc   func(T, T) bool
 	keyFunc       func(T) S
 	shardCriteria func(T) string
+	codec         wire.Codec[T]
+	queryId       uint8
 }
 
 type ConvertedAmountFilter[T, S, O comparable] struct {
@@ -110,4 +115,10 @@ type ConvertedAmountFilter[T, S, O comparable] struct {
 	fileMutexesMu      sync.Mutex
 	mapMutex           sync.Mutex
 	transformToOutput  func() O
+
+	leftCodec   wire.Codec[S]
+	rightCodec  wire.Codec[T]
+	outputCodec wire.Codec[O]
+	pending     map[int][]O
+	pendingMu   sync.Mutex
 }

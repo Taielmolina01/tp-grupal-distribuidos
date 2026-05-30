@@ -3,6 +3,7 @@ package join
 import (
 	"sync"
 
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 )
 
@@ -27,8 +28,10 @@ type JoinConfig struct {
 
 type Join[L, R, O any] struct {
 	output      middleware.Middleware
+	outputCodec wire.Codec[O]
 	leftBuffer  map[int]map[string]L //{clientID : {key : data}}
 	rightBuffer map[int]map[string]R //{clientID : {key : data}}
+	pending     map[int][]O
 	leftKey     func(L) string
 	rightKey    func(R) string
 	combine     func(L, R) O

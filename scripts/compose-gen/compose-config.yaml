@@ -13,6 +13,7 @@ join_q2: 2
 
 # Query 4:
 filter_and_splitter_q4: 2
+pre_filter_q4: 2
 join_accounts_q4: 2
 acum_accounts_q4: 2
 filter_account_seen_q4: 2

@@ -2,6 +2,7 @@ package reducer
 
 import (
 	"tp-grupal-distribuidos/internal/common/eofring"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 )
@@ -43,6 +44,8 @@ type Reducer[T, O comparable] struct {
 	inputEofsExpected int
 	inputEofCount     map[int]int
 	totalRealAmount   map[int]uint32
+	inputCodec        wire.Codec[T]
+	outputCodec       wire.Codec[O]
 }
 
 type CountReducer struct {

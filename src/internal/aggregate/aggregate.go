@@ -11,7 +11,8 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/summethod"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -174,18 +175,20 @@ func (a *AvgAggregator) close() {
 func (a *AvgAggregator) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[transfer.SumByMethod](&msg)
+	input, err := summethod.Read([]byte(msg.Body))
 	if err != nil {
-		slog.Error("While deserializing message", "err", err)
+		slog.Error("While deserializing input batch", "err", err)
 		return
 	}
 
-	if result.IsEOF() {
-		a.handleEOF(*result)
+	if input.EOF {
+		a.handleEOF(input.ClientID, input.Total)
 		return
 	}
 
-	a.handleRecord(result.ClientID, result.Payload)
+	for i := range input.Records {
+		a.handleRecord(input.ClientID, input.Records[i])
+	}
 }
 
 func (a *AvgAggregator) handleRecord(clientID int, p transfer.SumByMethod) {
@@ -212,49 +215,40 @@ func (a *AvgAggregator) handleRecord(clientID int, p transfer.SumByMethod) {
 	a.msgMonitor.AddProcessedMessagesAmountByClientId(clientID, 1)
 }
 
-func (a *AvgAggregator) handleEOF(data inner.DataMsg[transfer.SumByMethod]) {
+func (a *AvgAggregator) handleEOF(clientID int, total uint32) {
 	ringMsg := eofmessagetypes.EofRingMessage{
-		RealAmount:     data.EOF.TotalMessages,
-		ActualAmount:   a.msgMonitor.GetProcessedMessagesAmountByClientId(data.ClientID),
-		ClientId:       data.ClientID,
+		RealAmount:     total,
+		ActualAmount:   a.msgMonitor.GetProcessedMessagesAmountByClientId(clientID),
+		ClientId:       clientID,
 		CoordinatorId:  uint32(a.id),
-		FilteredAmount: a.msgMonitor.GetForwardedMessagesAmountByClientId(data.ClientID),
+		FilteredAmount: a.msgMonitor.GetForwardedMessagesAmountByClientId(clientID),
 	}
-	serialized, err := inner.SerializeEofFromQueueMsg(ringMsg)
-	if err != nil {
-		slog.Error("While serializing EOF ring message", "err", err)
-		return
-	}
-	if err := a.eofOutput.Send(*serialized); err != nil {
+	if err := a.eofOutput.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(ringMsg))}); err != nil {
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 		return
 	}
 }
 
-func (a *AvgAggregator) onRingConverged(clientID int, msg *middleware.Message, isCoordinator bool) error {
+func (a *AvgAggregator) onRingConverged(clientID int, total uint32, isCoordinator bool) error {
 	a.mu.Lock()
 	byMethod := a.acumuladores[clientID]
 	delete(a.acumuladores, clientID)
 	a.mu.Unlock()
 
+	avgs := make([]transfer.AvgByMethod, 0, len(byMethod))
 	for method, p := range byMethod {
 		if p.totalCount == 0 {
 			continue
 		}
-		avg := transfer.AvgByMethod{
+		avgs = append(avgs, transfer.AvgByMethod{
 			Method: method,
 			Avg:    p.totalSum / float64(p.totalCount),
-		}
-		out, err := inner.SerializeData(inner.DataMsg[transfer.AvgByMethod]{
-			Payload:  avg,
-			ClientID: clientID,
-			QueryID:  a.queryID,
 		})
-		if err != nil {
-			return err
-		}
+	}
+	if len(avgs) > 0 {
+		body := avgmethod.WriteBatch(clientID, a.queryID, avgs)
 		for _, q := range a.outputQueues {
-			if err := q.Send(*out); err != nil {
+			if err := q.Send(middleware.Message{Body: string(body)}); err != nil {
 				return err
 			}
 		}
@@ -263,8 +257,9 @@ func (a *AvgAggregator) onRingConverged(clientID int, msg *middleware.Message, i
 	if !isCoordinator {
 		return nil
 	}
+	eofBody := avgmethod.WriteEOF(clientID, a.queryID, total)
 	for _, q := range a.outputQueues {
-		if err := q.Send(*msg); err != nil {
+		if err := q.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 			return err
 		}
 	}

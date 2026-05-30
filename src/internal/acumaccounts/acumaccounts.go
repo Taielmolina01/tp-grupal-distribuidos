@@ -8,9 +8,8 @@ import (
 	"strconv"
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/eofmessage"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountchain"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/shard"
 )
@@ -34,7 +33,7 @@ type AcumAccountsConfig struct {
 
 type clientState struct {
 	eofAmt int
-	acum   map[string]int8
+	acum   map[account.AccountPair]int8
 }
 
 type AcumAccounts struct {
@@ -122,37 +121,27 @@ func (a *AcumAccounts) close() {
 
 func (a *AcumAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[account.AccountChainBatch](&middleware.Message{Body: msg.Body})
-
+	input, err := accountchain.Read([]byte(msg.Body))
 	if err != nil {
-		slog.Error("While deserializing pipeline message", "err", err)
+		slog.Error("While deserializing input batch", "err", err)
 		return
 	}
 
-	if m.IsEOF() {
-		a.handleEOF(*m)
+	if input.EOF {
+		a.handleEOF(input.ClientID, input.Total)
 		return
 	}
 
 	outgoing := map[string][]account.AccountIdentifier{}
-	for _, chain := range m.Payload.Items {
-		for rk, ids := range a.collectRecord(m.ClientID, chain) {
+	for i := range input.Records {
+		for rk, ids := range a.collectRecord(input.ClientID, input.Records[i]) {
 			outgoing[rk] = append(outgoing[rk], ids...)
 		}
 	}
 
 	for routingKey, ids := range outgoing {
-		batch := account.AccountIdentifierBatch{Items: ids}
-		out, err := inner.SerializeData(inner.DataMsg[account.AccountIdentifierBatch]{
-			ClientID: m.ClientID,
-			QueryID:  uint8(a.queryID),
-			Payload:  batch,
-		})
-		if err != nil {
-			slog.Error("While serializing output batch", "err", err)
-			continue
-		}
-		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: out.Body, RoutingKey: routingKey}); err != nil {
+		body := accountid.WriteBatch(input.ClientID, uint8(a.queryID), ids)
+		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: string(body), RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output batch", "err", err)
 		}
 	}
@@ -161,15 +150,15 @@ func (a *AcumAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 func (a *AcumAccounts) collectRecord(clientID int, record account.AccountChain) map[string][]account.AccountIdentifier {
 	state := a.stateFor(clientID)
 
-	key := record.Left.GetKey() + "_" + record.Right.GetKey()
+	pair := account.AccountPair{Left: record.Left, Right: record.Right}
 
-	if state.acum[key] >= a.requiredAmt {
+	if state.acum[pair] >= a.requiredAmt {
 		return nil
 	}
 
-	state.acum[key]++
+	state.acum[pair]++
 
-	if state.acum[key] < a.requiredAmt {
+	if state.acum[pair] < a.requiredAmt {
 		return nil
 	}
 
@@ -186,33 +175,28 @@ func (a *AcumAccounts) collectRecord(clientID int, record account.AccountChain) 
 	return result
 }
 
-func (a *AcumAccounts) handleEOF(data inner.DataMsg[account.AccountChainBatch]) {
-	state := a.stateFor(data.ClientID)
+func (a *AcumAccounts) handleEOF(clientID int, total uint32) {
+	state := a.stateFor(clientID)
 	state.eofAmt++
 
 	if state.eofAmt < a.expectedEOFs {
 		return
 	}
 
-	msg, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(a.queryID)})
-	if err != nil {
-		slog.Error("While serializing EOF message", "err", err)
-		return
-	}
-
-	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
+	eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), total)
+	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: string(eofBody), RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 
 	clear(state.acum)
-	delete(a.clientsState, data.ClientID)
+	delete(a.clientsState, clientID)
 }
 
 func (a *AcumAccounts) stateFor(clientID int) *clientState {
 	st, ok := a.clientsState[clientID]
 	if !ok {
 		st = &clientState{
-			acum: map[string]int8{},
+			acum: map[account.AccountPair]int8{},
 		}
 		a.clientsState[clientID] = st
 	}
