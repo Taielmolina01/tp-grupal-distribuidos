@@ -5,10 +5,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
-	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
@@ -60,54 +60,37 @@ func (count *CountReducer) Run() {
 
 func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func()) {
 	defer ack()
-	deserialized, err := inner.DeserializeData[transfer.FinalTransferForQ5](&msg)
+	input, err := batch.Read([]byte(msg.Body), records.FinalTransferForQ5Codec)
 	if err != nil {
-		slog.Error("while deserializing message", "err", err)
+		slog.Error("while deserializing input batch", "err", err)
 		return
 	}
 
-	if !deserialized.IsEOF() {
-		count.countByClient[deserialized.ClientID]++
-	} else {
-		if count.eofsByClient[deserialized.ClientID]++; count.eofsByClient[deserialized.ClientID] < count.inputEofsExpected {
-			return
-		}
-
-		result, err := inner.SerializeData(inner.DataMsg[queryresult.Query5Result]{
-			Payload: queryresult.Query5Result{
-				Qty: count.countByClient[deserialized.ClientID],
-			},
-			QueryID:  count.queryId,
-			EOF:      nil,
-			ClientID: deserialized.ClientID,
-		})
-		if err != nil {
-			slog.Error("while serializing EOF message", "err", err)
-			return
-		}
-		if err := count.outputQueue.Send(*result); err != nil {
-			slog.Error("while sending EOF message", "err", err)
-		}
-
-		result, err = inner.SerializeData(inner.DataMsg[queryresult.Query5Result]{
-			QueryID: count.queryId,
-			EOF: &inner.EOFInfo{
-				TotalMessages: 1,
-			},
-			ClientID: deserialized.ClientID,
-		})
-
-		if err != nil {
-			slog.Error("while serializing EOF message", "err", err)
-			return
-		}
-		if err := count.outputQueue.Send(*result); err != nil {
-			slog.Error("while sending EOF message", "err", err)
-		}
-
-		delete(count.countByClient, deserialized.ClientID)
+	if !input.EOF {
+		count.countByClient[input.ClientID] += uint32(len(input.Records))
+		return
 	}
 
+	if count.eofsByClient[input.ClientID]++; count.eofsByClient[input.ClientID] < count.inputEofsExpected {
+		return
+	}
+
+	resultBody := batch.Write(
+		input.ClientID,
+		count.queryId,
+		[]queryresult.Query5Result{{Qty: count.countByClient[input.ClientID]}},
+		records.Query5ResultCodec,
+	)
+	if err := count.outputQueue.Send(middleware.Message{Body: string(resultBody)}); err != nil {
+		slog.Error("while sending result message", "err", err)
+	}
+
+	eofBody := batch.WriteEOF(input.ClientID, count.queryId, 1)
+	if err := count.outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
+		slog.Error("while sending EOF message", "err", err)
+	}
+
+	delete(count.countByClient, input.ClientID)
 }
 
 func (count *CountReducer) HandleSignals() {

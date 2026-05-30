@@ -12,7 +12,8 @@ import (
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -57,6 +58,9 @@ func newConvertedAmountFilter[T, S, O comparable](
 	fromSaveFunc func(string) (T, int, error),
 	toIgnoreFunc func(T) bool,
 	transformToOutputType func() O,
+	leftCodec wire.Codec[S],
+	rightCodec wire.Codec[T],
+	outputCodec wire.Codec[O],
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{
 		Hostname: config.MomHost,
@@ -128,24 +132,7 @@ func newConvertedAmountFilter[T, S, O comparable](
 
 	messagesMonitor := msgmonitor.NewMessageMonitor()
 
-	eofring := eofring.CreateEofRingAlgorithm(
-		eofInput, eofOutput,
-		config.FilterAmount,
-		uint32(config.Id),
-		messagesMonitor,
-		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
-			if isCoordinator {
-				if err := outputQueue.Send(*msg); err != nil {
-					slog.Error("while sending message to output queue from ring callback", "err", err)
-					return err
-				}
-			}
-			return nil
-		},
-		config.QueryId,
-	)
-
-	return &ConvertedAmountFilter[T, S, O]{
+	filter := &ConvertedAmountFilter[T, S, O]{
 		leftInputQueue:     leftInputQueue,
 		rightInputQueue:    rightInputQueue,
 		outputQueue:        outputQueue,
@@ -161,7 +148,6 @@ func newConvertedAmountFilter[T, S, O comparable](
 		conversionFunc:     conversionFunc,
 		toSaveFunc:         toSaveFunc,
 		fromSaveFunc:       fromSaveFunc,
-		eofRing:            eofring,
 		eofOutputQueue:     eofOutput,
 		handlerMessages:    messagesMonitor,
 		id:                 uint32(config.Id),
@@ -172,7 +158,53 @@ func newConvertedAmountFilter[T, S, O comparable](
 		fileMutexesMu:      sync.Mutex{},
 		mapMutex:           sync.Mutex{},
 		transformToOutput:  transformToOutputType,
-	}, nil
+		leftCodec:          leftCodec,
+		rightCodec:         rightCodec,
+		outputCodec:        outputCodec,
+		pending:            map[int][]O{},
+	}
+
+	filter.eofRing = eofring.CreateEofRingAlgorithm(
+		eofInput, eofOutput,
+		config.FilterAmount,
+		uint32(config.Id),
+		messagesMonitor,
+		func(clientID int, total uint32, isCoordinator bool) error {
+			if !isCoordinator {
+				return nil
+			}
+			filter.flush(clientID)
+			if err := outputQueue.Send(middleware.Message{Body: string(batch.WriteEOF(clientID, config.QueryId, total))}); err != nil {
+				slog.Error("while sending message to output queue from ring callback", "err", err)
+				return err
+			}
+			return nil
+		},
+		config.QueryId,
+	)
+
+	return filter, nil
+}
+
+func (filter *ConvertedAmountFilter[T, S, O]) emit(clientID int, o O) {
+	filter.pendingMu.Lock()
+	filter.pending[clientID] = append(filter.pending[clientID], o)
+	filter.pendingMu.Unlock()
+}
+
+func (filter *ConvertedAmountFilter[T, S, O]) flush(clientID int) {
+	filter.pendingMu.Lock()
+	results := filter.pending[clientID]
+	delete(filter.pending, clientID)
+	filter.pendingMu.Unlock()
+
+	if len(results) == 0 {
+		return
+	}
+	body := batch.Write(clientID, filter.queryId, results, filter.outputCodec)
+	if err := filter.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
+		slog.Error("while sending results batch", "err", err)
+	}
 }
 
 func (filter *ConvertedAmountFilter[T, S, O]) Run() {
@@ -195,107 +227,79 @@ func (filter *ConvertedAmountFilter[T, S, O]) Run() {
 func (filter *ConvertedAmountFilter[T, S, O]) consumeLeft(msg middleware.Message, ack, _ func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[S](&msg)
+	input, err := batch.Read([]byte(msg.Body), filter.leftCodec)
 	if err != nil {
-		slog.Error("while deserializing transfer", "err", err)
+		slog.Error("while deserializing left batch", "err", err)
 		return
 	}
-	if result.IsEOF() {
-		msgToOutput, err := inner.SerializeData(inner.DataMsg[any]{
-			ClientID: result.ClientID,
-			EOF:      &inner.EOFInfo{},
-			Payload:  nil,
-			QueryID:  result.QueryID,
-		})
-		if err != nil {
-			slog.Error("while serializing message for finish callback", "client_id", result.ClientID, "err", err)
-		} else {
-			if err := filter.outputQueue.Send(*msgToOutput); err != nil {
-				slog.Error("while calling finish callback", "client_id", result.ClientID, "err", err)
-				return
-			}
+	if input.EOF {
+		filter.flush(input.ClientID)
+		if err := filter.outputQueue.Send(middleware.Message{Body: string(batch.WriteEOF(input.ClientID, filter.queryId, input.Total))}); err != nil {
+			slog.Error("while forwarding left EOF", "client_id", input.ClientID, "err", err)
 		}
 		return
 	}
 
-	filter.mapMutex.Lock()
-	if _, ok := filter.conversionsByDay[filter.leftKeyFunc(result.Payload)]; !ok {
-		filter.conversionsByDay[filter.leftKeyFunc(result.Payload)] = make(map[string]float64)
+	for i := range input.Records {
+		payload := input.Records[i]
+		filter.mapMutex.Lock()
+		if _, ok := filter.conversionsByDay[filter.leftKeyFunc(payload)]; !ok {
+			filter.conversionsByDay[filter.leftKeyFunc(payload)] = make(map[string]float64)
+		}
+		filter.conversionsByDay[filter.leftKeyFunc(payload)][filter.leftSecondKeyFunc(payload)] = filter.leftValueFunc(payload)
+		filter.mapMutex.Unlock()
+		filter.CheckTransfersWithoutConversion(payload)
 	}
-
-	filter.conversionsByDay[filter.leftKeyFunc(result.Payload)][filter.leftSecondKeyFunc(result.Payload)] = filter.leftValueFunc(result.Payload)
-	filter.mapMutex.Unlock()
-	filter.CheckTransfersWithoutConversion(result.Payload)
 }
 
 func (filter *ConvertedAmountFilter[T, S, O]) consumeRight(msg middleware.Message, ack, _ func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[T](&msg)
+	input, err := batch.Read([]byte(msg.Body), filter.rightCodec)
 	if err != nil {
-		slog.Error("while deserializing transfer", "err", err)
+		slog.Error("while deserializing right batch", "err", err)
 		return
 	}
 
-	if result.IsEOF() {
-		filter.closeClientFiles(result.ClientID)
+	if input.EOF {
+		filter.closeClientFiles(input.ClientID)
 		eofRingMessage := eofmessagetypes.EofRingMessage{
-			RealAmount:     result.EOF.TotalMessages,
-			ActualAmount:   filter.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
-			ClientId:       result.ClientID,
+			RealAmount:     input.Total,
+			ActualAmount:   filter.handlerMessages.GetProcessedMessagesAmountByClientId(input.ClientID),
+			ClientId:       input.ClientID,
 			CoordinatorId:  uint32(filter.id),
-			FilteredAmount: filter.handlerMessages.GetForwardedMessagesAmountByClientId(result.ClientID),
+			FilteredAmount: filter.handlerMessages.GetForwardedMessagesAmountByClientId(input.ClientID),
 		}
-		serializedEofRingMessage, err := inner.SerializeEofFromQueueMsg(eofRingMessage)
-		if err != nil {
-			slog.Error("While serializing EOF ring message", "err", err)
-			return
-		}
-		if err := filter.eofOutputQueue.Send(
-			*serializedEofRingMessage,
-		); err != nil {
+		if err := filter.eofOutputQueue.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(eofRingMessage))}); err != nil {
 			slog.Error("While sending EOF message to EOF ring", "err", err)
 		}
 		return
 	}
 
-	filter.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
+	for i := range input.Records {
+		filter.processRight(input.ClientID, input.Records[i])
+	}
+}
 
-	payload := result.Payload
+func (filter *ConvertedAmountFilter[T, S, O]) processRight(clientID int, payload T) {
+	filter.handlerMessages.AddProcessedMessagesAmountByClientId(clientID, 1)
 
-	key := filter.rightKeyFunc(payload)
-
-	if filter.toIgnoreFunc(result.Payload) {
+	if filter.toIgnoreFunc(payload) {
 		return
 	}
 
+	key := filter.rightKeyFunc(payload)
 	filter.mapMutex.Lock()
 	conversion, ok := filter.conversionsByDay[key][datasetToFrank[filter.rightsecondKeyFunc(payload)]]
 	filter.mapMutex.Unlock()
 
 	if ok || filter.rightsecondKeyFunc(payload) == filter.quote {
-		if filter.compareFunc(payload, filter.conversionFunc(
-			payload,
-			conversion,
-		)) || filter.rightValueFunc(payload) < filter.amountThreshold {
-			filter.handlerMessages.AddForwardedMessagesAmountByClientId(result.ClientID, 1)
-			msgOutput, err := inner.SerializeData(inner.DataMsg[O]{
-				ClientID: result.ClientID,
-				QueryID:  filter.queryId,
-				Payload:  filter.transformToOutput(),
-				EOF:      nil,
-			})
-			if err != nil {
-				slog.Error("while serializing message", "err", err)
-				return
-			}
-			if err := filter.outputQueue.Send(*msgOutput); err != nil {
-				slog.Error("while publishing message to output queue", "err", err)
-				return
-			}
+		if filter.compareFunc(payload, filter.conversionFunc(payload, conversion)) || filter.rightValueFunc(payload) < filter.amountThreshold {
+			filter.handlerMessages.AddForwardedMessagesAmountByClientId(clientID, 1)
+			filter.emit(clientID, filter.transformToOutput())
 		}
 	} else {
-		filter.saveTransfersInFile(payload, result.ClientID)
+		filter.saveTransfersInFile(payload, clientID)
 	}
 }
 
@@ -341,20 +345,7 @@ func (filter *ConvertedAmountFilter[T, S, O]) CheckTransfersWithoutConversion(s 
 			}
 
 			if filter.compareFunc(transfer, s) {
-				msgOutput, err := inner.SerializeData(inner.DataMsg[O]{
-					ClientID: clientID,
-					QueryID:  filter.queryId,
-					Payload:  filter.transformToOutput(),
-					EOF:      nil,
-				})
-				if err != nil {
-					slog.Error("while serializing message", "err", err)
-					return
-				}
-				if err := filter.outputQueue.Send(*msgOutput); err != nil {
-					slog.Error("while publishing message to output queue", "err", err)
-					return
-				}
+				filter.emit(clientID, filter.transformToOutput())
 			}
 		}
 	}
@@ -459,20 +450,7 @@ func (filter *ConvertedAmountFilter[T, S, O]) closeClientFiles(clientID int) {
 			)) {
 				remainingLines = append(remainingLines, line)
 			} else {
-				msgOutput, err := inner.SerializeData(inner.DataMsg[T]{
-					ClientID: cid,
-					QueryID:  filter.queryId,
-					Payload:  transfer,
-					EOF:      nil,
-				})
-				if err != nil {
-					slog.Error("while serializing saved transfer during cleanup", "file", filePath, "err", err)
-					continue
-				}
-				if err := filter.outputQueue.Send(*msgOutput); err != nil {
-					slog.Error("while sending saved transfer during cleanup", "file", filePath, "err", err)
-					continue
-				}
+				filter.emit(cid, filter.transformToOutput())
 				filter.handlerMessages.AddForwardedMessagesAmountByClientId(cid, 1)
 			}
 		}

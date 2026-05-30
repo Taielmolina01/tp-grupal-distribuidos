@@ -159,7 +159,9 @@ func getQuery3Result(inputDir string, n int, outPath string) error {
 }
 
 func getQuery4Result(inputDir string, n int, outPath string) error {
-	scatterMap := map[BankAcc]map[BankAcc]bool{}
+	outEdges := map[BankAcc]map[BankAcc]bool{}
+	inCount := map[BankAcc]int{}
+
 	if err := forEachTransaction(inputDir, n, func(t Transaction) error {
 		if t.PaymentCurrency != _USD_CURRENCY ||
 			t.Timestamp < _QUERY4_START_DATE || t.Timestamp >= _QUERY4_END_DATE {
@@ -167,61 +169,43 @@ func getQuery4Result(inputDir string, n int, outPath string) error {
 		}
 		a := BankAcc{t.FromBank, t.FromAccount}
 		b := BankAcc{t.ToBank, t.ToAccount}
-		dests := scatterMap[a]
-		if dests == nil {
-			dests = map[BankAcc]bool{}
-			scatterMap[a] = dests
+		if a == b {
+			return nil
 		}
-		dests[b] = true
+		if outEdges[a] == nil {
+			outEdges[a] = map[BankAcc]bool{}
+		}
+		if !outEdges[a][b] {
+			outEdges[a][b] = true
+			inCount[b]++
+		}
 		return nil
 	}); err != nil {
 		return err
 	}
-
-	reverseMap := map[BankAcc]map[BankAcc]bool{}
-	for src, dests := range scatterMap {
-		if len(dests) < _QUERY4_MIN_SCATTER {
-			continue
-		}
-		for mid := range dests {
-			sources := reverseMap[mid]
-			if sources == nil {
-				sources = map[BankAcc]bool{}
-				reverseMap[mid] = sources
-			}
-			sources[src] = true
-		}
-	}
-	scatterMap = nil
 
 	type pair struct{ S, D BankAcc }
 	chainMiddles := map[pair]map[BankAcc]bool{}
+	unique := map[BankAcc]bool{}
 
-	if err := forEachTransaction(inputDir, n, func(t Transaction) error {
-		if t.Timestamp < _QUERY4_START_DATE || t.Timestamp >= _QUERY4_END_DATE {
-			return nil
+	for a, mids := range outEdges {
+		if len(mids) < _QUERY4_MIN_SCATTER {
+			continue
 		}
-		a := BankAcc{t.FromBank, t.FromAccount}
-		sources, ok := reverseMap[a]
-		if !ok {
-			return nil
-		}
-		b := BankAcc{t.ToBank, t.ToAccount}
-		for src := range sources {
-			p := pair{src, b}
-			mids := chainMiddles[p]
-			if mids == nil {
-				mids = map[BankAcc]bool{}
-				chainMiddles[p] = mids
+		for b := range mids {
+			if outEdges[b] == nil {
+				continue
 			}
-			mids[a] = true
+			for c := range outEdges[b] {
+				p := pair{a, c}
+				if chainMiddles[p] == nil {
+					chainMiddles[p] = map[BankAcc]bool{}
+				}
+				chainMiddles[p][b] = true
+			}
 		}
-		return nil
-	}); err != nil {
-		return err
 	}
 
-	unique := map[BankAcc]bool{}
 	for p, mids := range chainMiddles {
 		if len(mids) >= _QUERY4_MIN_SCATTER {
 			unique[p.S] = true
@@ -250,7 +234,6 @@ func getQuery4Result(inputDir string, n int, outPath string) error {
 	}
 	return out.close()
 }
-
 func getQuery5Result(inputDir string, n int, rates map[string]map[string]float64, outPath string) error {
 	count := 0
 	if err := forEachTransaction(inputDir, n, func(t Transaction) error {

@@ -7,7 +7,8 @@ import (
 	"sync"
 	"syscall"
 
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -20,6 +21,8 @@ type TwoInputAdapter[L, R, O any] struct {
 	leftInput         middleware.Middleware
 	rightInput        middleware.Middleware
 	output            middleware.Middleware
+	leftCodec         wire.Codec[L]
+	rightCodec        wire.Codec[R]
 	leftEofCount      map[int]int
 	rightEofCount     map[int]int
 	leftEofsExpected  int
@@ -34,6 +37,9 @@ func newTwoInputJoin[L, R, O any](
 	rightKey func(R) string,
 	combine func(L, R) O,
 	leftCombine func(L, L) L,
+	leftCodec wire.Codec[L],
+	rightCodec wire.Codec[R],
+	outputCodec wire.Codec[O],
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
@@ -80,10 +86,12 @@ func newTwoInputJoin[L, R, O any](
 		id:                config.Id,
 		joinAmount:        config.Amount,
 		queryID:           config.QueryID,
-		join:              newJoin(output, leftKey, rightKey, combine, leftCombine, config.QueryID),
+		join:              newJoin(output, outputCodec, leftKey, rightKey, combine, leftCombine, config.QueryID),
 		leftInput:         leftInput,
 		rightInput:        rightInput,
 		output:            output,
+		leftCodec:         leftCodec,
+		rightCodec:        rightCodec,
 		leftEofCount:      map[int]int{},
 		rightEofCount:     map[int]int{},
 		leftEofsExpected:  leftEofs,
@@ -99,19 +107,21 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 	go func() {
 		if err := a.leftInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 			defer ack()
-			data, err := inner.DeserializeData[L](&msg)
+			input, err := batch.Read([]byte(msg.Body), a.leftCodec)
 			if err != nil {
-				slog.Error("while deserializing left message", "err", err)
+				slog.Error("while deserializing left batch", "err", err)
 				return
 			}
-			if data.IsEOF() {
+			if input.EOF {
 				a.lock.Lock()
-				a.leftEofCount[data.ClientID]++
+				a.leftEofCount[input.ClientID]++
 				a.lock.Unlock()
-				a.handleEOF(data.ClientID)
+				a.handleEOF(input.ClientID)
 				return
 			}
-			a.join.HandleLeft(data.ClientID, data.Payload)
+			for i := range input.Records {
+				a.join.HandleLeft(input.ClientID, input.Records[i])
+			}
 		}); err != nil {
 			slog.Error("while consuming left input", "err", err)
 		}
@@ -120,19 +130,21 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 
 	if err := a.rightInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		defer ack()
-		data, err := inner.DeserializeData[R](&msg)
+		input, err := batch.Read([]byte(msg.Body), a.rightCodec)
 		if err != nil {
-			slog.Error("while deserializing right message", "err", err)
+			slog.Error("while deserializing right batch", "err", err)
 			return
 		}
-		if data.IsEOF() {
+		if input.EOF {
 			a.lock.Lock()
-			a.rightEofCount[data.ClientID]++
+			a.rightEofCount[input.ClientID]++
 			a.lock.Unlock()
-			a.handleEOF(data.ClientID)
+			a.handleEOF(input.ClientID)
 			return
 		}
-		a.join.HandleRight(data.ClientID, data.Payload)
+		for i := range input.Records {
+			a.join.HandleRight(input.ClientID, input.Records[i])
+		}
 	}); err != nil {
 		slog.Error("while consuming right input", "err", err)
 	}
@@ -157,16 +169,8 @@ func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
 
 	a.join.HandleQueryEOF(clientID)
 
-	msgOut, err := inner.SerializeData(inner.DataMsg[any]{
-		ClientID: clientID,
-		EOF:      &inner.EOFInfo{Kind: "commit"},
-		QueryID:  a.queryID,
-	})
-	if err != nil {
-		slog.Error("while serializing join EOF", "err", err)
-		return
-	}
-	if err := a.output.Send(*msgOut); err != nil {
+	eofBody := batch.WriteEOF(clientID, a.queryID, 0)
+	if err := a.output.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 		slog.Error("while sending join EOF downstream", "err", err)
 	}
 }

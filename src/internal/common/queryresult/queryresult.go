@@ -1,6 +1,12 @@
 package queryresult
 
-import "tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+const (
+	Query1ID uint8 = 1
+	Query2ID uint8 = 2
+	Query3ID uint8 = 3
+	Query4ID uint8 = 4
+	Query5ID uint8 = 5
+)
 
 type Query1Result struct {
 	FromBank    string  `json:"from_bank"`
@@ -42,15 +48,8 @@ type BatchResults struct {
 }
 
 type QueryResult interface {
-	GetQueryId() uint8
 	GetHeaders() []string
 }
-
-func (q Query1Result) GetQueryId() uint8 { return inner.Query1ID }
-func (q Query2Result) GetQueryId() uint8 { return inner.Query2ID }
-func (q Query3Result) GetQueryId() uint8 { return inner.Query3ID }
-func (q Query4Result) GetQueryId() uint8 { return inner.Query4ID }
-func (q Query5Result) GetQueryId() uint8 { return inner.Query5ID }
 
 func (q Query1Result) GetHeaders() []string {
 	return []string{"From Bank", "Account", "To Bank", "Account.1", "Amount Paid"}

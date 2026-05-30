@@ -6,11 +6,13 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
+
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/eofmessage"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountchain"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/splittransfer"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -25,13 +27,23 @@ type JoinAccountsConfig struct {
 	MomHost string
 	MomPort int
 
-	InputMiddlewarePrefix string
-	QueryID               int
+	InputMiddlewarePrefix  string
+	QualifiedInputExchange string
+	PreFilterAmount        int
+
+	QueryID int
 }
 
 type clientState struct {
-	left  map[string]map[string]account.AccountPair
-	right map[string]map[string]account.AccountPair
+	left  map[account.AccountIdentifier]map[account.AccountIdentifier]account.AccountPair
+	right map[account.AccountIdentifier]map[account.AccountIdentifier]account.AccountPair
+
+	qualifyingLeft  map[account.AccountIdentifier]bool
+	qualifyingRight map[account.AccountIdentifier]bool
+
+	transferEOFReceived bool
+	transferEOFTotal    uint32
+	prefilterEOFCount   int
 }
 
 type JoinAccounts struct {
@@ -39,9 +51,13 @@ type JoinAccounts struct {
 
 	hasher shard.Hasher
 
-	inputMiddleware  newmiddleware.Middleware
-	outputMiddleware newmiddleware.Middleware
+	inputMiddleware     newmiddleware.Middleware
+	qualifiedMiddleware newmiddleware.Middleware
+	outputMiddleware    newmiddleware.Middleware
 
+	preFilterAmount int
+
+	mu           sync.Mutex
 	clientsState map[int]*clientState
 	queryID      int
 }
@@ -50,14 +66,18 @@ func NewJoinAccounts(config JoinAccountsConfig) (_ *JoinAccounts, err error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware  newmiddleware.Middleware
-		outputMiddleware newmiddleware.Middleware
+		inputMiddleware     newmiddleware.Middleware
+		qualifiedMiddleware newmiddleware.Middleware
+		outputMiddleware    newmiddleware.Middleware
 	)
 
 	defer func() {
 		if err != nil {
 			if outputMiddleware != nil {
 				outputMiddleware.Close()
+			}
+			if qualifiedMiddleware != nil {
+				qualifiedMiddleware.Close()
 			}
 			if inputMiddleware != nil {
 				inputMiddleware.Close()
@@ -73,28 +93,45 @@ func NewJoinAccounts(config JoinAccountsConfig) (_ *JoinAccounts, err error) {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
+	qualifiedQueue := fmt.Sprintf("%s_joinaccounts_%d", config.QualifiedInputExchange, config.Id)
+	qualifiedMiddleware, err = newmiddleware.NewFanoutMiddleware(connSettings, config.QualifiedInputExchange, qualifiedQueue)
+	if err != nil {
+		return nil, fmt.Errorf("creating qualified input middleware: %w", err)
+	}
+
 	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
 	return &JoinAccounts{
-		id:               config.Id,
-		hasher:           shard.New(config.OutputMiddlewareAmount),
-		queryID:          config.QueryID,
-		inputMiddleware:  inputMiddleware,
-		outputMiddleware: outputMiddleware,
-		clientsState:     map[int]*clientState{},
+		id:                  config.Id,
+		hasher:              shard.New(config.OutputMiddlewareAmount),
+		queryID:             config.QueryID,
+		inputMiddleware:     inputMiddleware,
+		qualifiedMiddleware: qualifiedMiddleware,
+		outputMiddleware:    outputMiddleware,
+		preFilterAmount:     config.PreFilterAmount,
+		clientsState:        map[int]*clientState{},
 	}, nil
 }
 
 func (j *JoinAccounts) Run() {
 	defer j.close()
+	go j.consumeQualified()
 
 	if err := j.inputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
 		j.handleInput(msg, ack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
+	}
+}
+
+func (j *JoinAccounts) consumeQualified() {
+	if err := j.qualifiedMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
+		j.handleQualifiedInput(msg, ack)
+	}); err != nil {
+		slog.Error("While consuming from qualified middleware", "err", err)
 	}
 }
 
@@ -104,115 +141,169 @@ func (j *JoinAccounts) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
+	j.qualifiedMiddleware.StopConsuming()
 	j.inputMiddleware.StopConsuming()
 }
 
 func (j *JoinAccounts) close() {
 	j.inputMiddleware.Close()
+	j.qualifiedMiddleware.Close()
 	j.outputMiddleware.Close()
 }
 
 func (j *JoinAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[transfer.SplittedTransfer](&middleware.Message{Body: msg.Body})
-
+	input, err := splittransfer.Read([]byte(msg.Body))
 	if err != nil {
-		slog.Error("While deserializing pipeline message", "err", err)
+		slog.Error("While deserializing input batch", "err", err)
 		return
 	}
 
-	if m.IsEOF() {
-		j.handleEOF(*m)
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	if input.EOF {
+		j.handleTransferEOF(input.ClientID, input.Total)
 		return
 	}
 
-	j.handleRecord(m.ClientID, m.Payload)
+	for i := range input.Records {
+		j.accumulate(input.ClientID, input.Records[i])
+	}
 }
 
-func (j *JoinAccounts) handleRecord(clientID int, record transfer.SplittedTransfer) {
-	var chains []account.AccountChain
+func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func()) {
+	defer ack()
+	input, err := qualifiedaccount.Read([]byte(msg.Body))
+	if err != nil {
+		slog.Error("While deserializing qualified accounts batch", "err", err)
+		return
+	}
+
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	if input.EOF {
+		j.handlePrefilterEOF(input.ClientID)
+		return
+	}
+
+	state := j.stateFor(input.ClientID)
+	for _, rec := range input.Records {
+		if rec.IsLeft {
+			state.qualifyingLeft[rec.Account] = true
+		} else {
+			state.qualifyingRight[rec.Account] = true
+		}
+	}
+}
+
+func (j *JoinAccounts) accumulate(clientID int, record transfer.SplittedTransfer) {
 	if record.IsLeftPart {
-		chains = j.handleLeftPartRecord(clientID, record)
+		j.accumulateLeft(clientID, record)
 	} else {
-		chains = j.handleRightPartRecord(clientID, record)
+		j.accumulateRight(clientID, record)
 	}
-	j.sendChains(clientID, chains)
 }
 
-func (j *JoinAccounts) handleLeftPartRecord(clientID int, record transfer.SplittedTransfer) []account.AccountChain {
+func (j *JoinAccounts) accumulateLeft(clientID int, record transfer.SplittedTransfer) {
 	identifier := account.AccountIdentifier{
 		BankID:        record.Transfer.FromBank,
 		AccountNumber: record.Transfer.FromBankAccount,
 	}
-	identifierKey := identifier.GetKey()
-
 	rightIdentifier := account.AccountIdentifier{
 		BankID:        record.Transfer.ToBank,
 		AccountNumber: record.Transfer.ToBankAccount,
 	}
-	rightIdentifierKey := rightIdentifier.GetKey()
 
 	state := j.stateFor(clientID)
-
-	accMap, ok := state.left[identifierKey]
+	accMap, ok := state.left[identifier]
 	if !ok {
-		accMap = map[string]account.AccountPair{}
-		state.left[identifierKey] = accMap
+		accMap = map[account.AccountIdentifier]account.AccountPair{}
+		state.left[identifier] = accMap
 	}
-
-	if _, ok = accMap[rightIdentifierKey]; ok {
-		return nil
-	}
-	accMap[rightIdentifierKey] = account.AccountPair{Left: identifier, Right: rightIdentifier}
-
-	accMapRight, ok := state.right[identifierKey]
-	if !ok {
-		return nil
-	}
-
-	chains := make([]account.AccountChain, 0, len(accMapRight))
-	for _, v := range accMapRight {
-		chains = append(chains, account.AccountChain{Left: v.Left, Middle: identifier, Right: rightIdentifier})
-	}
-	return chains
+	accMap[rightIdentifier] = account.AccountPair{Left: identifier, Right: rightIdentifier}
 }
 
-func (j *JoinAccounts) handleRightPartRecord(clientID int, record transfer.SplittedTransfer) []account.AccountChain {
+func (j *JoinAccounts) accumulateRight(clientID int, record transfer.SplittedTransfer) {
 	identifier := account.AccountIdentifier{
 		BankID:        record.Transfer.ToBank,
 		AccountNumber: record.Transfer.ToBankAccount,
 	}
-	identifierKey := identifier.GetKey()
-
 	leftIdentifier := account.AccountIdentifier{
 		BankID:        record.Transfer.FromBank,
 		AccountNumber: record.Transfer.FromBankAccount,
 	}
-	leftIdentifierKey := leftIdentifier.GetKey()
 
 	state := j.stateFor(clientID)
-
-	accMap, ok := state.right[identifierKey]
+	accMap, ok := state.right[identifier]
 	if !ok {
-		accMap = map[string]account.AccountPair{}
-		state.right[identifierKey] = accMap
+		accMap = map[account.AccountIdentifier]account.AccountPair{}
+		state.right[identifier] = accMap
+	}
+	accMap[leftIdentifier] = account.AccountPair{Left: leftIdentifier, Right: identifier}
+}
+
+func (j *JoinAccounts) handleTransferEOF(clientID int, total uint32) {
+	state := j.stateFor(clientID)
+	state.transferEOFReceived = true
+	state.transferEOFTotal = total
+	j.tryFinalize(clientID)
+}
+
+func (j *JoinAccounts) handlePrefilterEOF(clientID int) {
+	state := j.stateFor(clientID)
+	state.prefilterEOFCount++
+	j.tryFinalize(clientID)
+}
+
+func (j *JoinAccounts) tryFinalize(clientID int) {
+	state := j.stateFor(clientID)
+	if !state.transferEOFReceived || state.prefilterEOFCount < j.preFilterAmount {
+		return
+	}
+	j.finalize(clientID, state)
+}
+
+func (j *JoinAccounts) finalize(clientID int, state *clientState) {
+	var chains []account.AccountChain
+
+	for protagonistKey, rightMap := range state.right {
+		leftMap, ok := state.left[protagonistKey]
+		if !ok {
+			continue
+		}
+		for _, aPair := range rightMap {
+			if _, ok := state.qualifyingLeft[aPair.Left]; !ok {
+				continue
+			}
+			for _, cPair := range leftMap {
+				if _, ok := state.qualifyingRight[cPair.Right]; !ok {
+					continue
+				}
+				chains = append(chains, account.AccountChain{
+					Left:   aPair.Left,
+					Middle: aPair.Right,
+					Right:  cPair.Right,
+				})
+			}
+		}
 	}
 
-	if _, ok = accMap[leftIdentifierKey]; ok {
-		return nil
-	}
-	accMap[leftIdentifierKey] = account.AccountPair{Left: leftIdentifier, Right: identifier}
+	j.sendChains(clientID, chains)
 
-	accMapLeft, ok := state.left[identifierKey]
-	if !ok {
-		return nil
+	eofBody := accountchain.WriteEOF(clientID, uint8(j.queryID), state.transferEOFTotal)
+	if err := j.outputMiddleware.Send(newmiddleware.Message{Body: string(eofBody), RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
+		slog.Error("While sending EOF message", "err", err)
 	}
 
-	chains := make([]account.AccountChain, 0, len(accMapLeft))
-	for _, v := range accMapLeft {
-		chains = append(chains, account.AccountChain{Left: leftIdentifier, Middle: identifier, Right: v.Right})
-	}
-	return chains
+	for _, inner := range state.left  { clear(inner) }
+	for _, inner := range state.right { clear(inner) }
+	clear(state.left)
+	clear(state.right)
+	clear(state.qualifyingLeft)
+	clear(state.qualifyingRight)
+	delete(j.clientsState, clientID)
 }
 
 func (j *JoinAccounts) sendChains(clientID int, chains []account.AccountChain) {
@@ -224,47 +315,22 @@ func (j *JoinAccounts) sendChains(clientID int, chains []account.AccountChain) {
 		rk := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, chain.Left.GetKey(), chain.Right.GetKey()))
 		grouped[rk] = append(grouped[rk], chain)
 	}
-	for rk, batch := range grouped {
-		msg, err := inner.SerializeData(inner.DataMsg[account.AccountChainBatch]{
-			ClientID: clientID,
-			QueryID:  uint8(j.queryID),
-			Payload:  account.AccountChainBatch{Items: batch},
-		})
-		if err != nil {
-			slog.Error("While serializing chain batch", "err", err)
-			continue
-		}
-		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: rk}); err != nil {
+	for rk, group := range grouped {
+		body := accountchain.WriteBatch(clientID, uint8(j.queryID), group)
+		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: string(body), RoutingKey: rk}); err != nil {
 			slog.Error("While sending chain batch", "err", err)
 		}
 	}
-}
-
-func (j *JoinAccounts) handleEOF(data inner.DataMsg[transfer.SplittedTransfer]) {
-	msg, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(j.queryID)})
-	if err != nil {
-		slog.Error("While serializing EOF message", "err", err)
-		return
-	}
-
-	if err := j.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
-		slog.Error("While sending EOF message", "err", err)
-	}
-
-	state, ok := j.clientsState[data.ClientID]
-	if ok {
-		clear(state.left)
-		clear(state.right)
-	}
-	delete(j.clientsState, data.ClientID)
 }
 
 func (j *JoinAccounts) stateFor(clientID int) *clientState {
 	st, ok := j.clientsState[clientID]
 	if !ok {
 		st = &clientState{
-			left:  map[string]map[string]account.AccountPair{},
-			right: map[string]map[string]account.AccountPair{},
+			left:            map[account.AccountIdentifier]map[account.AccountIdentifier]account.AccountPair{},
+			right:           map[account.AccountIdentifier]map[account.AccountIdentifier]account.AccountPair{},
+			qualifyingLeft:  map[account.AccountIdentifier]bool{},
+			qualifyingRight: map[account.AccountIdentifier]bool{},
 		}
 		j.clientsState[clientID] = st
 	}

@@ -3,12 +3,14 @@ package join
 import (
 	"log/slog"
 
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 )
 
 func newJoin[L, R, O any](
 	output middleware.Middleware,
+	outputCodec wire.Codec[O],
 	leftKey func(L) string,
 	rightKey func(R) string,
 	combine func(L, R) O,
@@ -17,8 +19,10 @@ func newJoin[L, R, O any](
 ) *Join[L, R, O] {
 	return &Join[L, R, O]{
 		output:      output,
+		outputCodec: outputCodec,
 		leftBuffer:  map[int]map[string]L{},
 		rightBuffer: map[int]map[string]R{},
+		pending:     map[int][]O{},
 		leftKey:     leftKey,
 		rightKey:    rightKey,
 		combine:     combine,
@@ -74,8 +78,8 @@ func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
 
 	if leftMap, ok := j.leftBuffer[clientID]; ok {
 		if leftRecord, ok := leftMap[key]; ok {
-			j.mu.Unlock()
 			j.emit(clientID, j.combine(leftRecord, record))
+			j.mu.Unlock()
 			return
 		}
 	}
@@ -88,7 +92,6 @@ func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
 }
 
 func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
-
 	j.mu.Lock()
 	if j.leftCombine != nil {
 		leftMap := j.leftBuffer[clientID]
@@ -99,24 +102,21 @@ func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
 			}
 		}
 	}
+	results := j.pending[clientID]
+	delete(j.pending, clientID)
 	delete(j.leftBuffer, clientID)
 	delete(j.rightBuffer, clientID)
 	j.mu.Unlock()
+
+	if len(results) == 0 {
+		return
+	}
+	body := batch.Write(clientID, j.queryID, results, j.outputCodec)
+	if err := j.output.Send(middleware.Message{Body: string(body)}); err != nil {
+		slog.Error("while sending join results", "err", err)
+	}
 }
 
 func (j *Join[L, R, O]) emit(clientID int, result O) {
-	msg, err := inner.SerializeData(inner.DataMsg[O]{
-		ClientID: clientID,
-		QueryID:  j.queryID,
-		Payload:  result,
-	})
-	if err != nil {
-		slog.Error("while serializing result", "err", err)
-		return
-	}
-
-	// esto es un recurso compartido con 119
-	if err := j.output.Send(*msg); err != nil {
-		slog.Error("while sending result", "err", err)
-	}
+	j.pending[clientID] = append(j.pending[clientID], result)
 }

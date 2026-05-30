@@ -9,7 +9,8 @@ import (
 	"os/signal"
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
@@ -75,56 +76,51 @@ func (fetcher *Fetcher) Run() {
 func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[transfer.TransferForQ5](&msg)
+	input, err := batch.Read([]byte(msg.Body), records.TransferForQ5FilterCodec)
 	if err != nil {
-		slog.Error("while deserializing transfer", "err", err)
+		slog.Error("while deserializing input batch", "err", err)
 		return
 	}
 
-	if result.EOF != nil {
+	if input.EOF {
+		eofBody := batch.WriteEOF(input.ClientID, fetcher.queryId, input.Total)
 		for _, outputQueue := range fetcher.outputQueues {
-			if err := outputQueue.Send(msg); err != nil {
+			if err := outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 				slog.Error("while sending EOF to filter amount", "err", err)
 			}
 		}
 		return
 	}
 
-	transfer := result.Payload
-
-	today := transfer.Timestamp.Format(DATE_LAYOUT)
-	if _, ok := fetcher.conversionsByDay[today]; !ok {
+	var responses []fetcherresponse.FetcherResponse
+	for i := range input.Records {
+		t := input.Records[i]
+		today := t.Timestamp.Format(DATE_LAYOUT)
+		if _, ok := fetcher.conversionsByDay[today]; ok {
+			continue
+		}
 		fetcher.conversionsByDay[today] = make(map[string]float64)
-		if err := fetcher.fetchExchangeRate(transfer); err != nil {
+		if err := fetcher.fetchExchangeRate(t); err != nil {
 			slog.Error("while fetching exchange rate", "err", err)
-			return
+			continue
 		}
 		for base, rate := range fetcher.conversionsByDay[today] {
-			for _, outputQueue := range fetcher.outputQueues {
-				msgOutput, err := inner.SerializeData(inner.DataMsg[fetcherresponse.FetcherResponse]{
-					ClientID: result.ClientID,
-					QueryID:  fetcher.queryId,
-					Payload: fetcherresponse.FetcherResponse{
-						Date:  today,
-						Quote: base,
-						Rate:  rate,
-					},
-					EOF: nil,
-				})
-				if err != nil {
-					slog.Error("while serializing message", "err", err)
-					break
-				}
-				if err := outputQueue.Send(*msgOutput); err != nil {
-					slog.Error("while publishing message to output queue", "err", err)
-				}
-			}
+			responses = append(responses, fetcherresponse.FetcherResponse{Date: today, Quote: base, Rate: rate})
 		}
 	}
 
+	if len(responses) == 0 {
+		return
+	}
+	body := batch.Write(input.ClientID, fetcher.queryId, responses, records.FetcherResponseCodec)
+	for _, outputQueue := range fetcher.outputQueues {
+		if err := outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
+			slog.Error("while publishing batch to output queue", "err", err)
+		}
+	}
 }
 
-func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.TransferForQ5) error {
+func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.TransferForQ5Filter) error {
 	response, err := http.Get(fmt.Sprintf(FULL_ENDPOINT, fetcher.quote, transfer.Timestamp.Format("2006-01-02")))
 	if err != nil {
 		return err
