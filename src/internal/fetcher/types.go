@@ -14,14 +14,13 @@ type FetcherConfig struct {
 }
 
 type Fetcher struct {
-	inputQueue       middleware.Middleware
-	outputQueues     []middleware.Middleware
-	queryId          uint8
-	quote            string
-	conversionsByDay map[string]map[string]float64
+	inputQueue   middleware.Middleware
+	outputQueues []middleware.Middleware
+	queryId      uint8
+	quote        string
 }
 
-type apiResponseRates struct {
+type apiResponseRate struct {
 	Date  string  `json:"date"`
 	Base  string  `json:"base"`
 	Quote string  `json:"quote"`

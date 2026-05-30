@@ -1,7 +1,6 @@
 package filter
 
 import (
-	"sync"
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/eofring"
@@ -83,31 +82,15 @@ type DistinctFilter[T comparable, S comparable] struct {
 	shardCriteria func(T) string
 }
 
-type ConvertedAmountFilter[T, S, O comparable] struct {
-	leftInputQueue     middleware.Middleware
-	rightInputQueue    middleware.Middleware
-	outputQueue        middleware.Middleware
-	compareFunc        func(t T, s S) bool
-	queryId            uint8
-	leftKeyFunc        func(S) string
-	leftSecondKeyFunc  func(S) string
-	leftValueFunc      func(S) float64
-	rightKeyFunc       func(T) string
-	rightsecondKeyFunc func(T) string
-	rightValueFunc     func(T) float64
-	conversionFunc     func(T, float64) S
-	conversionsByDay   map[string]map[string]float64
-	toSaveFunc         func(T, int) string
-	fromSaveFunc       func(string) (T, int, error)
-	eofRing            eofring.EofRingAlgorithm
-	eofOutputQueue     middleware.Middleware
-	handlerMessages    msgmonitor.MessageMonitor
-	id                 uint32
-	toIgnoreFunc       func(T) bool
-	quote              string
-	amountThreshold    float64
-	fileMutexes        map[string]*sync.Mutex
-	fileMutexesMu      sync.Mutex
-	mapMutex           sync.Mutex
-	transformToOutput  func() O
+type ConvertedAmountFilter struct {
+	inputQueue       middleware.Middleware
+	outputQueue      middleware.Middleware
+	queryId          uint8
+	conversionsByDay map[string]map[string]float64
+	eofRing          eofring.EofRingAlgorithm
+	eofOutputQueue   middleware.Middleware
+	handlerMessages  msgmonitor.MessageMonitor
+	id               uint32
+	quote            string
+	amountThreshold  float64
 }

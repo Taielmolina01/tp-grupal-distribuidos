@@ -106,18 +106,18 @@ type TransferForQ5Filter struct {
 	AmountPaid float64   `json:"amount_paid"`
 }
 
-type FinalTransferForQ5 struct{}
-
-func ProjectForQ5(t Transfer) TransferForQ5 {
-	return TransferForQ5{Timestamp: t.Timestamp}
-}
-
 func ProjectForQ5Filter(t Transfer) TransferForQ5Filter {
 	return TransferForQ5Filter{
 		Timestamp:  t.Timestamp,
 		Currency:   t.ReceivingCurrency,
 		AmountPaid: t.AmountPaid,
 	}
+}
+
+type FinalTransferForQ5 struct{}
+
+func ProjectForQ5(t Transfer) TransferForQ5 {
+	return TransferForQ5{Timestamp: t.Timestamp}
 }
 
 func ProjectForQ5Final() FinalTransferForQ5 {

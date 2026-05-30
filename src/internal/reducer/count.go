@@ -67,11 +67,16 @@ func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func(
 	}
 
 	if !deserialized.IsEOF() {
+		slog.Info("msg received", "client_id", deserialized.ClientID, "actualcount", count.countByClient[deserialized.ClientID])
 		count.countByClient[deserialized.ClientID]++
 	} else {
 		if count.eofsByClient[deserialized.ClientID]++; count.eofsByClient[deserialized.ClientID] < count.inputEofsExpected {
+			slog.Info("eof received", "client_id", deserialized.ClientID, "actualcount", count.eofsByClient[deserialized.ClientID])
+
 			return
 		}
+
+		slog.Info("sending eof", "client_id", deserialized.ClientID, "count", count.countByClient[deserialized.ClientID])
 
 		result, err := inner.SerializeData(inner.DataMsg[queryresult.Query5Result]{
 			Payload: queryresult.Query5Result{

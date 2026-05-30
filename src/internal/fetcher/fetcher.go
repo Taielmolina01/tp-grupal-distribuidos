@@ -11,17 +11,35 @@ import (
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
-// https://frankfurter.dev/
 const (
 	API           = "https://api.frankfurter.dev/v2"
-	ENDPOINT      = "/rates"
-	QUERY         = "?base=%s&date=%s"
+	ENDPOINT      = "/rate/%s/%s"
+	QUERY         = "?date=%s"
 	FULL_ENDPOINT = API + ENDPOINT + QUERY
 	DATE_LAYOUT   = "2006-01-02"
 )
+
+var datasetToFrank = map[string]string{
+	"Australian Dollar": "AUD",
+	"Bitcoin":           "BTC",
+	"Brazil Real":       "BRL",
+	"Canadian Dollar":   "CAD",
+	"Euro":              "EUR",
+	"Mexican Peso":      "MXN",
+	"Ruble":             "RUB",
+	"Rupee":             "INR",
+	"Saudi Riyal":       "SAR",
+	"Shekel":            "ILS",
+	"Swiss Franc":       "CHF",
+	"UK Pound":          "GBP",
+	"US Dollar":         "USD",
+	"Yen":               "JPY",
+	"Yuan":              "CNY",
+}
 
 func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 	connSettings := middleware.ConnSettings{
@@ -55,11 +73,10 @@ func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 	}
 
 	return &Fetcher{
-		inputQueue:       inputQueue,
-		outputQueues:     outputQueues,
-		queryId:          config.QueryId,
-		quote:            config.Quote,
-		conversionsByDay: make(map[string]map[string]float64),
+		inputQueue:   inputQueue,
+		outputQueues: outputQueues,
+		queryId:      config.QueryId,
+		quote:        config.Quote,
 	}, nil
 }
 
@@ -75,7 +92,7 @@ func (fetcher *Fetcher) Run() {
 func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 	defer ack()
 
-	result, err := inner.DeserializeData[transfer.TransferForQ5](&msg)
+	result, err := inner.DeserializeData[transfer.TransferForQ5Filter](&msg)
 	if err != nil {
 		slog.Error("while deserializing transfer", "err", err)
 		return
@@ -92,42 +109,54 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 
 	transfer := result.Payload
 
-	today := transfer.Timestamp.Format(DATE_LAYOUT)
-	if _, ok := fetcher.conversionsByDay[today]; !ok {
-		fetcher.conversionsByDay[today] = make(map[string]float64)
-		if err := fetcher.fetchExchangeRate(transfer); err != nil {
-			slog.Error("while fetching exchange rate", "err", err)
-			return
-		}
-		for base, rate := range fetcher.conversionsByDay[today] {
-			for _, outputQueue := range fetcher.outputQueues {
-				msgOutput, err := inner.SerializeData(inner.DataMsg[fetcherresponse.FetcherResponse]{
-					ClientID: result.ClientID,
-					QueryID:  fetcher.queryId,
-					Payload: fetcherresponse.FetcherResponse{
-						Date:  today,
-						Quote: base,
-						Rate:  rate,
-					},
-					EOF: nil,
-				})
-				if err != nil {
-					slog.Error("while serializing message", "err", err)
-					break
-				}
-				if err := outputQueue.Send(*msgOutput); err != nil {
-					slog.Error("while publishing message to output queue", "err", err)
-				}
-			}
-		}
+	if transfer.Currency == "Bitcoin" {
+		return
 	}
 
+	if datasetToFrank[transfer.Currency] == fetcher.quote {
+		msgOutput, err := inner.SerializeData(inner.DataMsg[fetcherresponse.FetcherResponse]{
+			ClientID: result.ClientID,
+			QueryID:  fetcher.queryId,
+			Payload: fetcherresponse.FetcherResponse{
+				ConvertedAmount: transfer.AmountPaid,
+			},
+			EOF: nil,
+		})
+		if err != nil {
+			slog.Error("while serializing message", "err", err)
+			return
+		}
+		if err := fetcher.outputQueues[shard.CalculateIndexForShard(result.ClientID, transfer.Currency, len(fetcher.outputQueues))].Send(*msgOutput); err != nil {
+			slog.Error("while publishing message to output queue", "err", err)
+		}
+		return
+	}
+	rate, err := fetcher.fetchExchangeRate(transfer)
+	if err != nil {
+		slog.Error("while fetching exchange rate", "err", err)
+		return
+	}
+	msgOutput, err := inner.SerializeData(inner.DataMsg[fetcherresponse.FetcherResponse]{
+		ClientID: result.ClientID,
+		QueryID:  fetcher.queryId,
+		Payload: fetcherresponse.FetcherResponse{
+			ConvertedAmount: transfer.AmountPaid * rate,
+		},
+		EOF: nil,
+	})
+	if err != nil {
+		slog.Error("while serializing message", "err", err)
+		return
+	}
+	if err := fetcher.outputQueues[shard.CalculateIndexForShard(result.ClientID, transfer.Currency, len(fetcher.outputQueues))].Send(*msgOutput); err != nil {
+		slog.Error("while publishing message to output queue", "err", err)
+	}
 }
 
-func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.TransferForQ5) error {
-	response, err := http.Get(fmt.Sprintf(FULL_ENDPOINT, fetcher.quote, transfer.Timestamp.Format("2006-01-02")))
+func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.TransferForQ5Filter) (float64, error) {
+	response, err := http.Get(fmt.Sprintf(FULL_ENDPOINT, datasetToFrank[transfer.Currency], fetcher.quote, transfer.Timestamp.Format("2006-01-02")))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() {
 		if err := response.Body.Close(); err != nil {
@@ -136,23 +165,16 @@ func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.TransferForQ5) error
 	}()
 
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("received non-OK response: %s", response.Status)
+		return 0, fmt.Errorf("received non-OK response: %s. \nresponse: %s\nendp: %s", response.Status, response.Body, fmt.Sprintf(FULL_ENDPOINT, datasetToFrank[transfer.Currency], fetcher.quote, transfer.Timestamp.Format("2006-01-02")))
 	}
 
 	decoder := json.NewDecoder(response.Body)
-	var body []apiResponseRates
+	var body apiResponseRate
 	if err = decoder.Decode(&body); err != nil {
-		return fmt.Errorf("error decoding response body: %v", err)
+		return 0, fmt.Errorf("error decoding response body: %v", err)
 	}
 
-	for _, row := range body {
-		if _, ok := fetcher.conversionsByDay[row.Date]; !ok {
-			fetcher.conversionsByDay[row.Date] = make(map[string]float64)
-		}
-		fetcher.conversionsByDay[row.Date][row.Quote] = row.Rate
-	}
-
-	return nil
+	return body.Rate, nil
 }
 
 func (fetcher *Fetcher) HandleSignals() {
