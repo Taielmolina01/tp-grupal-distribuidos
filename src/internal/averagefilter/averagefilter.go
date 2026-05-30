@@ -249,6 +249,12 @@ func (af *AverageFilter) handleTransferInput(msg middleware.Message, ack func())
 	for i := range input.Records {
 		af.handleTransferRecord(input.ClientID, input.Records[i])
 	}
+
+	af.lock.Lock()
+	if state, ok := af.state[input.ClientID]; ok {
+		af.flushPendingLocked(input.ClientID, state)
+	}
+	af.lock.Unlock()
 }
 
 func (af *AverageFilter) handleTransferRecord(clientID int, t transfer.TransferForQ3Filter) {
@@ -306,6 +312,20 @@ func (af *AverageFilter) handleAvgInput(msg middleware.Message, ack func()) {
 		state.avgs[rec.Method] = rec.Avg
 		af.drainFileForMethod(input.ClientID, rec.Method, state)
 	}
+	af.flushPendingLocked(input.ClientID, state)
+}
+
+const pendingFlushThreshold = 1000
+
+func (af *AverageFilter) flushPendingLocked(clientID int, state *clientState) {
+	if len(state.pending) == 0 {
+		return
+	}
+	body := batch.Write(clientID, af.queryID, state.pending, records.Query3ResultCodec)
+	if err := af.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
+		slog.Error("While sending Q3 results batch", "err", err)
+	}
+	state.pending = state.pending[:0]
 }
 
 func (af *AverageFilter) handleAvgEOFLocked(clientID int, state *clientState) {
@@ -365,6 +385,9 @@ func (af *AverageFilter) processTransferLocked(clientID int, t transfer.Transfer
 		Amount:        t.AmountPaid,
 	})
 	af.transfersMonitor.AddForwardedMessagesAmountByClientId(clientID, 1)
+	if len(state.pending) >= pendingFlushThreshold {
+		af.flushPendingLocked(clientID, state)
+	}
 }
 
 func (af *AverageFilter) fireTransfersRingLocked(clientID int, realAmount uint32) {
@@ -387,12 +410,7 @@ func (af *AverageFilter) finalizeClientLocked(clientID int, state *clientState) 
 	}
 	af.deleteRemainingFiles(clientID)
 
-	if len(state.pending) > 0 {
-		body := batch.Write(clientID, af.queryID, state.pending, records.Query3ResultCodec)
-		if err := af.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
-			slog.Error("While sending Q3 results batch", "err", err)
-		}
-	}
+	af.flushPendingLocked(clientID, state)
 	delete(af.state, clientID)
 }
 
