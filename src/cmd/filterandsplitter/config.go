@@ -71,7 +71,7 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		InputMiddlewareName:    os.Getenv("INPUT_EXCHANGE"),
 		InputMiddlewareQueue:   os.Getenv("INPUT_QUEUE"),
 		InputRoutingKeys:       inputRoutingKeys,
-		QueryID:                queryID,
+		QueryID:                uint8(queryID),
 	}, nil
 }
 

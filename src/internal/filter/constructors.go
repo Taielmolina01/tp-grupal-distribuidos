@@ -7,6 +7,7 @@ import (
 	"time"
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/normalizer"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -23,6 +24,8 @@ func CreateCurrencyFilter(config FilterConfig) (worker.Worker, error) {
 			return isValidCurrency(t, config)
 		},
 		transfer.ProjectAfterCurrency,
+		records.TransferCodec,
+		records.TransferAfterCurrencyCodec,
 	)
 }
 
@@ -41,6 +44,8 @@ func CreateAmountFilter(config FilterConfig) (worker.Worker, error) {
 				Amount:      t.AmountPaid,
 			}
 		},
+		records.TransferAfterCurrencyCodec,
+		records.Query1ResultCodec,
 	)
 }
 
@@ -53,6 +58,8 @@ func CreateDateRangeFilter(config FilterConfig) (worker.Worker, error) {
 		func(t transfer.Transfer) transfer.Transfer {
 			return t
 		},
+		records.TransferCodec,
+		records.TransferCodec,
 	)
 }
 
@@ -63,6 +70,8 @@ func CreateDateRangeAndPaymentMethod(config FilterConfig) (worker.Worker, error)
 			return isValidPaymentMethod(t, config) && !t.Timestamp.Before(config.StartDateRange) && t.Timestamp.Before(config.EndDateRange)
 		},
 		transfer.ProjectForQ5Filter,
+		records.TransferCodec,
+		records.TransferForQ5FilterCodec,
 	)
 }
 
@@ -84,6 +93,7 @@ func CreateBankDistinctFilter(config FilterConfig) (worker.Worker, error) {
 		func(t account.Account) string {
 			return normalizer.NormalizeBankID(t.BankId)
 		},
+		records.AccountCodec,
 	)
 }
 
@@ -145,5 +155,8 @@ func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 		func() transfer.FinalTransferForQ5 {
 			return transfer.ProjectForQ5Final()
 		},
+		records.FetcherResponseCodec,
+		records.TransferForQ5FilterCodec,
+		records.FinalTransferForQ5Codec,
 	)
 }

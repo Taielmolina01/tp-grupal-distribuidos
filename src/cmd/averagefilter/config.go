@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"tp-grupal-distribuidos/internal/averagefilter"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/queryresult"
 )
 
 func loadConfig() (averagefilter.AverageFilterConfig, error) {
@@ -59,6 +59,6 @@ func loadConfig() (averagefilter.AverageFilterConfig, error) {
 		InputAvgsQueue:      inputAvgsQueue,
 		OutputQueue:         outputQueue,
 		AvgsExpectedEofs:    avgsExpectedEofs,
-		QueryID:             inner.Query3ID,
+		QueryID:             queryresult.Query3ID,
 	}, nil
 }

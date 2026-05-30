@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/splitter"
 	"tp-grupal-distribuidos/internal/daterangesplitter"
 )
@@ -56,7 +56,7 @@ func loadConfig() (daterangesplitter.DateRangeSplitterConfig, error) {
 		InputQueue:        inputQueue,
 		InputRoutingKeys:  inputRoutingKeys,
 		OutputQueues:      outputQueues,
-		QueryID:           inner.Query3ID,
+		QueryID:           queryresult.Query3ID,
 		AvgPeriodStart:    time.Date(2022, 9, 1, 0, 0, 0, 0, time.UTC),
 		AvgPeriodEnd:      time.Date(2022, 9, 5, 23, 59, 59, 0, time.UTC),
 		FilterPeriodStart: time.Date(2022, 9, 6, 0, 0, 0, 0, time.UTC),

@@ -9,9 +9,9 @@ import (
 	"sync"
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/eofmessage"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 )
@@ -47,7 +47,8 @@ type FilterAccountSeen struct {
 
 type clientState struct {
 	eofAmt       int
-	seenAccounts map[string]bool
+	seenAccounts map[account.AccountIdentifier]bool
+	pending      []queryresult.Query4Result
 }
 
 func NewFilterAccountSeen(config FilterAccountSeenConfig) (_ *FilterAccountSeen, err error) {
@@ -118,20 +119,19 @@ func (f *FilterAccountSeen) close() {
 
 func (f *FilterAccountSeen) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[account.AccountIdentifierBatch](&middleware.Message{Body: msg.Body})
-
+	input, err := accountid.Read([]byte(msg.Body))
 	if err != nil {
-		slog.Error("While deserializing pipeline message", "err", err)
+		slog.Error("While deserializing input batch", "err", err)
 		return
 	}
 
-	if m.IsEOF() {
-		f.handleEOF(*m)
+	if input.EOF {
+		f.handleEOF(input.ClientID, input.Total)
 		return
 	}
 
-	for _, id := range m.Payload.Items {
-		f.handleRecord(m.ClientID, id)
+	for i := range input.Records {
+		f.handleRecord(input.ClientID, input.Records[i])
 	}
 }
 
@@ -141,56 +141,47 @@ func (f *FilterAccountSeen) handleRecord(clientID int, record account.AccountIde
 
 	state := f.stateFor(clientID)
 
-	if _, ok := state.seenAccounts[record.GetKey()]; ok {
+	if _, ok := state.seenAccounts[record]; ok {
 		return
 	}
 
-	state.seenAccounts[record.GetKey()] = true
-
-	msg, err := inner.SerializeData(inner.DataMsg[queryresult.Query4Result]{
-		ClientID: clientID,
-		QueryID:  uint8(f.queryID),
-		Payload:  queryresult.Query4Result{BankId: record.BankID, AccountNumber: record.AccountNumber},
+	state.seenAccounts[record] = true
+	state.pending = append(state.pending, queryresult.Query4Result{
+		BankId:        record.BankID,
+		AccountNumber: record.AccountNumber,
 	})
-
-	if err != nil {
-		slog.Error("While serializing output message", "err", err)
-		return
-	}
-
-	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body}); err != nil {
-		slog.Error("While sending output message", "err", err)
-	}
 }
 
-func (f *FilterAccountSeen) handleEOF(data inner.DataMsg[account.AccountIdentifierBatch]) {
+func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	state := f.stateFor(data.ClientID)
+	state := f.stateFor(clientID)
 	state.eofAmt++
 
 	if state.eofAmt < f.expectedEOFs {
 		return
 	}
 
-	msg, err := inner.SerializeEofMessage(eofmessage.EofMessage{ClientID: data.ClientID, QueryID: uint8(f.queryID)})
-	if err != nil {
-		slog.Error("While serializing EOF message", "err", err)
-		return
+	if len(state.pending) > 0 {
+		body := batch.Write(clientID, uint8(f.queryID), state.pending, records.Query4ResultCodec)
+		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(body)}); err != nil {
+			slog.Error("While sending Q4 results batch", "err", err)
+		}
 	}
 
-	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body}); err != nil {
+	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), total)
+	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(eofBody)}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 
-	delete(f.clientsState, data.ClientID)
+	delete(f.clientsState, clientID)
 }
 
 func (f *FilterAccountSeen) stateFor(clientID int) *clientState {
 	st, ok := f.clientsState[clientID]
 	if !ok {
-		st = &clientState{seenAccounts: map[string]bool{}}
+		st = &clientState{seenAccounts: map[account.AccountIdentifier]bool{}}
 		f.clientsState[clientID] = st
 	}
 	return st

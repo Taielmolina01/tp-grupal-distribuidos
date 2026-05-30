@@ -5,10 +5,59 @@ import (
 	"log/slog"
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 )
+
+const (
+	typeRing uint8 = iota + 1
+	typeCommit
+)
+
+func SerializeRingMessage(m eofmessagetypes.EofRingMessage) []byte {
+	w := wire.NewWriter()
+	w.Uint8(typeRing)
+	w.Uint32(m.CoordinatorId)
+	w.Uint32(m.ActualAmount)
+	w.Uint32(m.RealAmount)
+	w.Uint32(uint32(m.ClientId))
+	w.Uint32(m.FilteredAmount)
+	return w.Bytes()
+}
+
+func serializeCommit(m eofmessagetypes.EofMessageCommit) []byte {
+	w := wire.NewWriter()
+	w.Uint8(typeCommit)
+	w.Uint32(uint32(m.ClientID))
+	w.Uint32(uint32(m.Hops))
+	w.Uint32(m.FilteredAmount)
+	return w.Bytes()
+}
+
+func deserializeRing(body []byte) (*eofmessagetypes.EofRingMessage, *eofmessagetypes.EofMessageCommit, error) {
+	r := wire.NewReader(body)
+	switch r.Uint8() {
+	case typeRing:
+		m := &eofmessagetypes.EofRingMessage{
+			CoordinatorId:  r.Uint32(),
+			ActualAmount:   r.Uint32(),
+			RealAmount:     r.Uint32(),
+			ClientId:       int(r.Uint32()),
+			FilteredAmount: r.Uint32(),
+		}
+		return m, nil, r.Err()
+	case typeCommit:
+		m := &eofmessagetypes.EofMessageCommit{
+			ClientID:       int(r.Uint32()),
+			Hops:           int(r.Uint32()),
+			FilteredAmount: r.Uint32(),
+		}
+		return nil, m, r.Err()
+	default:
+		return nil, nil, fmt.Errorf("eofring: unknown message type")
+	}
+}
 
 type EofRingAlgorithm interface {
 	Run()
@@ -21,19 +70,20 @@ type eofRingAlgorithmImpl struct {
 	amountReplicas  int
 	id              uint32
 	messagesMonitor msgmonitor.MessageMonitor
-	// typeOfNode should be an enum defined somewhere in common, but for simplicity I just left it as a string
-	typeOfNode     string
-	totalMessages  *uint32
-	finishCallback func(clientID int, msg *middleware.Message, isCoordinator bool) error
-	queryId        uint8
+	typeOfNode      string
+	totalMessages   *uint32
+	finishCallback  FinishCallback
+	queryId         uint8
 }
+
+type FinishCallback func(clientID int, total uint32, isCoordinator bool) error
 
 func CreateEofRingAlgorithm(
 	inputQueue, outputQueue middleware.Middleware,
 	amountReplicas int,
 	id uint32,
 	messageMonitor msgmonitor.MessageMonitor,
-	finishCallback func(clientID int, msg *middleware.Message, isCoordinator bool) error,
+	finishCallback FinishCallback,
 	queryId uint8,
 ) EofRingAlgorithm {
 	return &eofRingAlgorithmImpl{
@@ -64,7 +114,7 @@ func (eofring *eofRingAlgorithmImpl) Close() error {
 }
 
 func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Message, ack, nack func()) {
-	eofRingMessage, eofRingCommitMessage, err := inner.DeserializeRingMessage(&msg)
+	eofRingMessage, eofRingCommitMessage, err := deserializeRing([]byte(msg.Body))
 	if err != nil {
 		slog.Error("Error deserializing EOF ring message", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "err", err)
 		ack()
@@ -116,18 +166,13 @@ func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Me
 }
 
 func (eofring *eofRingAlgorithmImpl) sendEofCommitToReplicas(eofRingMessage *eofmessagetypes.EofRingMessage, ack, nack func()) {
-	msg, err := inner.SerializeEofMessageCommit(eofmessagetypes.EofMessageCommit{
+	body := serializeCommit(eofmessagetypes.EofMessageCommit{
 		CoordinatorId:  eofRingMessage.CoordinatorId,
 		ClientID:       eofRingMessage.ClientId,
 		Hops:           0,
 		FilteredAmount: eofRingMessage.FilteredAmount,
 	})
-	if err != nil {
-		slog.Error("Error serializing EOF commit", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "err", err)
-		ack()
-		return
-	}
-	if err = eofring.outputQueue.Send(*msg); err != nil {
+	if err := eofring.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Error("Error sending EOF commit to ring", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "err", err)
 		nack()
 		return
@@ -137,12 +182,8 @@ func (eofring *eofRingAlgorithmImpl) sendEofCommitToReplicas(eofRingMessage *eof
 
 func (eofring *eofRingAlgorithmImpl) sendEofMessageToQueue(eofRingMessage *eofmessagetypes.EofRingMessage, ack func()) {
 	defer ack()
-	serializedEofRingMessage, err := inner.SerializeEofFromQueueMsg(*eofRingMessage)
-	if err != nil {
-		slog.Error("Error serializing forwarded EOF ring message", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "err", err)
-		return
-	}
-	if err := eofring.outputQueue.Send(*serializedEofRingMessage); err != nil {
+	body := SerializeRingMessage(*eofRingMessage)
+	if err := eofring.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Error("Error forwarding EOF ring message", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "err", err)
 		return
 	}
@@ -150,21 +191,7 @@ func (eofring *eofRingAlgorithmImpl) sendEofMessageToQueue(eofRingMessage *eofme
 
 func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *eofmessagetypes.EofMessageCommit) error {
 
-	msgToOutput, err := inner.SerializeData(inner.DataMsg[any]{
-		ClientID: msg.ClientID,
-		EOF: &inner.EOFInfo{
-			Kind:          "commit",           // ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
-			TotalMessages: msg.FilteredAmount, // aca si pasan de la primera instancia de filter deberia solamente decir q los mensajes totales son los que pasaron mi filtro justamente
-		},
-		Payload: nil,
-		QueryID: eofring.queryId,
-	})
-
-	if err != nil {
-		slog.Error("Error serializing message for finish callback", "client_id", msg.ClientID, "err", err)
-	}
-
-	if err := eofring.finishCallback(msg.ClientID, msgToOutput, msg.CoordinatorId == eofring.id); err != nil {
+	if err := eofring.finishCallback(msg.ClientID, msg.FilteredAmount, msg.CoordinatorId == eofring.id); err != nil {
 		slog.Error("Error finishing callback", "err", err)
 	}
 
@@ -174,14 +201,7 @@ func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *eofmessagetypes
 		return nil
 	}
 
-	toSend, err := inner.SerializeEofMessageCommit(*msg)
-
-	if err != nil {
-		slog.Error("While sending EOF commit", "err", err)
-		return err
-	}
-
-	if err = eofring.outputQueue.Send(*toSend); err != nil {
+	if err := eofring.outputQueue.Send(middleware.Message{Body: string(serializeCommit(*msg))}); err != nil {
 		slog.Error("Error sending EOF commit to ring", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", msg.ClientID, "err", err)
 		return err
 	}

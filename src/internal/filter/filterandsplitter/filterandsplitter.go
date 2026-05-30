@@ -10,7 +10,9 @@ import (
 	"time"
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/splittransfer"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
@@ -35,7 +37,7 @@ type FilterAndSplitterConfig struct {
 	InputMiddlewareQueue string
 	InputRoutingKeys     []string
 
-	QueryID int
+	QueryID uint8
 }
 
 type FilterAndSplitter struct {
@@ -53,7 +55,7 @@ type FilterAndSplitter struct {
 
 	handlerMessages msgmonitor.MessageMonitor
 
-	queryID int
+	queryID uint8
 }
 
 func getRingNextIndex(config FilterAndSplitterConfig) int {
@@ -126,11 +128,11 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		config.FilterAndSpliterAmount,
 		uint32(config.Id),
 		handlerMessages,
-		func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+		func(clientID int, total uint32, isCoordinator bool) error {
 			handlerMessages.RemoveClient(clientID)
 			if isCoordinator {
 				return outputMiddleware.Send(newmiddleware.Message{
-					Body:       msg.Body,
+					Body:       string(batch.WriteEOF(clientID, config.QueryID, total)),
 					RoutingKey: newmiddleware.BroadcastRoutingKey,
 				})
 			}
@@ -184,82 +186,68 @@ func (f *FilterAndSplitter) close() {
 
 func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
-	m, err := inner.DeserializeData[transfer.TransferAfterCurrency](&msg)
-
+	input, err := batch.Read([]byte(msg.Body), records.TransferAfterCurrencyCodec)
 	if err != nil {
-		slog.Error("While deserializing pipeline message", "err", err)
+		slog.Error("While deserializing input batch", "err", err)
 		return
 	}
 
-	if m.IsEOF() {
-		f.handleEOF(*m)
+	if input.EOF {
+		f.handleEOF(input.ClientID, input.Total)
 		return
 	}
 
-	f.handleRecord(m.ClientID, m.Payload)
+	f.handleBatch(input.ClientID, input.Records)
 }
 
-func (f *FilterAndSplitter) handleRecord(clientID int, record transfer.TransferAfterCurrency) {
-	f.handlerMessages.AddProcessedMessagesAmountByClientId(clientID, 1)
+func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.TransferAfterCurrency) {
+	byShard := make(map[string][]transfer.SplittedTransfer)
 
-	if record.Timestamp.Before(f.startDate) || record.Timestamp.After(f.endDate) {
-		return
-	}
+	for i := range records {
+		record := records[i]
+		f.handlerMessages.AddProcessedMessagesAmountByClientId(clientID, 1)
 
-	if record.FromBankAccount == record.ToBankAccount && record.FromBank == record.ToBank {
-		return
-	}
-
-	projected := transfer.ProjectForQ4(record)
-	output := []transfer.SplittedTransfer{
-		{Transfer: projected, IsLeftPart: true},
-		{Transfer: projected, IsLeftPart: false},
-	}
-
-	for _, o := range output {
-		var bank, acc string
-		if o.IsLeftPart {
-			bank = o.Transfer.FromBank
-			acc = o.Transfer.FromBankAccount
-		} else {
-			bank = o.Transfer.ToBank
-			acc = o.Transfer.ToBankAccount
+		if record.Timestamp.Before(f.startDate) || record.Timestamp.After(f.endDate) {
+			continue
+		}
+		if record.FromBankAccount == record.ToBankAccount && record.FromBank == record.ToBank {
+			continue
 		}
 
-		msg, err := inner.SerializeData(inner.DataMsg[transfer.SplittedTransfer]{
-			ClientID: clientID,
-			QueryID:  uint8(f.queryID),
-			Payload:  o,
-		})
-
-		if err != nil {
-			slog.Error("While serializing output message", "err", err)
-			return
+		projected := transfer.ProjectForQ4(record)
+		for _, o := range []transfer.SplittedTransfer{
+			{Transfer: projected, IsLeftPart: true},
+			{Transfer: projected, IsLeftPart: false},
+		} {
+			var bank, acc string
+			if o.IsLeftPart {
+				bank, acc = o.Transfer.FromBank, o.Transfer.FromBankAccount
+			} else {
+				bank, acc = o.Transfer.ToBank, o.Transfer.ToBankAccount
+			}
+			routingKey := fmt.Sprintf("shard-%d", f.hasher.ShardFor(clientID, bank, acc))
+			byShard[routingKey] = append(byShard[routingKey], o)
+			f.handlerMessages.AddForwardedMessagesAmountByClientId(clientID, 1)
 		}
+	}
 
-		routingKey := fmt.Sprintf("shard-%d", f.hasher.ShardFor(clientID, bank, acc))
-
-		f.handlerMessages.AddForwardedMessagesAmountByClientId(clientID, 1)
-		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: msg.Body, RoutingKey: routingKey}); err != nil {
-			slog.Error("While sending output message", "err", err)
+	for routingKey, group := range byShard {
+		body := splittransfer.WriteBatch(clientID, f.queryID, group)
+		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(body), RoutingKey: routingKey}); err != nil {
+			slog.Error("While sending output batch", "err", err)
 		}
 	}
 }
 
-func (f *FilterAndSplitter) handleEOF(data inner.DataMsg[transfer.TransferAfterCurrency]) {
+func (f *FilterAndSplitter) handleEOF(clientID int, total uint32) {
 	eofRingMessage := eofmessagetypes.EofRingMessage{
-		RealAmount:     data.EOF.TotalMessages,
-		ActualAmount:   f.handlerMessages.GetProcessedMessagesAmountByClientId(data.ClientID),
-		ClientId:       data.ClientID,
+		RealAmount:     total,
+		ActualAmount:   f.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
+		ClientId:       clientID,
 		CoordinatorId:  uint32(f.id),
-		FilteredAmount: f.handlerMessages.GetForwardedMessagesAmountByClientId(data.ClientID),
+		FilteredAmount: f.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
 	}
-	serializedEofRingMessage, err := inner.SerializeEofFromQueueMsg(eofRingMessage)
-	if err != nil {
-		slog.Error("While serializing EOF ring message", "err", err)
-		return
-	}
-	if err := f.eofOutput.Send(*serializedEofRingMessage); err != nil {
+	if err := f.eofOutput.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(eofRingMessage))}); err != nil {
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 	}
 }

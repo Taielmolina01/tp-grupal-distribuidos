@@ -2,7 +2,7 @@ package join
 
 import (
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/normalizer"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -10,7 +10,7 @@ import (
 )
 
 func CreateTransferAccountByBankJoin(config JoinConfig) (worker.Worker, error) {
-	config.QueryID = inner.Query2ID
+	config.QueryID = queryresult.Query2ID
 	return newTwoInputJoin(
 		config,
 		func(t transfer.TransferForQ2) string { return normalizer.NormalizeBankID(t.FromBank) },
@@ -29,5 +29,8 @@ func CreateTransferAccountByBankJoin(config JoinConfig) (worker.Worker, error) {
 			}
 			return t2
 		},
+		records.TransferForQ2Codec,
+		records.AccountCodec,
+		records.Query2ResultCodec,
 	)
 }

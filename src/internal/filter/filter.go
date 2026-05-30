@@ -9,7 +9,8 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/inner"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -17,10 +18,12 @@ import (
 
 const eofRingQueueNamePrefix = "FILTER_%s_"
 
-func newFilter[T comparable, O comparable](
+func newFilter[T any, O any](
 	config FilterConfig,
 	filterFunction func(T) bool,
 	inputToOutput func(T) O,
+	inputCodec wire.Codec[T],
+	outputCodec wire.Codec[O],
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
@@ -100,9 +103,9 @@ func newFilter[T comparable, O comparable](
 			config.FilterAmount,
 			uint32(config.Id),
 			handlerMessages,
-			func(clientID int, msg *middleware.Message, isCoordinator bool) error {
+			func(clientID int, total uint32, isCoordinator bool) error {
 				if isCoordinator {
-					return outputExchange.Send(*msg)
+					return outputExchange.Send(middleware.Message{Body: string(batch.WriteEOF(clientID, config.QueryId, total))})
 				}
 				return nil
 			},
@@ -113,6 +116,8 @@ func newFilter[T comparable, O comparable](
 		filterType:      config.Type,
 		outputTransform: inputToOutput,
 		queryId:         config.QueryId,
+		inputCodec:      inputCodec,
+		outputCodec:     outputCodec,
 	}, nil
 }
 
@@ -130,49 +135,47 @@ func (filter *Filter[T, O]) Run() {
 func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, _ func()) {
 	ack()
 
-	result, err := inner.DeserializeData[T](&msg)
+	input, err := batch.Read([]byte(msg.Body), filter.inputCodec)
 	if err != nil {
-		slog.Error("While deserializing message", "err", err)
+		slog.Error("While deserializing input batch", "err", err)
 		return
 	}
 
-	if result.IsEOF() {
-		eofRingMessage := eofmessagetypes.EofRingMessage{
-			RealAmount:     result.EOF.TotalMessages,
-			ActualAmount:   filter.handlerMessages.GetProcessedMessagesAmountByClientId(result.ClientID),
-			ClientId:       result.ClientID,
-			CoordinatorId:  uint32(filter.id),
-			FilteredAmount: filter.handlerMessages.GetForwardedMessagesAmountByClientId(result.ClientID),
+	if input.EOF {
+		filter.handleEOF(input.ClientID, input.Total)
+		return
+	}
+
+	outputs := make([]O, 0, len(input.Records))
+	for i := range input.Records {
+		filter.handlerMessages.AddProcessedMessagesAmountByClientId(input.ClientID, 1)
+		if filter.filterFunction(input.Records[i]) {
+			filter.handlerMessages.AddForwardedMessagesAmountByClientId(input.ClientID, 1)
+			outputs = append(outputs, filter.outputTransform(input.Records[i]))
 		}
-		serializedEofRingMessage, err := inner.SerializeEofFromQueueMsg(eofRingMessage)
-		if err != nil {
-			slog.Error("While serializing EOF ring message", "err", err)
-			return
-		}
-		if err := filter.outputQueueEof.Send(
-			*serializedEofRingMessage,
-		); err != nil {
-			slog.Error("While sending EOF message to EOF ring", "err", err)
-		}
-	} else {
-		filter.handlerMessages.AddProcessedMessagesAmountByClientId(result.ClientID, 1)
-		if filter.filterFunction(result.Payload) {
-			filter.handlerMessages.AddForwardedMessagesAmountByClientId(result.ClientID, 1)
-			payload := filter.outputTransform(result.Payload)
-			msgOutput, err := inner.SerializeData(
-				inner.DataMsg[O]{
-					Payload:  payload,
-					ClientID: result.ClientID,
-					QueryID:  uint8(filter.queryId)},
-			)
-			if err != nil {
-				slog.Error("While serializing output message", "err", err)
-				return
-			}
-			if err := filter.outputExchange.Send(*msgOutput); err != nil {
-				slog.Error("While sending message to output exchange", "err", err)
-			}
-		}
+	}
+
+	if len(outputs) == 0 {
+		return
+	}
+
+	body := batch.Write(input.ClientID, filter.queryId, outputs, filter.outputCodec)
+	if err := filter.outputExchange.Send(middleware.Message{Body: string(body)}); err != nil {
+		slog.Error("While sending batch to output exchange", "err", err)
+	}
+}
+
+func (filter *Filter[T, O]) handleEOF(clientID int, total uint32) {
+	eofRingMessage := eofmessagetypes.EofRingMessage{
+		RealAmount:     total,
+		ActualAmount:   filter.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
+		ClientId:       clientID,
+		CoordinatorId:  uint32(filter.id),
+		FilteredAmount: filter.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
+	}
+
+	if err := filter.outputQueueEof.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(eofRingMessage))}); err != nil {
+		slog.Error("While sending EOF message to EOF ring", "err", err)
 	}
 }
 

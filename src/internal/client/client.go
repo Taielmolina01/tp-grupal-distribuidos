@@ -10,22 +10,19 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/external"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/byteconv"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
-const (
-	// TODO: subir a 5 cuando se implementen Q3/Q4/Q5.
-	numQueries           = 5
-	transTimestampLayout = "2006/01/02 15:04"
-)
+const numQueries = 5
+
 
 type ClientConfig struct {
 	ServerHost               string
@@ -132,21 +129,21 @@ func (client *Client) sendAccountRecords() error {
 		}
 	}()
 
-	builder := external.NewAccountBatchBuilder(client.config.MaxBatchSize)
+	builder := tcpproto.NewAccountBatchBuilder(client.config.MaxBatchSize)
 	scanner := bufio.NewScanner(file)
 
-	scanner.Scan() // Skip header line
+	var cols [5][]byte
+	scanner.Scan()
 	for scanner.Scan() {
-		columns := strings.Split(scanner.Text(), ",")
-		if len(columns) < 5 {
+		if byteconv.SplitFields(scanner.Bytes(), cols[:]) < 5 {
 			continue
 		}
 		acc := account.Account{
-			BankName:      columns[0],
-			BankId:        columns[1],
-			AccountNumber: columns[2],
-			EntityId:      columns[3],
-			EntityName:    columns[4],
+			BankName:      string(cols[0]),
+			BankId:        string(cols[1]),
+			AccountNumber: string(cols[2]),
+			EntityId:      string(cols[3]),
+			EntityName:    string(cols[4]),
 		}
 		if !builder.TryAdd(acc) {
 			if err := builder.Flush(client.conn); err != nil {
@@ -166,7 +163,7 @@ func (client *Client) sendAccountRecords() error {
 		}
 	}
 
-	if err := external.WriteEndOfRecords(client.conn); err != nil {
+	if err := tcpproto.WriteEndOfRecords(client.conn); err != nil {
 		return err
 	}
 	return nil
@@ -184,42 +181,42 @@ func (client *Client) sendTransRecords() error {
 		}
 	}()
 
-	builder := external.NewTransBatchBuilder(client.config.MaxBatchSize)
+	builder := tcpproto.NewTransBatchBuilder(client.config.MaxBatchSize)
 	scanner := bufio.NewScanner(file)
 
-	scanner.Scan() // Skip header line
+	var cols [11][]byte
+	scanner.Scan()
 	for scanner.Scan() {
-		columns := strings.Split(scanner.Text(), ",")
-		if len(columns) < 11 {
+		if byteconv.SplitFields(scanner.Bytes(), cols[:]) < 11 {
 			continue
 		}
-		timestamp, err := time.Parse(transTimestampLayout, columns[0])
-		if err != nil {
-			slog.Debug("Error while parsing trans timestamp", "err", err)
+		tsUnix, ok := byteconv.ParseTimestampUnix(cols[0])
+		if !ok {
+			slog.Debug("Error while parsing trans timestamp", "raw", string(cols[0]))
 			continue
 		}
-		amountReceived, err := strconv.ParseFloat(columns[5], 64)
+		amountReceived, err := strconv.ParseFloat(string(cols[5]), 64)
 		if err != nil {
 			slog.Debug("Error while parsing trans amount received", "err", err)
 			continue
 		}
-		amountPaid, err := strconv.ParseFloat(columns[7], 64)
+		amountPaid, err := strconv.ParseFloat(string(cols[7]), 64)
 		if err != nil {
 			slog.Debug("Error while parsing trans amount paid", "err", err)
 			continue
 		}
 		t := transfer.Transfer{
-			Timestamp:         timestamp,
-			FromBank:          columns[1],
-			FromBankAccount:   columns[2],
-			ToBank:            columns[3],
-			ToBankAccount:     columns[4],
+			Timestamp:         time.Unix(tsUnix, 0).UTC(),
+			FromBank:          string(cols[1]),
+			FromBankAccount:   string(cols[2]),
+			ToBank:            string(cols[3]),
+			ToBankAccount:     string(cols[4]),
 			AmountReceived:    amountReceived,
-			ReceivingCurrency: columns[6],
+			ReceivingCurrency: string(cols[6]),
 			AmountPaid:        amountPaid,
-			PaymentCurrency:   columns[8],
-			PaymentFormat:     columns[9],
-			IsLaundering:      columns[10] == "1",
+			PaymentCurrency:   string(cols[8]),
+			PaymentFormat:     string(cols[9]),
+			IsLaundering:      len(cols[10]) > 0 && cols[10][0] == '1',
 		}
 		if !builder.TryAdd(t) {
 			if err := builder.Flush(client.conn); err != nil {
@@ -239,7 +236,7 @@ func (client *Client) sendTransRecords() error {
 		}
 	}
 
-	if err := external.WriteEndOfRecords(client.conn); err != nil {
+	if err := tcpproto.WriteEndOfRecords(client.conn); err != nil {
 		return err
 	}
 	return nil
@@ -285,23 +282,23 @@ func (client *Client) recvResults() error {
 
 	doneCount := 0
 	for doneCount < numQueries {
-		msgType, err := external.ReadMsgType(client.conn)
+		msgType, err := tcpproto.ReadMsgType(client.conn)
 		if err != nil {
 			slog.Debug("Error while reading message type", "err", err)
 			return err
 		}
 
 		switch msgType {
-		case external.ResultBatch:
-			results, err := external.ReadResultBatch(client.conn)
+		case tcpproto.ResultBatch:
+			results, err := tcpproto.ReadResultBatch(client.conn)
 			if err != nil {
 				slog.Debug("Error while reading result batch", "err", err)
 				return err
 			}
 			client.flushBatchToWriters(results, writers)
 
-		case external.QueryEOF:
-			queryId, err := external.ReadQueryEOF(client.conn)
+		case tcpproto.QueryEOF:
+			queryId, err := tcpproto.ReadQueryEOF(client.conn)
 			if err != nil {
 				slog.Debug("Error while reading query EOF", "err", err)
 				return err

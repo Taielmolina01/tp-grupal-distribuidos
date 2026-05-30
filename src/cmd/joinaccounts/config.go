@@ -44,6 +44,16 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		return joinaccounts.JoinAccountsConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
 	}
 
+	qualifiedInputExchange := os.Getenv("QUALIFIED_INPUT_EXCHANGE")
+	if qualifiedInputExchange == "" {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("QUALIFIED_INPUT_EXCHANGE environment variable is required")
+	}
+
+	preFilterAmount, err := strconv.Atoi(os.Getenv("PREFILTER_AMOUNT"))
+	if err != nil {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("PREFILTER_AMOUNT environment variable is required and must be a number")
+	}
+
 	return joinaccounts.JoinAccountsConfig{
 		Id:                     id,
 		OutputMiddlewareAmount: outputAmount,
@@ -51,6 +61,8 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		MomHost:                momHost,
 		MomPort:                momPort,
 		InputMiddlewarePrefix:  inputPrefix,
+		QualifiedInputExchange: qualifiedInputExchange,
+		PreFilterAmount:        preFilterAmount,
 		QueryID:                queryID,
 	}, nil
 }
