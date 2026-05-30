@@ -1,0 +1,34 @@
+src/internal/common/messageprotocol/wire/wire.go
+  s_d4ccdc42efc234::t_f2faef8fcfad22 5-6,9,23,25,30-36,38,41-43,47,50,54,58-59,62-63,68,72,76,80,84,88,92,96-98,102,106,118,122,126,130-132
+src/internal/common/byteconv/byteconv.go
+  s_d4ccdc42efc234::t_f62fa5644941a7 36-43
+src/internal/common/messageprotocol/tcpproto/protocol.go
+  s_d4ccdc42efc234::t_4866ab8fbb4a90 8
+  s_d4ccdc42efc234::t_adc557c966d24a 291-297,300-305,308-313,316-319,322-323
+src/internal/common/messageprotocol/tcpproto/batch.go
+  s_d4ccdc42efc234::t_d8eb1fd476bb4e 140-146
+  s_d4ccdc42efc234::t_7d9238c3460a13 7
+  s_d4ccdc42efc234::t_c43a9e00c544b1 38-40,42,44-47
+  s_d4ccdc42efc234::t_65f87abf7f23e9 84-88,96-103,107-114,118-125,129-136
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d395c34a44947709d3547fdf5beefca2d01b0bdc",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_d4ccdc42efc234": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3f414f81-789d-4e7f-83f6-eba44d2c9a7c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
