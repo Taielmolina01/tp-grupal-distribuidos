@@ -48,10 +48,10 @@ services:
     environment:
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - INPUT_FILE_ACCOUNTS=/input/HI-Large_accounts.csv
-      - INPUT_FILE_TRANS=/input/HI-Large_Trans.csv
+      - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
+      - INPUT_FILE_TRANS=/input/transactions_0.csv
       - OUTPUT_FILE_PREFIX=/output/output_0
-      - MAX_BATCH_SIZE=5000
+      - MAX_BATCH_SIZE=1000
     volumes:
       - ./input:/input
       - ./output:/output
@@ -433,6 +433,8 @@ services:
       - QUALIFIED_INPUT_EXCHANGE=Q4_prefilter_out
       - PREFILTER_AMOUNT=2
       - QUERY_ID=4
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
     logging:
       driver: json-file
       options:
@@ -457,6 +459,8 @@ services:
       - QUALIFIED_INPUT_EXCHANGE=Q4_prefilter_out
       - PREFILTER_AMOUNT=2
       - QUERY_ID=4
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
     logging:
       driver: json-file
       options:
@@ -527,6 +531,8 @@ services:
       - OUTPUT_MIDDLEWARE=results_queue
       - EXPECTED_EOFS=2
       - QUERY_ID=4
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
     logging:
       driver: json-file
       options:
@@ -549,6 +555,8 @@ services:
       - OUTPUT_MIDDLEWARE=results_queue
       - EXPECTED_EOFS=2
       - QUERY_ID=4
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
     logging:
       driver: json-file
       options:
