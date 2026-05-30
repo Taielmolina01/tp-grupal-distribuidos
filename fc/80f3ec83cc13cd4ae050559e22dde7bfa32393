@@ -1,0 +1,28 @@
+src/internal/client/client.go
+  s_d4ccdc42efc234::t_af12b9f4ae3fc7 138,190
+src/internal/common/byteconv/byteconv.go
+  s_d4ccdc42efc234::t_d3c9df4e6a90dc 5-24
+src/internal/averagefilter/averagefilter.go
+  h_3c9b41718876fe 74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "fc80f3ec83cc13cd4ae050559e22dde7bfa32393",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_d4ccdc42efc234": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3f414f81-789d-4e7f-83f6-eba44d2c9a7c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
