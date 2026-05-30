@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"slices"
 	"sort"
@@ -12,7 +13,7 @@ const (
 	_USD_CURRENCY                   = "US Dollar"
 	_QUERY1_AMOUNT_THRESHOLD        = 50.0
 	_QUERY3_AVG_FRACTION            = 0.01
-	_QUERY4_MIN_SCATTER             = 5
+	_QUERY4_MIN_SCATTER             = 3
 	_QUERY5_AMOUNT_THRESHOLD        = 1.0
 	_QUERY3_FIRST_RANGE_START_DATE  = "2022/09/01"
 	_QUERY3_FIRST_RANGE_END_DATE    = "2022/09/06"
@@ -44,35 +45,43 @@ var currencyToISO = map[string]string{
 
 var validFormatsQ5 = []string{"Wire", "ACH"}
 
-func getQuery1Result(txs []Transaction, outPath string) error {
+func getQuery1Result(inputDir string, n int, outPath string) error {
 	out, err := newCSVOut(outPath)
 	if err != nil {
 		return err
 	}
 	out.row("From Bank", "Account", "To Bank", "Account.1", "Amount Paid")
-	for _, t := range txs {
+	if err := forEachTransaction(inputDir, n, func(t Transaction) error {
 		if t.PaymentCurrency == _USD_CURRENCY && t.AmountPaid < _QUERY1_AMOUNT_THRESHOLD {
 			out.row(t.FromBank, t.FromAccount, t.ToBank, t.ToAccount, fmtAmount(t.AmountPaid))
 		}
+		return nil
+	}); err != nil {
+		out.close()
+		return err
 	}
 	return out.close()
 }
 
-func getQuery2Result(txs []Transaction, accs []Account, outPath string) error {
+func getQuery2Result(inputDir string, n int, accs []Account, outPath string) error {
 	out, err := newCSVOut(outPath)
 	if err != nil {
 		return err
 	}
 
 	maxes := map[string]Transaction{}
-	for _, t := range txs {
+	if err := forEachTransaction(inputDir, n, func(t Transaction) error {
 		if t.PaymentCurrency != _USD_CURRENCY {
-			continue
+			return nil
 		}
 		cur, ok := maxes[normalizeBank(t.FromBank)]
 		if !ok || t.AmountPaid > cur.AmountPaid {
 			maxes[normalizeBank(t.FromBank)] = t
 		}
+		return nil
+	}); err != nil {
+		out.close()
+		return err
 	}
 
 	bankName := map[string]string{}
@@ -97,20 +106,15 @@ func getQuery2Result(txs []Transaction, accs []Account, outPath string) error {
 	return out.close()
 }
 
-func getQuery3Result(txs []Transaction, outPath string) error {
-	out, err := newCSVOut(outPath)
-	if err != nil {
-		return err
-	}
-
+func getQuery3Result(inputDir string, n int, outPath string) error {
 	type entry struct {
 		AmountPaid float64
 		Total      int32
 	}
 	sumAndCounts := map[string]entry{}
-	for _, t := range txs {
+	if err := forEachTransaction(inputDir, n, func(t Transaction) error {
 		if t.PaymentCurrency != _USD_CURRENCY {
-			continue
+			return nil
 		}
 		if t.Timestamp >= _QUERY3_FIRST_RANGE_START_DATE && t.Timestamp <= _QUERY3_FIRST_RANGE_END_DATE {
 			oldValue := sumAndCounts[t.PaymentFormat]
@@ -119,6 +123,9 @@ func getQuery3Result(txs []Transaction, outPath string) error {
 				Total:      oldValue.Total + 1,
 			}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 	avg := map[string]float64{}
 	for k, s := range sumAndCounts {
@@ -127,79 +134,103 @@ func getQuery3Result(txs []Transaction, outPath string) error {
 		}
 	}
 
+	out, err := newCSVOut(outPath)
+	if err != nil {
+		return err
+	}
 	out.row("From Bank", "Account", "Payment Format", "Amount Paid")
-	for _, t := range txs {
+	if err := forEachTransaction(inputDir, n, func(t Transaction) error {
 		if t.PaymentCurrency != _USD_CURRENCY ||
 			(t.Timestamp < _QUERY3_SECOND_RANGE_START_DATE || t.Timestamp >= _QUERY3_SECOND_RANGE_END_DATE) {
-			continue
+			return nil
 		}
 		a, ok := avg[t.PaymentFormat]
 		if !ok {
-			continue
+			return nil
 		}
 		if t.AmountPaid < a*_QUERY3_AVG_FRACTION {
 			out.row(t.FromBank, t.FromAccount, t.PaymentFormat, fmtAmount(t.AmountPaid))
 		}
+		return nil
+	}); err != nil {
+		out.close()
+		return err
 	}
 	return out.close()
 }
 
-func getQuery4Result(txs []Transaction, outPath string) error {
-	var p1 []Transaction
-	for _, t := range txs {
-		if t.PaymentCurrency == _USD_CURRENCY &&
-			t.Timestamp >= _QUERY4_START_DATE && t.Timestamp < _QUERY4_END_DATE {
-			p1 = append(p1, t)
-		}
-	}
+func getQuery4Result(inputDir string, n int, outPath string) error {
+	outEdges := map[BankAcc]map[BankAcc]bool{}
+	inCount := map[BankAcc]int{}
 
-	left := map[BankAcc]map[BankAcc]bool{}
-	right := map[BankAcc]map[BankAcc]bool{}
-
-	type pair struct{ A, C BankAcc }
-	middles := map[pair]map[BankAcc]bool{}
-
-	addTo := func(m map[BankAcc]map[BankAcc]bool, k, v BankAcc) bool {
-		if m[k] == nil {
-			m[k] = map[BankAcc]bool{}
+	if err := forEachTransaction(inputDir, n, func(t Transaction) error {
+		if t.PaymentCurrency != _USD_CURRENCY ||
+			t.Timestamp < _QUERY4_START_DATE || t.Timestamp >= _QUERY4_END_DATE {
+			return nil
 		}
-		if m[k][v] {
-			return false
-		}
-		m[k][v] = true
-		return true
-	}
-	addMiddle := func(p pair, mid BankAcc) {
-		if middles[p] == nil {
-			middles[p] = map[BankAcc]bool{}
-		}
-		middles[p][mid] = true
-	}
-
-	for _, t := range p1 {
 		a := BankAcc{t.FromBank, t.FromAccount}
 		b := BankAcc{t.ToBank, t.ToAccount}
-
-		if addTo(left, a, b) {
-			for x := range right[a] {
-				addMiddle(pair{x, b}, a)
-			}
+		if a == b {
+			return nil
 		}
-
-		if addTo(right, b, a) {
-			for c := range left[b] {
-				addMiddle(pair{a, c}, b)
-			}
+		if outEdges[a] == nil {
+			outEdges[a] = map[BankAcc]bool{}
 		}
+		if !outEdges[a][b] {
+			outEdges[a][b] = true
+			inCount[b]++
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
+	type pair struct{ S, D BankAcc }
+	chainMiddles := map[pair]map[BankAcc]bool{}
 	unique := map[BankAcc]bool{}
-	for p, ms := range middles {
-		if len(ms) >= _QUERY4_MIN_SCATTER {
-			unique[p.A] = true
-			unique[p.C] = true
+
+	for a, mids := range outEdges {
+		if len(mids) < _QUERY4_MIN_SCATTER {
+			continue
+		}
+		for b := range mids {
+			if outEdges[b] == nil {
+				continue
+			}
+			for c := range outEdges[b] {
+				p := pair{a, c}
+				if chainMiddles[p] == nil {
+					chainMiddles[p] = map[BankAcc]bool{}
+				}
+				chainMiddles[p][b] = true
+			}
 		}
 	}
+
+	maxMids := 0
+	var maxPair pair
+	for p, mids := range chainMiddles {
+		if len(mids) > maxMids {
+			maxMids = len(mids)
+			maxPair = p
+		}
+	}
+	log.Printf("[Q4] máximo intermediarias en un par: %d, A=%v C=%v", maxMids, maxPair.S, maxPair.D)
+	if maxMids > 0 {
+		log.Printf("[Q4] Bi del par máximo:")
+		for bi := range chainMiddles[maxPair] {
+			log.Printf("[Q4]   %v", bi)
+		}
+	}
+
+	for p, mids := range chainMiddles {
+		if len(mids) >= _QUERY4_MIN_SCATTER {
+			unique[p.S] = true
+			unique[p.D] = true
+		}
+	}
+
+	log.Printf("[Q4] Cuentas únicas en resultado: %d", len(unique))
 
 	accs := make([]BankAcc, 0, len(unique))
 	for a := range unique {
@@ -222,14 +253,13 @@ func getQuery4Result(txs []Transaction, outPath string) error {
 	}
 	return out.close()
 }
-
-func getQuery5Result(txs []Transaction, rates map[string]map[string]float64, outPath string) error {
+func getQuery5Result(inputDir string, n int, rates map[string]map[string]float64, outPath string) error {
 	count := 0
-	for _, t := range txs {
+	if err := forEachTransaction(inputDir, n, func(t Transaction) error {
 		if !(t.Timestamp >= _QUERY5_START_DATE && t.Timestamp < _QUERY5_END_DATE) ||
 			!slices.Contains(validFormatsQ5, t.PaymentFormat) ||
 			t.ReceivingCurrency == "Bitcoin" {
-			continue
+			return nil
 		}
 		date := strings.SplitN(t.Timestamp, " ", 2)[0]
 		iso, ok := currencyToISO[t.PaymentCurrency]
@@ -245,11 +275,14 @@ func getQuery5Result(txs []Transaction, rates map[string]map[string]float64, out
 			}
 		}
 		if !found {
-			continue
+			return nil
 		}
 		if t.AmountPaid/rate < _QUERY5_AMOUNT_THRESHOLD {
 			count++
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 	f, err := os.Create(outPath)
 	if err != nil {

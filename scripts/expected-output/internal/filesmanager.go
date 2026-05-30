@@ -3,54 +3,39 @@ package internal
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 )
 
+const _SCANNER_MAX_LINE = 1024 * 1024
+
 // Reading helpers
 
-func readCSVRecords(path string) ([][]string, error) {
-	fStat, err := os.Stat(path)
-	if err != nil {
-		return nil, err
-	}
-	if fStat.Size() > 1*8*1024*1024*1024 {
-		return nil, fmt.Errorf("Los archivos de prueba deben ser menores de 1GB. La ruta %s tiene un tamaño de %d bytes", path, fStat.Size())
-	}
+func forEachTransaction(inputDir string, n int, fn func(Transaction) error) error {
+	path := filepath.Join(inputDir, fmt.Sprintf("transactions_%d.csv", n))
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
-	var out [][]string
-	sc.Scan() // skip header
+	sc.Buffer(make([]byte, 64*1024), _SCANNER_MAX_LINE)
+	sc.Scan()
 	for sc.Scan() {
 		line := sc.Text()
 		if line == "" {
 			continue
 		}
-		out = append(out, strings.Split(line, ","))
-	}
-	return out, sc.Err()
-}
-
-func loadTransactions(inputDir string, n int) ([]Transaction, error) {
-	path := filepath.Join(inputDir, fmt.Sprintf("transactions_%d.csv", n))
-	rows, err := readCSVRecords(path)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]Transaction, 0, len(rows))
-	for _, r := range rows {
+		r := strings.Split(line, ",")
 		if len(r) < 10 {
 			continue
 		}
 		amount, _ := strconv.ParseFloat(r[7], 64)
-		out = append(out, Transaction{
+		if err := fn(Transaction{
 			Timestamp:         r[0],
 			FromBank:          r[1],
 			FromAccount:       r[2],
@@ -60,25 +45,36 @@ func loadTransactions(inputDir string, n int) ([]Transaction, error) {
 			AmountPaid:        amount,
 			PaymentCurrency:   r[8],
 			PaymentFormat:     r[9],
-		})
+		}); err != nil {
+			return err
+		}
 	}
-	return out, nil
+	return sc.Err()
 }
 
 func loadAccounts(inputDir string, n int) ([]Account, error) {
 	path := filepath.Join(inputDir, fmt.Sprintf("accounts_%d.csv", n))
-	rows, err := readCSVRecords(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]Account, 0, len(rows))
-	for _, r := range rows {
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64*1024), _SCANNER_MAX_LINE)
+	sc.Scan()
+	var out []Account
+	for sc.Scan() {
+		line := sc.Text()
+		if line == "" {
+			continue
+		}
+		r := strings.Split(line, ",")
 		if len(r) < 2 {
 			continue
 		}
 		out = append(out, Account{BankName: r[0], BankID: r[1]})
 	}
-	return out, nil
+	return out, sc.Err()
 }
 
 // Writting helpers
@@ -109,47 +105,102 @@ func (c *csvOut) close() error {
 	return c.f.Close()
 }
 
-func sortedLines(path string) ([]string, error) {
-	f, err := os.Open(path)
+
+type sortedStream struct {
+	cmd    *exec.Cmd
+	stdout io.ReadCloser
+	sc     *bufio.Scanner
+}
+
+func openSortedStream(path string) (*sortedStream, error) {
+	cmd := exec.Command("sort", path)
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	var lines []string
-	for sc.Scan() {
-		lines = append(lines, sc.Text())
-	}
-	if err := sc.Err(); err != nil {
+	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	sort.Strings(lines)
-	return lines, nil
+	sc := bufio.NewScanner(stdout)
+	sc.Buffer(make([]byte, 64*1024), _SCANNER_MAX_LINE)
+	return &sortedStream{cmd: cmd, stdout: stdout, sc: sc}, nil
 }
 
-func diffSorted(a, b []string) []string {
-	var out []string
-	i, j := 0, 0
-	for i < len(a) && j < len(b) {
+func (s *sortedStream) close() {
+	io.Copy(io.Discard, s.stdout)
+	s.cmd.Wait()
+}
+
+func diffSortedFiles(tag, aPath, bPath string, w io.Writer) (bool, error) {
+	a, err := openSortedStream(aPath)
+	if err != nil {
+		return false, err
+	}
+	defer a.close()
+	b, err := openSortedStream(bPath)
+	if err != nil {
+		return false, err
+	}
+	defer b.close()
+
+	var lineA, lineB string
+	hasA := a.sc.Scan()
+	if hasA {
+		lineA = a.sc.Text()
+	}
+	hasB := b.sc.Scan()
+	if hasB {
+		lineB = b.sc.Text()
+	}
+	diffs := false
+	for hasA && hasB {
 		switch {
-		case a[i] == b[j]:
-			i++
-			j++
-		case a[i] < b[j]:
-			out = append(out, "< "+a[i])
-			i++
+		case lineA == lineB:
+			hasA = a.sc.Scan()
+			if hasA {
+				lineA = a.sc.Text()
+			}
+			hasB = b.sc.Scan()
+			if hasB {
+				lineB = b.sc.Text()
+			}
+		case lineA < lineB:
+			fmt.Fprintln(w, tag, "<", lineA)
+			diffs = true
+			hasA = a.sc.Scan()
+			if hasA {
+				lineA = a.sc.Text()
+			}
 		default:
-			out = append(out, "> "+b[j])
-			j++
+			fmt.Fprintln(w, tag, ">", lineB)
+			diffs = true
+			hasB = b.sc.Scan()
+			if hasB {
+				lineB = b.sc.Text()
+			}
 		}
 	}
-	for i < len(a) {
-		out = append(out, "< "+a[i])
-		i++
+	for hasA {
+		fmt.Fprintln(w, tag, "<", lineA)
+		diffs = true
+		hasA = a.sc.Scan()
+		if hasA {
+			lineA = a.sc.Text()
+		}
 	}
-	for j < len(b) {
-		out = append(out, "> "+b[j])
-		j++
+	for hasB {
+		fmt.Fprintln(w, tag, ">", lineB)
+		diffs = true
+		hasB = b.sc.Scan()
+		if hasB {
+			lineB = b.sc.Text()
+		}
 	}
-	return out
+	if err := a.sc.Err(); err != nil {
+		return diffs, err
+	}
+	if err := b.sc.Err(); err != nil {
+		return diffs, err
+	}
+	return diffs, nil
 }
