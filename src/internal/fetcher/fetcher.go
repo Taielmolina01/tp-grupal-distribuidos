@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -75,13 +74,12 @@ func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 	}
 
 	return &Fetcher{
-		inputQueue:     inputQueue,
-		outputQueues:   outputQueues,
-		queryId:        config.QueryId,
-		quote:          config.Quote,
-		actualIndex:    0,
-		ratesCache:     make(map[string]float64),
-		ratesCacheKeys: make([]string, 0, CACHE_MAX_SIZE),
+		inputQueue:   inputQueue,
+		outputQueues: outputQueues,
+		queryId:      config.QueryId,
+		quote:        config.Quote,
+		actualIndex:  0,
+		ratesCache:   make(map[string]float64),
 	}, nil
 }
 
@@ -134,15 +132,15 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 				slog.Error("while fetching exchange rate", "err", err)
 				continue
 			}
-			if len(fetcher.ratesCacheKeys) >= CACHE_MAX_SIZE {
-				idx := rand.Intn(len(fetcher.ratesCacheKeys))
-				evict := fetcher.ratesCacheKeys[idx]
-				delete(fetcher.ratesCache, evict)
-				fetcher.ratesCacheKeys[idx] = fetcher.ratesCacheKeys[len(fetcher.ratesCacheKeys)-1]
-				fetcher.ratesCacheKeys = fetcher.ratesCacheKeys[:len(fetcher.ratesCacheKeys)-1]
+			if len(fetcher.ratesCache) >= CACHE_MAX_SIZE {
+				toDelete := ""
+				for key := range fetcher.ratesCache {
+					toDelete = key
+					break // me quedo con el primero del iterador, que es "random"
+				}
+				delete(fetcher.ratesCache, toDelete)
 			}
 			fetcher.ratesCache[cacheKey] = rate
-			fetcher.ratesCacheKeys = append(fetcher.ratesCacheKeys, cacheKey)
 		}
 		responses = append(responses, fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * rate})
 	}

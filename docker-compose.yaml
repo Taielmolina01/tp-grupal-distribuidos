@@ -172,7 +172,7 @@ services:
         max-file: "3"
 
 
-  # Query 2
+  # # Query 2
 
   q2_reducer_0:
     build:
@@ -317,7 +317,7 @@ services:
         max-file: "3"
 
 
-  # Query 4
+  # # Query 4
 
   q4_filter_and_splitter_0:
     build:
@@ -556,7 +556,7 @@ services:
         max-file: "3"
 
 
-  # Query 3
+  # # Query 3
 
   q3_filter_range_0:
     build:

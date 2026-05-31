@@ -117,16 +117,12 @@ func (filter *ConvertedAmountFilter) consume(msg middleware.Message, ack, _ func
 // Helpers
 
 func (filter *ConvertedAmountFilter) emit(clientID int, response transfer.FinalTransferForQ5) {
-	filter.pendingMu.Lock()
 	filter.pending[clientID] = append(filter.pending[clientID], response)
-	filter.pendingMu.Unlock()
 }
 
 func (filter *ConvertedAmountFilter) flush(clientID int) {
-	filter.pendingMu.Lock()
 	results := filter.pending[clientID]
 	delete(filter.pending, clientID)
-	filter.pendingMu.Unlock()
 
 	if len(results) == 0 {
 		return

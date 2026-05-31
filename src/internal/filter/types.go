@@ -1,7 +1,6 @@
 package filter
 
 import (
-	"sync"
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/eofring"
@@ -97,5 +96,4 @@ type ConvertedAmountFilter struct {
 	quote           string
 	amountThreshold float64
 	pending         map[int][]transfer.FinalTransferForQ5
-	pendingMu       sync.Mutex
 }
