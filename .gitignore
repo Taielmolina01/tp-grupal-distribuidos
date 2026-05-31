@@ -38,3 +38,6 @@ pruebas/*
 input2/*
 expected_output/*
 salida.txt
+loop.sh
+resultados_loop.md
+loop_logs/*

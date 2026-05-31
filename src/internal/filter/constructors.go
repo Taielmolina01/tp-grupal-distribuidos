@@ -1,12 +1,7 @@
 package filter
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
-	"time"
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/fetcherresponse"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/normalizer"
 	"tp-grupal-distribuidos/internal/common/queryresult"
@@ -67,7 +62,7 @@ func CreateDateRangeAndPaymentMethod(config FilterConfig) (worker.Worker, error)
 	return newFilter(
 		config,
 		func(t transfer.Transfer) bool {
-			return isValidPaymentMethod(t, config) && !t.Timestamp.Before(config.StartDateRange) && t.Timestamp.Before(config.EndDateRange)
+			return t.PaymentCurrency != IGNORED_CURRENCY && isValidPaymentMethod(t, config) && !t.Timestamp.Before(config.StartDateRange) && t.Timestamp.Before(config.EndDateRange)
 		},
 		transfer.ProjectForQ5Filter,
 		records.TransferCodec,
@@ -100,63 +95,5 @@ func CreateBankDistinctFilter(config FilterConfig) (worker.Worker, error) {
 func CreateConvertedAmountFilter(config FilterConfig) (worker.Worker, error) {
 	return newConvertedAmountFilter(
 		config,
-		func(t transfer.TransferForQ5Filter, f fetcherresponse.FetcherResponse) bool {
-			return t.AmountPaid/f.Rate < config.Amount
-		},
-		func(f fetcherresponse.FetcherResponse) string { return f.Date },
-		func(f fetcherresponse.FetcherResponse) string { return f.Quote },
-		func(f fetcherresponse.FetcherResponse) float64 { return f.Rate },
-		func(t transfer.TransferForQ5Filter) string {
-			return t.Timestamp.Format(DATE_LAYOUT)
-		},
-		func(t transfer.TransferForQ5Filter) string { return t.Currency },
-		func(t transfer.TransferForQ5Filter) float64 { return t.AmountPaid },
-		func(t transfer.TransferForQ5Filter, rate float64) fetcherresponse.FetcherResponse {
-			return fetcherresponse.FetcherResponse{
-				Date:  t.Timestamp.Format(DATE_LAYOUT),
-				Quote: t.Currency,
-				Rate:  rate,
-			}
-		},
-		func(t transfer.TransferForQ5Filter, clientID int) string {
-			return strings.Join([]string{
-				t.Timestamp.Format(time.RFC3339),
-				t.Currency,
-				strconv.FormatFloat(t.AmountPaid, 'f', -1, 64),
-				strconv.Itoa(clientID),
-			}, ",")
-		},
-		func(line string) (transfer.TransferForQ5Filter, int, error) {
-			columns := strings.Split(line, ",")
-			if len(columns) < 4 {
-				return transfer.TransferForQ5Filter{}, -1, fmt.Errorf("invalid line format")
-			}
-			timestamp, err := time.Parse(time.RFC3339, columns[0])
-			if err != nil {
-				return transfer.TransferForQ5Filter{}, -1, fmt.Errorf("error while parsing timestamp: %w", err)
-			}
-			amountPaid, err := strconv.ParseFloat(columns[2], 64)
-			if err != nil {
-				return transfer.TransferForQ5Filter{}, -1, fmt.Errorf("error while parsing amount paid: %w", err)
-			}
-			clientId, err := strconv.Atoi(columns[3])
-			if err != nil {
-				return transfer.TransferForQ5Filter{}, -1, fmt.Errorf("error while parsing client ID: %w", err)
-			}
-			return transfer.TransferForQ5Filter{
-				Timestamp:  timestamp,
-				Currency:   columns[1],
-				AmountPaid: amountPaid,
-			}, clientId, nil
-		},
-		func(t transfer.TransferForQ5Filter) bool {
-			return t.Currency == IGNORED_CURRENCY
-		},
-		func() transfer.FinalTransferForQ5 {
-			return transfer.ProjectForQ5Final()
-		},
-		records.FetcherResponseCodec,
-		records.TransferForQ5FilterCodec,
-		records.FinalTransferForQ5Codec,
 	)
 }

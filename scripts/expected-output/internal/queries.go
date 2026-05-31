@@ -76,6 +76,10 @@ func getQuery2Result(inputDir string, n int, accs []Account, outPath string) err
 		cur, ok := maxes[normalizeBank(t.FromBank)]
 		if !ok || t.AmountPaid > cur.AmountPaid {
 			maxes[normalizeBank(t.FromBank)] = t
+		} else if ok && t.AmountPaid == cur.AmountPaid {
+			if t.FromBank > cur.FromBank {
+				maxes[normalizeBank(t.FromBank)] = t
+			}
 		}
 		return nil
 	}); err != nil {
@@ -234,12 +238,13 @@ func getQuery4Result(inputDir string, n int, outPath string) error {
 	}
 	return out.close()
 }
+
 func getQuery5Result(inputDir string, n int, rates map[string]map[string]float64, outPath string) error {
 	count := 0
 	if err := forEachTransaction(inputDir, n, func(t Transaction) error {
 		if !(t.Timestamp >= _QUERY5_START_DATE && t.Timestamp < _QUERY5_END_DATE) ||
 			!slices.Contains(validFormatsQ5, t.PaymentFormat) ||
-			t.ReceivingCurrency == "Bitcoin" {
+			t.PaymentCurrency == "Bitcoin" {
 			return nil
 		}
 		date := strings.SplitN(t.Timestamp, " ", 2)[0]
@@ -248,15 +253,17 @@ func getQuery5Result(inputDir string, n int, rates map[string]map[string]float64
 			iso = t.PaymentCurrency
 		}
 		rate := 1.0
-		found := false
-		if dayRates, ok := rates[date]; ok {
-			if r, ok2 := dayRates[iso]; ok2 {
-				rate = r
-				found = true
+		if iso != "USD" {
+			found := false
+			if dayRates, ok := rates[date]; ok {
+				if r, ok2 := dayRates[iso]; ok2 {
+					rate = r
+					found = true
+				}
 			}
-		}
-		if !found {
-			return nil
+			if !found {
+				return nil
+			}
 		}
 		if t.AmountPaid/rate < _QUERY5_AMOUNT_THRESHOLD {
 			count++

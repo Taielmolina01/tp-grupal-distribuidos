@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,14 +16,32 @@ import (
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
-// https://frankfurter.dev/
 const (
-	API           = "https://api.frankfurter.dev/v2"
-	ENDPOINT      = "/rates"
-	QUERY         = "?base=%s&date=%s"
-	FULL_ENDPOINT = API + ENDPOINT + QUERY
-	DATE_LAYOUT   = "2006-01-02"
+	API            = "https://api.frankfurter.dev/v2"
+	ENDPOINT       = "/rate/%s/%s"
+	QUERY          = "?date=%s"
+	FULL_ENDPOINT  = API + ENDPOINT + QUERY
+	DATE_LAYOUT    = "2006-01-02"
+	CACHE_MAX_SIZE = 100_000
 )
+
+var datasetToFrank = map[string]string{
+	"Australian Dollar": "AUD",
+	"Bitcoin":           "BTC",
+	"Brazil Real":       "BRL",
+	"Canadian Dollar":   "CAD",
+	"Euro":              "EUR",
+	"Mexican Peso":      "MXN",
+	"Ruble":             "RUB",
+	"Rupee":             "INR",
+	"Saudi Riyal":       "SAR",
+	"Shekel":            "ILS",
+	"Swiss Franc":       "CHF",
+	"UK Pound":          "GBP",
+	"US Dollar":         "USD",
+	"Yen":               "JPY",
+	"Yuan":              "CNY",
+}
 
 func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 	connSettings := middleware.ConnSettings{
@@ -56,11 +75,13 @@ func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 	}
 
 	return &Fetcher{
-		inputQueue:       inputQueue,
-		outputQueues:     outputQueues,
-		queryId:          config.QueryId,
-		quote:            config.Quote,
-		conversionsByDay: make(map[string]map[string]float64),
+		inputQueue:     inputQueue,
+		outputQueues:   outputQueues,
+		queryId:        config.QueryId,
+		quote:          config.Quote,
+		actualIndex:    0,
+		ratesCache:     make(map[string]float64),
+		ratesCacheKeys: make([]string, 0, CACHE_MAX_SIZE),
 	}, nil
 }
 
@@ -95,35 +116,51 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 	var responses []fetcherresponse.FetcherResponse
 	for i := range input.Records {
 		t := input.Records[i]
-		today := t.Timestamp.Format(DATE_LAYOUT)
-		if _, ok := fetcher.conversionsByDay[today]; ok {
+		if t.Currency == "Bitcoin" {
 			continue
 		}
-		fetcher.conversionsByDay[today] = make(map[string]float64)
-		if err := fetcher.fetchExchangeRate(t); err != nil {
-			slog.Error("while fetching exchange rate", "err", err)
+		base := datasetToFrank[t.Currency]
+		if base == fetcher.quote {
+			responses = append(responses, fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid})
 			continue
 		}
-		for base, rate := range fetcher.conversionsByDay[today] {
-			responses = append(responses, fetcherresponse.FetcherResponse{Date: today, Quote: base, Rate: rate})
+		dateKey := t.Timestamp.Format(DATE_LAYOUT)
+		cacheKey := dateKey + ":" + base
+		rate, ok := fetcher.ratesCache[cacheKey]
+		if !ok {
+			var err error
+			rate, err = fetcher.fetchExchangeRate(t)
+			if err != nil {
+				slog.Error("while fetching exchange rate", "err", err)
+				continue
+			}
+			if len(fetcher.ratesCacheKeys) >= CACHE_MAX_SIZE {
+				idx := rand.Intn(len(fetcher.ratesCacheKeys))
+				evict := fetcher.ratesCacheKeys[idx]
+				delete(fetcher.ratesCache, evict)
+				fetcher.ratesCacheKeys[idx] = fetcher.ratesCacheKeys[len(fetcher.ratesCacheKeys)-1]
+				fetcher.ratesCacheKeys = fetcher.ratesCacheKeys[:len(fetcher.ratesCacheKeys)-1]
+			}
+			fetcher.ratesCache[cacheKey] = rate
+			fetcher.ratesCacheKeys = append(fetcher.ratesCacheKeys, cacheKey)
 		}
+		responses = append(responses, fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * rate})
 	}
 
 	if len(responses) == 0 {
 		return
 	}
 	body := batch.Write(input.ClientID, fetcher.queryId, responses, records.FetcherResponseCodec)
-	for _, outputQueue := range fetcher.outputQueues {
-		if err := outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
-			slog.Error("while publishing batch to output queue", "err", err)
-		}
+	fetcher.actualIndex = (fetcher.actualIndex + 1) % len(fetcher.outputQueues)
+	if err := fetcher.outputQueues[fetcher.actualIndex].Send(middleware.Message{Body: string(body)}); err != nil {
+		slog.Error("while publishing batch to output queue", "err", err)
 	}
 }
 
-func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.TransferForQ5Filter) error {
-	response, err := http.Get(fmt.Sprintf(FULL_ENDPOINT, fetcher.quote, transfer.Timestamp.Format("2006-01-02")))
+func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.TransferForQ5Filter) (float64, error) {
+	response, err := http.Get(fmt.Sprintf(FULL_ENDPOINT, datasetToFrank[transfer.Currency], fetcher.quote, transfer.Timestamp.Format("2006-01-02")))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() {
 		if err := response.Body.Close(); err != nil {
@@ -132,23 +169,16 @@ func (fetcher *Fetcher) fetchExchangeRate(transfer transfer.TransferForQ5Filter)
 	}()
 
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("received non-OK response: %s", response.Status)
+		return 0, fmt.Errorf("received non-OK response: %s", response.Status)
 	}
 
 	decoder := json.NewDecoder(response.Body)
-	var body []apiResponseRates
+	var body apiResponseRate
 	if err = decoder.Decode(&body); err != nil {
-		return fmt.Errorf("error decoding response body: %v", err)
+		return 0, fmt.Errorf("error decoding response body: %v", err)
 	}
 
-	for _, row := range body {
-		if _, ok := fetcher.conversionsByDay[row.Date]; !ok {
-			fetcher.conversionsByDay[row.Date] = make(map[string]float64)
-		}
-		fetcher.conversionsByDay[row.Date][row.Quote] = row.Rate
-	}
-
-	return nil
+	return body.Rate, nil
 }
 
 func (fetcher *Fetcher) HandleSignals() {

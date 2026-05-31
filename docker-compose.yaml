@@ -48,8 +48,8 @@ services:
     environment:
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - INPUT_FILE_ACCOUNTS=/input/HI-Large_accounts.csv
-      - INPUT_FILE_TRANS=/input/HI-Large_Trans.csv
+      - INPUT_FILE_ACCOUNTS=/input/LI-Small_accounts.csv
+      - INPUT_FILE_TRANS=/input/HI-Medium_Trans.csv
       - OUTPUT_FILE_PREFIX=/output/output_0
       - MAX_BATCH_SIZE=5000
     volumes:
@@ -782,10 +782,7 @@ services:
       - MOM_PORT=5672
       - ID=0
       - AMOUNT=1
-      - LEFT_INPUT_QUEUE=Q5_fetcher_output_0
-      - RIGHT_INPUT_QUEUE=Q5_filtered_filter_q
-      - RIGHT_INPUT_EXCHANGE=Q5_filtered_exchange
-      - RIGHT_INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
+      - INPUT_QUEUE=Q5_fetcher_output_0
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
@@ -805,10 +802,7 @@ services:
       - MOM_PORT=5672
       - ID=1
       - AMOUNT=1
-      - LEFT_INPUT_QUEUE=Q5_fetcher_output_1
-      - RIGHT_INPUT_QUEUE=Q5_filtered_filter_q
-      - RIGHT_INPUT_EXCHANGE=Q5_filtered_exchange
-      - RIGHT_INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
+      - INPUT_QUEUE=Q5_fetcher_output_1
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER

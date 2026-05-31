@@ -100,25 +100,25 @@ type TransferForQ5 struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+func ProjectForQ5(t Transfer) TransferForQ5 {
+	return TransferForQ5{Timestamp: t.Timestamp}
+}
+
 type TransferForQ5Filter struct {
 	Timestamp  time.Time `json:"timestamp"`
 	Currency   string    `json:"currency"`
 	AmountPaid float64   `json:"amount_paid"`
 }
 
-type FinalTransferForQ5 struct{}
-
-func ProjectForQ5(t Transfer) TransferForQ5 {
-	return TransferForQ5{Timestamp: t.Timestamp}
-}
-
 func ProjectForQ5Filter(t Transfer) TransferForQ5Filter {
 	return TransferForQ5Filter{
 		Timestamp:  t.Timestamp,
-		Currency:   t.ReceivingCurrency,
+		Currency:   t.PaymentCurrency,
 		AmountPaid: t.AmountPaid,
 	}
 }
+
+type FinalTransferForQ5 struct{}
 
 func ProjectForQ5Final() FinalTransferForQ5 {
 	return FinalTransferForQ5{}

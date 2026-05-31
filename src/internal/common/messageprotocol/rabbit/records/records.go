@@ -268,19 +268,15 @@ var AccountIdentifierCodec = wire.Codec[account.AccountIdentifier]{
 	Marshal: MarshalAccountIdentifier, Unmarshal: UnmarshalAccountIdentifier, MinSize: MinSizeAccountIdentifier,
 }
 
-const MinSizeFetcherResponse = 2*serializer.UINT16_SIZE + serializer.UINT64_SIZE
+const MinSizeFetcherResponse = serializer.UINT64_SIZE
 
 func MarshalFetcherResponse(w *wire.Writer, f *fetcherresponse.FetcherResponse) {
-	w.String(f.Date)
-	w.String(f.Quote)
-	w.Float64(f.Rate)
+	w.Float64(f.ConvertedAmount)
 }
 
 func UnmarshalFetcherResponse(r *wire.Reader) fetcherresponse.FetcherResponse {
 	return fetcherresponse.FetcherResponse{
-		Date:  r.String(),
-		Quote: r.String(),
-		Rate:  r.Float64(),
+		ConvertedAmount: r.Float64(),
 	}
 }
 

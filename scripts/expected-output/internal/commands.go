@@ -18,7 +18,7 @@ func Build(inputDir, expectedDir, outputDir string, amountOfClients int) error {
 		return fmt.Errorf("no se pudieron obtener las cotizaciones: %w", err)
 	}
 
-	for i := 0; i < amountOfClients; i++ {
+	for i := range amountOfClients {
 		log.Printf("Procesando dataset (rep cliente %d)", i)
 		accounts, err := loadAccounts(inputDir, i)
 		if err != nil {

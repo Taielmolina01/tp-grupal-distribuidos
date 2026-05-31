@@ -1,21 +1,15 @@
 package filter
 
 import (
-	"bufio"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
-	"sync"
 	"syscall"
-	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
-	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
@@ -44,155 +38,91 @@ var datasetToFrank = map[string]string{
 	"Yuan":              "CNY",
 }
 
-func newConvertedAmountFilter[T, S, O comparable](
+func newConvertedAmountFilter(
 	config FilterConfig,
-	compareFunc func(t T, s S) bool,
-	leftKeyFunc func(S) string,
-	leftSecondKeyFunc func(S) string,
-	leftValueFunc func(S) float64,
-	rightKeyFunc func(T) string,
-	rightsecondKeyFunc func(T) string,
-	rightValueFunc func(T) float64,
-	conversionFunc func(T, float64) S,
-	toSaveFunc func(T, int) string,
-	fromSaveFunc func(string) (T, int, error),
-	toIgnoreFunc func(T) bool,
-	transformToOutputType func() O,
-	leftCodec wire.Codec[S],
-	rightCodec wire.Codec[T],
-	outputCodec wire.Codec[O],
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{
 		Hostname: config.MomHost,
 		Port:     config.MomPort,
 	}
 
-	leftInputQueue, err := middleware.CreateQueueMiddleware(
-		config.LeftInputQueue,
+	inputQueue, err := middleware.CreateQueueMiddleware(
+		config.InputQueue,
 		connSettings,
 	)
 
 	if err != nil {
 		return nil, err
 	}
-
-	rightInputQueue, err := middleware.CreateExchangeMiddleware(
-		config.RightInputExchange,
-		config.RightInputQueue,
-		config.RightInputRoutingKeys,
-		connSettings,
-	)
-
-	if err != nil {
-		if err := leftInputQueue.Close(); err != nil {
-			slog.Error("while closing left input queue", "err", err)
-		}
-		return nil, err
-	}
-
 	outputQueue, err := middleware.CreateQueueMiddleware(
 		config.OutputQueue,
 		connSettings,
 	)
 
 	if err != nil {
-		if err := leftInputQueue.Close(); err != nil {
-			slog.Error("while closing left input queue", "err", err)
-		}
-		if err := rightInputQueue.Close(); err != nil {
-			slog.Error("while closing right input queue", "err", err)
+		if err := inputQueue.Close(); err != nil {
+			slog.Error("while closing input queue", "err", err)
 		}
 		return nil, err
 	}
 
-	eofInputName, eofOutputName := eofring.GetInputAndOutputQueueNames(
-		config.Id,
-		config.FilterAmount,
-		eofRingQueuePrefix,
-		eofRingQueuePrefix,
-	)
-
-	eofInput, err := middleware.CreateQueueMiddleware(
-		eofInputName,
-		connSettings,
-	)
-
-	if err != nil {
-		slog.Error("creating eof input", "err", err)
-	}
-
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		eofOutputName,
-		connSettings,
-	)
-
-	if err != nil {
-		slog.Error("creating eof output", "err", err)
-	}
-
 	messagesMonitor := msgmonitor.NewMessageMonitor()
 
-	filter := &ConvertedAmountFilter[T, S, O]{
-		leftInputQueue:     leftInputQueue,
-		rightInputQueue:    rightInputQueue,
-		outputQueue:        outputQueue,
-		compareFunc:        compareFunc,
-		queryId:            config.QueryId,
-		conversionsByDay:   make(map[string]map[string]float64),
-		leftKeyFunc:        leftKeyFunc,
-		leftSecondKeyFunc:  leftSecondKeyFunc,
-		leftValueFunc:      leftValueFunc,
-		rightKeyFunc:       rightKeyFunc,
-		rightsecondKeyFunc: rightsecondKeyFunc,
-		rightValueFunc:     rightValueFunc,
-		conversionFunc:     conversionFunc,
-		toSaveFunc:         toSaveFunc,
-		fromSaveFunc:       fromSaveFunc,
-		eofOutputQueue:     eofOutput,
-		handlerMessages:    messagesMonitor,
-		id:                 uint32(config.Id),
-		toIgnoreFunc:       toIgnoreFunc,
-		quote:              config.Quote,
-		amountThreshold:    config.Amount,
-		fileMutexes:        make(map[string]*sync.Mutex),
-		fileMutexesMu:      sync.Mutex{},
-		mapMutex:           sync.Mutex{},
-		transformToOutput:  transformToOutputType,
-		leftCodec:          leftCodec,
-		rightCodec:         rightCodec,
-		outputCodec:        outputCodec,
-		pending:            map[int][]O{},
+	filter := &ConvertedAmountFilter{
+		inputQueue:      inputQueue,
+		outputQueue:     outputQueue,
+		queryId:         config.QueryId,
+		handlerMessages: messagesMonitor,
+		id:              uint32(config.Id),
+		quote:           config.Quote,
+		amountThreshold: config.Amount,
+		pending:         make(map[int][]transfer.FinalTransferForQ5),
 	}
-
-	filter.eofRing = eofring.CreateEofRingAlgorithm(
-		eofInput, eofOutput,
-		config.FilterAmount,
-		uint32(config.Id),
-		messagesMonitor,
-		func(clientID int, total uint32, isCoordinator bool) error {
-			if !isCoordinator {
-				return nil
-			}
-			filter.flush(clientID)
-			if err := outputQueue.Send(middleware.Message{Body: string(batch.WriteEOF(clientID, config.QueryId, total))}); err != nil {
-				slog.Error("while sending message to output queue from ring callback", "err", err)
-				return err
-			}
-			return nil
-		},
-		config.QueryId,
-	)
 
 	return filter, nil
 }
 
-func (filter *ConvertedAmountFilter[T, S, O]) emit(clientID int, o O) {
+func (filter *ConvertedAmountFilter) Run() {
+	defer filter.close()
+
+	if err := filter.inputQueue.StartConsuming(filter.consume); err != nil {
+		slog.Error("while starting consuming from left input queue", "err", err)
+		return
+	}
+}
+
+func (filter *ConvertedAmountFilter) consume(msg middleware.Message, ack, _ func()) {
+	defer ack()
+
+	input, err := batch.Read([]byte(msg.Body), records.FetcherResponseCodec)
+	if err != nil {
+		slog.Error("while deserializing batch", "err", err)
+		return
+	}
+	if input.EOF {
+		filter.flush(input.ClientID)
+		if err := filter.outputQueue.Send(middleware.Message{Body: string(batch.WriteEOF(input.ClientID, filter.queryId, input.Total))}); err != nil {
+			slog.Error("while forwarding EOF", "client_id", input.ClientID, "err", err)
+		}
+		return
+	}
+
+	for _, t := range input.Records {
+		if t.ConvertedAmount < filter.amountThreshold {
+			filter.emit(input.ClientID, transfer.ProjectForQ5Final())
+		}
+	}
+}
+
+// Helpers
+
+func (filter *ConvertedAmountFilter) emit(clientID int, response transfer.FinalTransferForQ5) {
 	filter.pendingMu.Lock()
-	filter.pending[clientID] = append(filter.pending[clientID], o)
+	filter.pending[clientID] = append(filter.pending[clientID], response)
 	filter.pendingMu.Unlock()
 }
 
-func (filter *ConvertedAmountFilter[T, S, O]) flush(clientID int) {
+func (filter *ConvertedAmountFilter) flush(clientID int) {
 	filter.pendingMu.Lock()
 	results := filter.pending[clientID]
 	delete(filter.pending, clientID)
@@ -201,320 +131,28 @@ func (filter *ConvertedAmountFilter[T, S, O]) flush(clientID int) {
 	if len(results) == 0 {
 		return
 	}
-	body := batch.Write(clientID, filter.queryId, results, filter.outputCodec)
+	body := batch.Write(clientID, filter.queryId, results, records.FinalTransferForQ5Codec)
 	if err := filter.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Error("while sending results batch", "err", err)
 	}
 }
 
-func (filter *ConvertedAmountFilter[T, S, O]) Run() {
-	defer filter.close()
+// Closure
 
-	go func() {
-		if err := filter.leftInputQueue.StartConsuming(filter.consumeLeft); err != nil {
-			slog.Error("while starting consuming from left input queue", "err", err)
-			return
-		}
-	}()
-	go filter.eofRing.Run()
-
-	if err := filter.rightInputQueue.StartConsuming(filter.consumeRight); err != nil {
-		slog.Error("while starting consuming from right input queue", "err", err)
-		return
-	}
-}
-
-func (filter *ConvertedAmountFilter[T, S, O]) consumeLeft(msg middleware.Message, ack, _ func()) {
-	defer ack()
-
-	input, err := batch.Read([]byte(msg.Body), filter.leftCodec)
-	if err != nil {
-		slog.Error("while deserializing left batch", "err", err)
-		return
-	}
-	if input.EOF {
-		filter.flush(input.ClientID)
-		if err := filter.outputQueue.Send(middleware.Message{Body: string(batch.WriteEOF(input.ClientID, filter.queryId, input.Total))}); err != nil {
-			slog.Error("while forwarding left EOF", "client_id", input.ClientID, "err", err)
-		}
-		return
-	}
-
-	for i := range input.Records {
-		payload := input.Records[i]
-		filter.mapMutex.Lock()
-		if _, ok := filter.conversionsByDay[filter.leftKeyFunc(payload)]; !ok {
-			filter.conversionsByDay[filter.leftKeyFunc(payload)] = make(map[string]float64)
-		}
-		filter.conversionsByDay[filter.leftKeyFunc(payload)][filter.leftSecondKeyFunc(payload)] = filter.leftValueFunc(payload)
-		filter.mapMutex.Unlock()
-		filter.CheckTransfersWithoutConversion(payload)
-	}
-}
-
-func (filter *ConvertedAmountFilter[T, S, O]) consumeRight(msg middleware.Message, ack, _ func()) {
-	defer ack()
-
-	input, err := batch.Read([]byte(msg.Body), filter.rightCodec)
-	if err != nil {
-		slog.Error("while deserializing right batch", "err", err)
-		return
-	}
-
-	if input.EOF {
-		filter.closeClientFiles(input.ClientID)
-		eofRingMessage := eofmessagetypes.EofRingMessage{
-			RealAmount:     input.Total,
-			ActualAmount:   filter.handlerMessages.GetProcessedMessagesAmountByClientId(input.ClientID),
-			ClientId:       input.ClientID,
-			CoordinatorId:  uint32(filter.id),
-			FilteredAmount: filter.handlerMessages.GetForwardedMessagesAmountByClientId(input.ClientID),
-		}
-		if err := filter.eofOutputQueue.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(eofRingMessage))}); err != nil {
-			slog.Error("While sending EOF message to EOF ring", "err", err)
-		}
-		return
-	}
-
-	for i := range input.Records {
-		filter.processRight(input.ClientID, input.Records[i])
-	}
-}
-
-func (filter *ConvertedAmountFilter[T, S, O]) processRight(clientID int, payload T) {
-	filter.handlerMessages.AddProcessedMessagesAmountByClientId(clientID, 1)
-
-	if filter.toIgnoreFunc(payload) {
-		return
-	}
-
-	key := filter.rightKeyFunc(payload)
-	filter.mapMutex.Lock()
-	conversion, ok := filter.conversionsByDay[key][datasetToFrank[filter.rightsecondKeyFunc(payload)]]
-	filter.mapMutex.Unlock()
-
-	if ok || filter.rightsecondKeyFunc(payload) == filter.quote {
-		if filter.compareFunc(payload, filter.conversionFunc(payload, conversion)) || filter.rightValueFunc(payload) < filter.amountThreshold {
-			filter.handlerMessages.AddForwardedMessagesAmountByClientId(clientID, 1)
-			filter.emit(clientID, filter.transformToOutput())
-		}
-	} else {
-		filter.saveTransfersInFile(payload, clientID)
-	}
-}
-
-func (filter *ConvertedAmountFilter[T, S, O]) CheckTransfersWithoutConversion(s S) {
-
-	firstKeyFile := strings.ReplaceAll(filter.leftKeyFunc(s), " ", "")
-	secondKeyFile := strings.ReplaceAll(filter.leftSecondKeyFunc(s), " ", "")
-	filePath := fmt.Sprintf(FILE_LAYOUT, firstKeyFile, secondKeyFile)
-	_, err := os.Stat(filePath)
-
-	if err != nil {
-		return
-	} else {
-		filter.fileMutexes[filePath].Lock()
-		defer filter.fileMutexes[filePath].Unlock()
-
-		file, err := os.Open(filePath)
-		if err != nil {
-			slog.Error("while opening file", "err", err)
-			return
-		}
-		defer func() {
-			if err := file.Close(); err != nil {
-				slog.Error("while closing file", "err", err)
-			}
-			if err := os.Remove(filePath); err != nil {
-				slog.Error("while removing file", "err", err)
-			}
-		}()
-
-		scanner := bufio.NewScanner(file)
-
-		for scanner.Scan() {
-			line := scanner.Text()
-			transfer, clientID, err := filter.fromSaveFunc(line)
-			if err != nil {
-				slog.Error("while parsing line", "err", err)
-				continue
-			}
-
-			if filter.toIgnoreFunc(transfer) {
-				continue
-			}
-
-			if filter.compareFunc(transfer, s) {
-				filter.emit(clientID, filter.transformToOutput())
-			}
-		}
-	}
-}
-
-func (filter *ConvertedAmountFilter[T, S, O]) saveTransfersInFile(transfer T, clientID int) {
-	filter.mapMutex.Lock()
-	secondKey := datasetToFrank[filter.rightsecondKeyFunc(transfer)]
-	filter.mapMutex.Unlock()
-
-	// https://www.solvetic.com/tutoriales/article/1458-entender-los-permisos-linux-chmod/
-	filePath := fmt.Sprintf(
-		FILE_LAYOUT,
-		strings.ReplaceAll(filter.rightKeyFunc(transfer), " ", ""),
-		secondKey,
-	)
-
-	filter.fileMutexesMu.Lock()
-	if filter.fileMutexes[filePath] == nil {
-		filter.fileMutexes[filePath] = &sync.Mutex{}
-	}
-	filter.fileMutexesMu.Unlock()
-
-	filter.fileMutexes[filePath].Lock()
-	defer filter.fileMutexes[filePath].Unlock()
-
-	file, err := os.OpenFile(
-		filePath,
-		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
-		0644,
-	)
-
-	if err != nil {
-		slog.Error("while opening file", "err", err)
-		return
-	}
-
-	defer func() {
-		if err := file.Close(); err != nil {
-			slog.Error("while closing file", "err", err)
-		}
-	}()
-
-	writer := bufio.NewWriter(file)
-
-	line := filter.toSaveFunc(transfer, clientID) + "\n"
-
-	_, err = writer.WriteString(line)
-	if err != nil {
-		slog.Error("while writing to file", "err", err)
-	}
-
-	if err := writer.Flush(); err != nil {
-		slog.Error("while flushing writer", "err", err)
-	}
-}
-
-func (filter *ConvertedAmountFilter[T, S, O]) closeClientFiles(clientID int) {
-	// quizas deberia tener un mutex por file? no se que tan costoso es eso
-
-	pattern := "*_*.csv"
-	files, err := filepath.Glob(pattern)
-	if err != nil {
-		slog.Error("while globbing files for client cleanup", "err", err)
-		return
-	}
-
-	for _, filePath := range files {
-		filter.fileMutexesMu.Lock()
-		if filter.fileMutexes[filePath] == nil {
-			filter.fileMutexes[filePath] = &sync.Mutex{}
-		}
-		filter.fileMutexesMu.Unlock()
-
-		filter.fileMutexes[filePath].Lock()
-		defer filter.fileMutexes[filePath].Unlock()
-
-		f, err := os.Open(filePath)
-		if err != nil {
-			slog.Error("while opening file for client cleanup", "file", filePath, "err", err)
-			continue
-		}
-
-		scanner := bufio.NewScanner(f)
-		var remainingLines []string
-
-		for scanner.Scan() {
-			line := scanner.Text()
-			transfer, cid, err := filter.fromSaveFunc(line)
-			if err != nil {
-				slog.Error("while parsing saved line during cleanup", "file", filePath, "err", err)
-				continue
-			}
-
-			if filter.toIgnoreFunc(transfer) {
-				continue
-			}
-
-			if cid != clientID || !filter.compareFunc(transfer, filter.conversionFunc(
-				transfer,
-				filter.conversionsByDay[filter.rightKeyFunc(transfer)][datasetToFrank[filter.rightsecondKeyFunc(transfer)]],
-			)) {
-				remainingLines = append(remainingLines, line)
-			} else {
-				filter.emit(cid, filter.transformToOutput())
-				filter.handlerMessages.AddForwardedMessagesAmountByClientId(cid, 1)
-			}
-		}
-
-		if err := f.Close(); err != nil {
-			slog.Error("while closing file during client cleanup", "file", filePath, "err", err)
-		}
-
-		// podria hacer un directorio por cliente y guardar distinto en los archivos. quizas sea más facil para manejar esto. Incluso las sin procesar podrían ser millones
-		// y estoy levantando en memoria un monton de data. para la proxima iteración CAMBIAR.
-		if len(remainingLines) == 0 {
-			if err := os.Remove(filePath); err != nil {
-				slog.Error("while removing emptied file during cleanup", "file", filePath, "err", err)
-			}
-			continue
-		}
-
-		dir := filepath.Dir(filePath)
-		tmpFile, err := os.CreateTemp(dir, ".tmp-*")
-		if err != nil {
-			slog.Error("while creating temp file during cleanup", "err", err)
-			continue
-		}
-
-		w := bufio.NewWriter(tmpFile)
-		for _, l := range remainingLines {
-			if _, err := w.WriteString(l + "\n"); err != nil {
-				slog.Error("while writing to temp file during cleanup", "err", err)
-			}
-		}
-		if err := w.Flush(); err != nil {
-			slog.Error("while flushing temp file during cleanup", "err", err)
-		}
-		if err := tmpFile.Close(); err != nil {
-			slog.Error("while closing temp file during cleanup", "err", err)
-		}
-
-		if err := os.Rename(tmpFile.Name(), filePath); err != nil {
-			slog.Error("while replacing original file during cleanup", "file", filePath, "err", err)
-		}
-	}
-}
-
-func (filter *ConvertedAmountFilter[T, S, O]) HandleSignals() {
+func (filter *ConvertedAmountFilter) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
 
-	if err := filter.leftInputQueue.StopConsuming(); err != nil {
+	if err := filter.inputQueue.StopConsuming(); err != nil {
 		slog.Error("while stopping consuming from left input queue", "err", err)
-	}
-	if err := filter.rightInputQueue.StopConsuming(); err != nil {
-		slog.Error("while stopping consuming from right input queue", "err", err)
 	}
 }
 
-func (filter *ConvertedAmountFilter[T, S, O]) close() {
-
-	if err := filter.leftInputQueue.Close(); err != nil {
+func (filter *ConvertedAmountFilter) close() {
+	if err := filter.inputQueue.Close(); err != nil {
 		slog.Error("while closing left input queue", "err", err)
-	}
-	if err := filter.rightInputQueue.Close(); err != nil {
-		slog.Error("while closing right input queue", "err", err)
 	}
 	if err := filter.outputQueue.Close(); err != nil {
 		slog.Error("while closing output queue", "err", err)

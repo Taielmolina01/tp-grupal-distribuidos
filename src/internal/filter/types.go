@@ -88,37 +88,14 @@ type DistinctFilter[T comparable, S comparable] struct {
 	queryId       uint8
 }
 
-type ConvertedAmountFilter[T, S, O comparable] struct {
-	leftInputQueue     middleware.Middleware
-	rightInputQueue    middleware.Middleware
-	outputQueue        middleware.Middleware
-	compareFunc        func(t T, s S) bool
-	queryId            uint8
-	leftKeyFunc        func(S) string
-	leftSecondKeyFunc  func(S) string
-	leftValueFunc      func(S) float64
-	rightKeyFunc       func(T) string
-	rightsecondKeyFunc func(T) string
-	rightValueFunc     func(T) float64
-	conversionFunc     func(T, float64) S
-	conversionsByDay   map[string]map[string]float64
-	toSaveFunc         func(T, int) string
-	fromSaveFunc       func(string) (T, int, error)
-	eofRing            eofring.EofRingAlgorithm
-	eofOutputQueue     middleware.Middleware
-	handlerMessages    msgmonitor.MessageMonitor
-	id                 uint32
-	toIgnoreFunc       func(T) bool
-	quote              string
-	amountThreshold    float64
-	fileMutexes        map[string]*sync.Mutex
-	fileMutexesMu      sync.Mutex
-	mapMutex           sync.Mutex
-	transformToOutput  func() O
-
-	leftCodec   wire.Codec[S]
-	rightCodec  wire.Codec[T]
-	outputCodec wire.Codec[O]
-	pending     map[int][]O
-	pendingMu   sync.Mutex
+type ConvertedAmountFilter struct {
+	inputQueue      middleware.Middleware
+	outputQueue     middleware.Middleware
+	queryId         uint8
+	handlerMessages msgmonitor.MessageMonitor
+	id              uint32
+	quote           string
+	amountThreshold float64
+	pending         map[int][]transfer.FinalTransferForQ5
+	pendingMu       sync.Mutex
 }
