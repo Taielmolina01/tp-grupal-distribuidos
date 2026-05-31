@@ -56,6 +56,7 @@ services:
       - ./input:/input
       - ./output:/output
 
+
   # Query 1
 
   q1234_filter_currency_0:
@@ -170,7 +171,8 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # # Query 2
+
+  # Query 2
 
   q2_reducer_0:
     build:
@@ -314,7 +316,8 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # # Query 4
+
+  # Query 4
 
   q4_filter_and_splitter_0:
     build:
@@ -560,7 +563,8 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # # Query 3
+
+  # Query 3
 
   q3_filter_range_0:
     build:
@@ -706,6 +710,7 @@ services:
       - OUTPUT_QUEUE=results_queue
       - QUERY_ID=3
 
+
   # Query 5
 
   q5_filter_date_and_payment_0:
@@ -830,3 +835,4 @@ services:
       - OUTPUT_QUEUES=results_queue
       - REDUCER_TYPE=COUNT
       - QUERY_ID=5
+
