@@ -28,6 +28,8 @@ type FilterAccountSeenConfig struct {
 
 	InputMiddlewarePrefix string
 	QueryID               int
+	MaxBatchSize          int
+	MaxBatchBytes         int
 }
 
 type FilterAccountSeen struct {
@@ -35,7 +37,9 @@ type FilterAccountSeen struct {
 
 	mu sync.Mutex
 
-	expectedEOFs int
+	expectedEOFs  int
+	maxBatchSize  int
+	maxBatchBytes int
 
 	inputMiddleware  newmiddleware.Middleware
 	outputMiddleware newmiddleware.Middleware
@@ -47,8 +51,8 @@ type FilterAccountSeen struct {
 
 type clientState struct {
 	eofAmt       int
-	seenAccounts map[account.AccountIdentifier]bool
-	pending      []queryresult.Query4Result
+	seenAccounts map[account.AccountIdentifier]struct{}
+	builder      *batch.Builder[queryresult.Query4Result]
 }
 
 func NewFilterAccountSeen(config FilterAccountSeenConfig) (_ *FilterAccountSeen, err error) {
@@ -90,6 +94,8 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (_ *FilterAccountSeen,
 		outputMiddleware: outputMiddleware,
 		clientsState:     map[int]*clientState{},
 		expectedEOFs:     config.ExpectedEOFs,
+		maxBatchSize:     config.MaxBatchSize,
+		maxBatchBytes:    config.MaxBatchBytes,
 	}, nil
 }
 
@@ -145,11 +151,15 @@ func (f *FilterAccountSeen) handleRecord(clientID int, record account.AccountIde
 		return
 	}
 
-	state.seenAccounts[record] = true
-	state.pending = append(state.pending, queryresult.Query4Result{
+	state.seenAccounts[record] = struct{}{}
+	result := queryresult.Query4Result{
 		BankId:        record.BankID,
 		AccountNumber: record.AccountNumber,
-	})
+	}
+	if !state.builder.TryAdd(&result) {
+		f.flushResults(clientID, state)
+		state.builder.TryAdd(&result)
+	}
 }
 
 func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
@@ -163,11 +173,8 @@ func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
 		return
 	}
 
-	if len(state.pending) > 0 {
-		body := batch.Write(clientID, uint8(f.queryID), state.pending, records.Query4ResultCodec)
-		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(body)}); err != nil {
-			slog.Error("While sending Q4 results batch", "err", err)
-		}
+	if !state.builder.IsEmpty() {
+		f.flushResults(clientID, state)
 	}
 
 	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), total)
@@ -178,10 +185,20 @@ func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
 	delete(f.clientsState, clientID)
 }
 
+func (f *FilterAccountSeen) flushResults(clientID int, state *clientState) {
+	body := state.builder.Flush(clientID, uint8(f.queryID))
+	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(body)}); err != nil {
+		slog.Error("While sending Q4 results batch", "err", err)
+	}
+}
+
 func (f *FilterAccountSeen) stateFor(clientID int) *clientState {
 	st, ok := f.clientsState[clientID]
 	if !ok {
-		st = &clientState{seenAccounts: map[account.AccountIdentifier]bool{}}
+		st = &clientState{
+			seenAccounts: map[account.AccountIdentifier]struct{}{},
+			builder:      batch.NewBuilder(f.maxBatchSize, f.maxBatchBytes, records.Query4ResultCodec),
+		}
 		f.clientsState[clientID] = st
 	}
 	return st

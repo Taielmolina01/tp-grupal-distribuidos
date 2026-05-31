@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountchain"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/splittransfer"
@@ -31,7 +32,9 @@ type JoinAccountsConfig struct {
 	QualifiedInputExchange string
 	PreFilterAmount        int
 
-	QueryID int
+	QueryID       int
+	MaxBatchSize  int
+	MaxBatchBytes int
 }
 
 type clientState struct {
@@ -56,6 +59,8 @@ type JoinAccounts struct {
 	outputMiddleware    newmiddleware.Middleware
 
 	preFilterAmount int
+	maxBatchSize    int
+	maxBatchBytes   int
 
 	mu           sync.Mutex
 	clientsState map[int]*clientState
@@ -112,6 +117,8 @@ func NewJoinAccounts(config JoinAccountsConfig) (_ *JoinAccounts, err error) {
 		qualifiedMiddleware: qualifiedMiddleware,
 		outputMiddleware:    outputMiddleware,
 		preFilterAmount:     config.PreFilterAmount,
+		maxBatchSize:        config.MaxBatchSize,
+		maxBatchBytes:       config.MaxBatchBytes,
 		clientsState:        map[int]*clientState{},
 	}, nil
 }
@@ -266,7 +273,7 @@ func (j *JoinAccounts) tryFinalize(clientID int) {
 }
 
 func (j *JoinAccounts) finalize(clientID int, state *clientState) {
-	var chains []account.AccountChain
+	batches := make(map[string]*batch.Builder[account.AccountChain])
 
 	for protagonistKey, rightMap := range state.right {
 		leftMap, ok := state.left[protagonistKey]
@@ -281,24 +288,38 @@ func (j *JoinAccounts) finalize(clientID int, state *clientState) {
 				if _, ok := state.qualifyingRight[cPair.Right]; !ok {
 					continue
 				}
-				chains = append(chains, account.AccountChain{
+				chain := account.AccountChain{
 					Left:   aPair.Left,
 					Middle: aPair.Right,
 					Right:  cPair.Right,
-				})
+				}
+				rk := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, chain.Left.GetKey(), chain.Right.GetKey()))
+				b := j.builderFor(batches, rk)
+				if !b.TryAdd(&chain) {
+					j.flushChainBatch(clientID, rk, b)
+					b.TryAdd(&chain)
+				}
 			}
 		}
 	}
 
-	j.sendChains(clientID, chains)
+	for rk, b := range batches {
+		if !b.IsEmpty() {
+			j.flushChainBatch(clientID, rk, b)
+		}
+	}
 
 	eofBody := accountchain.WriteEOF(clientID, uint8(j.queryID), state.transferEOFTotal)
 	if err := j.outputMiddleware.Send(newmiddleware.Message{Body: string(eofBody), RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 
-	for _, inner := range state.left  { clear(inner) }
-	for _, inner := range state.right { clear(inner) }
+	for _, inner := range state.left {
+		clear(inner)
+	}
+	for _, inner := range state.right {
+		clear(inner)
+	}
 	clear(state.left)
 	clear(state.right)
 	clear(state.qualifyingLeft)
@@ -306,20 +327,19 @@ func (j *JoinAccounts) finalize(clientID int, state *clientState) {
 	delete(j.clientsState, clientID)
 }
 
-func (j *JoinAccounts) sendChains(clientID int, chains []account.AccountChain) {
-	if len(chains) == 0 {
-		return
+func (j *JoinAccounts) builderFor(batches map[string]*batch.Builder[account.AccountChain], rk string) *batch.Builder[account.AccountChain] {
+	b := batches[rk]
+	if b == nil {
+		b = accountchain.NewBatchBuilder(j.maxBatchSize, j.maxBatchBytes)
+		batches[rk] = b
 	}
-	grouped := make(map[string][]account.AccountChain)
-	for _, chain := range chains {
-		rk := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, chain.Left.GetKey(), chain.Right.GetKey()))
-		grouped[rk] = append(grouped[rk], chain)
-	}
-	for rk, group := range grouped {
-		body := accountchain.WriteBatch(clientID, uint8(j.queryID), group)
-		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: string(body), RoutingKey: rk}); err != nil {
-			slog.Error("While sending chain batch", "err", err)
-		}
+	return b
+}
+
+func (j *JoinAccounts) flushChainBatch(clientID int, rk string, b *batch.Builder[account.AccountChain]) {
+	body := b.Flush(clientID, uint8(j.queryID))
+	if err := j.outputMiddleware.Send(newmiddleware.Message{Body: string(body), RoutingKey: rk}); err != nil {
+		slog.Error("While sending chain batch", "err", err)
 	}
 }
 

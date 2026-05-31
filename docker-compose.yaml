@@ -48,14 +48,13 @@ services:
     environment:
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - INPUT_FILE_ACCOUNTS=/input/LI-Small_accounts.csv
-      - INPUT_FILE_TRANS=/input/HI-Medium_Trans.csv
+      - INPUT_FILE_ACCOUNTS=/input/accounts_0.csv
+      - INPUT_FILE_TRANS=/input/transactions_0.csv
       - OUTPUT_FILE_PREFIX=/output/output_0
-      - MAX_BATCH_SIZE=5000
+      - MAX_BATCH_SIZE=1000
     volumes:
       - ./input:/input
       - ./output:/output
-
 
   # Query 1
 
@@ -170,7 +169,6 @@ services:
       options:
         max-size: "50m"
         max-file: "3"
-
 
   # # Query 2
 
@@ -316,7 +314,6 @@ services:
         max-size: "50m"
         max-file: "3"
 
-
   # # Query 4
 
   q4_filter_and_splitter_0:
@@ -433,6 +430,8 @@ services:
       - QUALIFIED_INPUT_EXCHANGE=Q4_prefilter_out
       - PREFILTER_AMOUNT=2
       - QUERY_ID=4
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
     logging:
       driver: json-file
       options:
@@ -457,6 +456,8 @@ services:
       - QUALIFIED_INPUT_EXCHANGE=Q4_prefilter_out
       - PREFILTER_AMOUNT=2
       - QUERY_ID=4
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
     logging:
       driver: json-file
       options:
@@ -527,6 +528,8 @@ services:
       - OUTPUT_MIDDLEWARE=results_queue
       - EXPECTED_EOFS=2
       - QUERY_ID=4
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
     logging:
       driver: json-file
       options:
@@ -549,12 +552,13 @@ services:
       - OUTPUT_MIDDLEWARE=results_queue
       - EXPECTED_EOFS=2
       - QUERY_ID=4
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "3"
-
 
   # # Query 3
 
@@ -702,7 +706,6 @@ services:
       - OUTPUT_QUEUE=results_queue
       - QUERY_ID=3
 
-
   # Query 5
 
   q5_filter_date_and_payment_0:
@@ -827,4 +830,3 @@ services:
       - OUTPUT_QUEUES=results_queue
       - REDUCER_TYPE=COUNT
       - QUERY_ID=5
-

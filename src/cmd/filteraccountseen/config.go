@@ -44,6 +44,16 @@ func loadConfig() (filteraccountseen.FilterAccountSeenConfig, error) {
 		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
 	}
 
+	maxBatchSize, err := strconv.Atoi(os.Getenv("MAX_BATCH_SIZE"))
+	if err != nil {
+		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("MAX_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	maxBatchBytes, err := strconv.Atoi(os.Getenv("MAX_BATCH_BYTES"))
+	if err != nil {
+		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("MAX_BATCH_BYTES environment variable is required and must be a number")
+	}
+
 	return filteraccountseen.FilterAccountSeenConfig{
 		Id:                    id,
 		ExpectedEOFs:          expectedEOFs,
@@ -52,5 +62,7 @@ func loadConfig() (filteraccountseen.FilterAccountSeenConfig, error) {
 		MomPort:               momPort,
 		InputMiddlewarePrefix: inputPrefix,
 		QueryID:               queryID,
+		MaxBatchSize:          maxBatchSize,
+		MaxBatchBytes:         maxBatchBytes,
 	}, nil
 }

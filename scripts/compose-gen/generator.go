@@ -372,6 +372,8 @@ func writeJoinAccountsQ4(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - QUALIFIED_INPUT_EXCHANGE=Q4_prefilter_out\n")
 		fmt.Fprintf(b, "      - PREFILTER_AMOUNT=%d\n", cfg.PreFilterQ4)
 		b.WriteString("      - QUERY_ID=4\n")
+		b.WriteString("      - MAX_BATCH_SIZE=500\n")
+		b.WriteString("      - MAX_BATCH_BYTES=65536\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -416,6 +418,8 @@ func writeFilterAccountSeenQ4(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - OUTPUT_MIDDLEWARE=results_queue\n")
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.AcumAccountsQ4)
 		b.WriteString("      - QUERY_ID=4\n")
+		b.WriteString("      - MAX_BATCH_SIZE=500\n")
+		b.WriteString("      - MAX_BATCH_BYTES=65536\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
