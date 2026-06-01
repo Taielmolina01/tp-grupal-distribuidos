@@ -44,14 +44,19 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		return joinaccounts.JoinAccountsConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
 	}
 
-	qualifiedInputExchange := os.Getenv("QUALIFIED_INPUT_EXCHANGE")
-	if qualifiedInputExchange == "" {
-		return joinaccounts.JoinAccountsConfig{}, errors.New("QUALIFIED_INPUT_EXCHANGE environment variable is required")
+	qualifiedExchange := os.Getenv("QUALIFIED_EXCHANGE")
+	if qualifiedExchange == "" {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("QUALIFIED_EXCHANGE environment variable is required")
 	}
 
-	preFilterAmount, err := strconv.Atoi(os.Getenv("PREFILTER_AMOUNT"))
+	peerAmount, err := strconv.Atoi(os.Getenv("PEER_AMOUNT"))
 	if err != nil {
-		return joinaccounts.JoinAccountsConfig{}, errors.New("PREFILTER_AMOUNT environment variable is required and must be a number")
+		return joinaccounts.JoinAccountsConfig{}, errors.New("PEER_AMOUNT environment variable is required and must be a number")
+	}
+
+	threshold, err := strconv.Atoi(os.Getenv("THRESHOLD"))
+	if err != nil {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("THRESHOLD environment variable is required and must be a number")
 	}
 
 	maxBatchSize, err := strconv.Atoi(os.Getenv("MAX_BATCH_SIZE"))
@@ -71,8 +76,9 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		MomHost:                momHost,
 		MomPort:                momPort,
 		InputMiddlewarePrefix:  inputPrefix,
-		QualifiedInputExchange: qualifiedInputExchange,
-		PreFilterAmount:        preFilterAmount,
+		QualifiedExchange:      qualifiedExchange,
+		PeerAmount:             peerAmount,
+		Threshold:              threshold,
 		QueryID:                queryID,
 		MaxBatchSize:           maxBatchSize,
 		MaxBatchBytes:          maxBatchBytes,

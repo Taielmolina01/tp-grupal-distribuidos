@@ -25,7 +25,6 @@ func generateCompose(cfg *Config) string {
 
 	b.WriteString("\n  # Query 4\n\n")
 	writeFilterAndSplitterQ4(&b, cfg)
-	writePreFilterQ4(&b, cfg)
 	writeJoinAccountsQ4(&b, cfg)
 	writeAcumAccountsQ4(&b, cfg)
 	writeFilterAccountSeenQ4(&b, cfg)
@@ -333,27 +332,6 @@ func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 	}
 }
 
-func writePreFilterQ4(b *strings.Builder, cfg *Config) {
-	for i := range cfg.PreFilterQ4 {
-		fmt.Fprintf(b, "  q4_pre_filter_%d:\n", i)
-		b.WriteString("    build:\n")
-		b.WriteString("      context: ./src/\n")
-		b.WriteString("      dockerfile: cmd/prefilterq4/Dockerfile\n")
-		fmt.Fprintf(b, "    container_name: q4_pre_filter_%d\n", i)
-		rabbitmqDepends(b)
-		b.WriteString("    environment:\n")
-		fmt.Fprintf(b, "      - ID=%d\n", i)
-		b.WriteString("      - MOM_HOST=rabbitmq\n")
-		b.WriteString("      - MOM_PORT=5672\n")
-		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter\n")
-		b.WriteString("      - OUTPUT_EXCHANGE=Q4_prefilter_out\n")
-		b.WriteString("      - THRESHOLD=5\n")
-		b.WriteString("      - QUERY_ID=4\n")
-		jsonFileLogging(b)
-		b.WriteString("\n")
-	}
-}
-
 func writeJoinAccountsQ4(b *strings.Builder, cfg *Config) {
 	for i := range cfg.JoinAccountsQ4 {
 		fmt.Fprintf(b, "  q4_join_accounts_%d:\n", i)
@@ -369,8 +347,9 @@ func writeJoinAccountsQ4(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.AcumAccountsQ4)
 		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts\n")
 		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter\n")
-		b.WriteString("      - QUALIFIED_INPUT_EXCHANGE=Q4_prefilter_out\n")
-		fmt.Fprintf(b, "      - PREFILTER_AMOUNT=%d\n", cfg.PreFilterQ4)
+		b.WriteString("      - QUALIFIED_EXCHANGE=Q4_qualified_accounts\n")
+		fmt.Fprintf(b, "      - PEER_AMOUNT=%d\n", cfg.JoinAccountsQ4)
+		b.WriteString("      - THRESHOLD=5\n")
 		b.WriteString("      - QUERY_ID=4\n")
 		b.WriteString("      - MAX_BATCH_SIZE=500\n")
 		b.WriteString("      - MAX_BATCH_BYTES=65536\n")

@@ -1,13 +1,10 @@
-// Package qualifiedaccount is the protocol for the prefilterq4 -> joinaccounts
-// channel. It carries accounts that passed the pre-filter threshold, tagged
-// with whether they qualify as chain.Left (IsLeft=true) or chain.Right (IsLeft=false).
 package qualifiedaccount
 
 import (
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 )
 

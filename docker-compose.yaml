@@ -43,6 +43,7 @@ services:
       context: ./src/
       dockerfile: cmd/client/Dockerfile
     container_name: client_0
+    restart: on-failure
     depends_on:
       - gateway
     environment:
@@ -55,6 +56,7 @@ services:
     volumes:
       - ./input:/input
       - ./output:/output
+
 
   # Query 1
 
@@ -170,7 +172,8 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # # Query 2
+
+  # Query 2
 
   q2_reducer_0:
     build:
@@ -314,7 +317,8 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # # Query 4
+
+  # Query 4
 
   q4_filter_and_splitter_0:
     build:
@@ -368,50 +372,6 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  q4_pre_filter_0:
-    build:
-      context: ./src/
-      dockerfile: cmd/prefilterq4/Dockerfile
-    container_name: q4_pre_filter_0
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      - ID=0
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
-      - OUTPUT_EXCHANGE=Q4_prefilter_out
-      - THRESHOLD=5
-      - QUERY_ID=4
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "3"
-
-  q4_pre_filter_1:
-    build:
-      context: ./src/
-      dockerfile: cmd/prefilterq4/Dockerfile
-    container_name: q4_pre_filter_1
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    environment:
-      - ID=1
-      - MOM_HOST=rabbitmq
-      - MOM_PORT=5672
-      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
-      - OUTPUT_EXCHANGE=Q4_prefilter_out
-      - THRESHOLD=5
-      - QUERY_ID=4
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "3"
-
   q4_join_accounts_0:
     build:
       context: ./src/
@@ -427,8 +387,9 @@ services:
       - OUTPUT_AMOUNT=2
       - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
       - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
-      - QUALIFIED_INPUT_EXCHANGE=Q4_prefilter_out
-      - PREFILTER_AMOUNT=2
+      - QUALIFIED_EXCHANGE=Q4_qualified_accounts
+      - PEER_AMOUNT=2
+      - THRESHOLD=5
       - QUERY_ID=4
       - MAX_BATCH_SIZE=500
       - MAX_BATCH_BYTES=65536
@@ -453,8 +414,9 @@ services:
       - OUTPUT_AMOUNT=2
       - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
       - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
-      - QUALIFIED_INPUT_EXCHANGE=Q4_prefilter_out
-      - PREFILTER_AMOUNT=2
+      - QUALIFIED_EXCHANGE=Q4_qualified_accounts
+      - PEER_AMOUNT=2
+      - THRESHOLD=5
       - QUERY_ID=4
       - MAX_BATCH_SIZE=500
       - MAX_BATCH_BYTES=65536
@@ -560,7 +522,8 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # # Query 3
+
+  # Query 3
 
   q3_filter_range_0:
     build:
@@ -706,6 +669,7 @@ services:
       - OUTPUT_QUEUE=results_queue
       - QUERY_ID=3
 
+
   # Query 5
 
   q5_filter_date_and_payment_0:
@@ -785,7 +749,10 @@ services:
       - MOM_PORT=5672
       - ID=0
       - AMOUNT=1
-      - INPUT_QUEUE=Q5_fetcher_output_0
+      - LEFT_INPUT_QUEUE=Q5_fetcher_output_0
+      - RIGHT_INPUT_QUEUE=Q5_filtered_filter_q
+      - RIGHT_INPUT_EXCHANGE=Q5_filtered_exchange
+      - RIGHT_INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
@@ -805,7 +772,10 @@ services:
       - MOM_PORT=5672
       - ID=1
       - AMOUNT=1
-      - INPUT_QUEUE=Q5_fetcher_output_1
+      - LEFT_INPUT_QUEUE=Q5_fetcher_output_1
+      - RIGHT_INPUT_QUEUE=Q5_filtered_filter_q
+      - RIGHT_INPUT_EXCHANGE=Q5_filtered_exchange
+      - RIGHT_INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
@@ -830,3 +800,4 @@ services:
       - OUTPUT_QUEUES=results_queue
       - REDUCER_TYPE=COUNT
       - QUERY_ID=5
+

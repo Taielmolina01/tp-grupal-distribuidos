@@ -28,10 +28,11 @@ type JoinAccountsConfig struct {
 	MomHost string
 	MomPort int
 
-	InputMiddlewarePrefix  string
-	QualifiedInputExchange string
-	PreFilterAmount        int
+	InputMiddlewarePrefix string
+	QualifiedExchange     string
+	PeerAmount            int
 
+	Threshold     int
 	QueryID       int
 	MaxBatchSize  int
 	MaxBatchBytes int
@@ -46,7 +47,7 @@ type clientState struct {
 
 	transferEOFReceived bool
 	transferEOFTotal    uint32
-	prefilterEOFCount   int
+	qualifiedEOFCount   int
 }
 
 type JoinAccounts struct {
@@ -54,13 +55,15 @@ type JoinAccounts struct {
 
 	hasher shard.Hasher
 
-	inputMiddleware     newmiddleware.Middleware
-	qualifiedMiddleware newmiddleware.Middleware
-	outputMiddleware    newmiddleware.Middleware
+	inputMiddleware           newmiddleware.Middleware
+	qualifiedInputMiddleware  newmiddleware.Middleware
+	qualifiedOutputMiddleware newmiddleware.Middleware
+	outputMiddleware          newmiddleware.Middleware
 
-	preFilterAmount int
-	maxBatchSize    int
-	maxBatchBytes   int
+	peerAmount    int
+	threshold     int
+	maxBatchSize  int
+	maxBatchBytes int
 
 	mu           sync.Mutex
 	clientsState map[int]*clientState
@@ -71,9 +74,10 @@ func NewJoinAccounts(config JoinAccountsConfig) (_ *JoinAccounts, err error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware     newmiddleware.Middleware
-		qualifiedMiddleware newmiddleware.Middleware
-		outputMiddleware    newmiddleware.Middleware
+		inputMiddleware           newmiddleware.Middleware
+		qualifiedInputMiddleware  newmiddleware.Middleware
+		qualifiedOutputMiddleware newmiddleware.Middleware
+		outputMiddleware          newmiddleware.Middleware
 	)
 
 	defer func() {
@@ -81,8 +85,11 @@ func NewJoinAccounts(config JoinAccountsConfig) (_ *JoinAccounts, err error) {
 			if outputMiddleware != nil {
 				outputMiddleware.Close()
 			}
-			if qualifiedMiddleware != nil {
-				qualifiedMiddleware.Close()
+			if qualifiedOutputMiddleware != nil {
+				qualifiedOutputMiddleware.Close()
+			}
+			if qualifiedInputMiddleware != nil {
+				qualifiedInputMiddleware.Close()
 			}
 			if inputMiddleware != nil {
 				inputMiddleware.Close()
@@ -98,10 +105,15 @@ func NewJoinAccounts(config JoinAccountsConfig) (_ *JoinAccounts, err error) {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	qualifiedQueue := fmt.Sprintf("%s_joinaccounts_%d", config.QualifiedInputExchange, config.Id)
-	qualifiedMiddleware, err = newmiddleware.NewFanoutMiddleware(connSettings, config.QualifiedInputExchange, qualifiedQueue)
+	qualifiedQueue := fmt.Sprintf("%s_joinaccounts_%d", config.QualifiedExchange, config.Id)
+	qualifiedInputMiddleware, err = newmiddleware.NewFanoutMiddleware(connSettings, config.QualifiedExchange, qualifiedQueue)
 	if err != nil {
 		return nil, fmt.Errorf("creating qualified input middleware: %w", err)
+	}
+
+	qualifiedOutputMiddleware, err = newmiddleware.NewFanoutMiddleware(connSettings, config.QualifiedExchange, "")
+	if err != nil {
+		return nil, fmt.Errorf("creating qualified output middleware: %w", err)
 	}
 
 	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
@@ -110,16 +122,18 @@ func NewJoinAccounts(config JoinAccountsConfig) (_ *JoinAccounts, err error) {
 	}
 
 	return &JoinAccounts{
-		id:                  config.Id,
-		hasher:              shard.New(config.OutputMiddlewareAmount),
-		queryID:             config.QueryID,
-		inputMiddleware:     inputMiddleware,
-		qualifiedMiddleware: qualifiedMiddleware,
-		outputMiddleware:    outputMiddleware,
-		preFilterAmount:     config.PreFilterAmount,
-		maxBatchSize:        config.MaxBatchSize,
-		maxBatchBytes:       config.MaxBatchBytes,
-		clientsState:        map[int]*clientState{},
+		id:                        config.Id,
+		hasher:                    shard.New(config.OutputMiddlewareAmount),
+		queryID:                   config.QueryID,
+		inputMiddleware:           inputMiddleware,
+		qualifiedInputMiddleware:  qualifiedInputMiddleware,
+		qualifiedOutputMiddleware: qualifiedOutputMiddleware,
+		outputMiddleware:          outputMiddleware,
+		peerAmount:                config.PeerAmount,
+		threshold:                 config.Threshold,
+		maxBatchSize:              config.MaxBatchSize,
+		maxBatchBytes:             config.MaxBatchBytes,
+		clientsState:              map[int]*clientState{},
 	}, nil
 }
 
@@ -135,7 +149,7 @@ func (j *JoinAccounts) Run() {
 }
 
 func (j *JoinAccounts) consumeQualified() {
-	if err := j.qualifiedMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
+	if err := j.qualifiedInputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
 		j.handleQualifiedInput(msg, ack)
 	}); err != nil {
 		slog.Error("While consuming from qualified middleware", "err", err)
@@ -148,13 +162,14 @@ func (j *JoinAccounts) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	j.qualifiedMiddleware.StopConsuming()
+	j.qualifiedInputMiddleware.StopConsuming()
 	j.inputMiddleware.StopConsuming()
 }
 
 func (j *JoinAccounts) close() {
 	j.inputMiddleware.Close()
-	j.qualifiedMiddleware.Close()
+	j.qualifiedInputMiddleware.Close()
+	j.qualifiedOutputMiddleware.Close()
 	j.outputMiddleware.Close()
 }
 
@@ -191,7 +206,7 @@ func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(
 	defer j.mu.Unlock()
 
 	if input.EOF {
-		j.handlePrefilterEOF(input.ClientID)
+		j.handleQualifiedEOF(input.ClientID)
 		return
 	}
 
@@ -230,6 +245,10 @@ func (j *JoinAccounts) accumulateLeft(clientID int, record transfer.SplittedTran
 		state.left[identifier] = accMap
 	}
 	accMap[rightIdentifier] = account.AccountPair{Left: identifier, Right: rightIdentifier}
+
+	if len(accMap) == j.threshold {
+		j.broadcastQualified(clientID, identifier, true)
+	}
 }
 
 func (j *JoinAccounts) accumulateRight(clientID int, record transfer.SplittedTransfer) {
@@ -249,24 +268,41 @@ func (j *JoinAccounts) accumulateRight(clientID int, record transfer.SplittedTra
 		state.right[identifier] = accMap
 	}
 	accMap[leftIdentifier] = account.AccountPair{Left: leftIdentifier, Right: identifier}
+
+	if len(accMap) == j.threshold {
+		j.broadcastQualified(clientID, identifier, false)
+	}
+}
+
+func (j *JoinAccounts) broadcastQualified(clientID int, acc account.AccountIdentifier, isLeft bool) {
+	body := qualifiedaccount.WriteBatch(clientID, uint8(j.queryID), []qualifiedaccount.QualifiedAccount{{Account: acc, IsLeft: isLeft}})
+	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: string(body)}); err != nil {
+		slog.Error("While broadcasting qualified account", "err", err)
+	}
 }
 
 func (j *JoinAccounts) handleTransferEOF(clientID int, total uint32) {
 	state := j.stateFor(clientID)
 	state.transferEOFReceived = true
 	state.transferEOFTotal = total
+
+	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), 0)
+	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: string(eofBody)}); err != nil {
+		slog.Error("While sending qualified EOF", "err", err)
+	}
+
 	j.tryFinalize(clientID)
 }
 
-func (j *JoinAccounts) handlePrefilterEOF(clientID int) {
+func (j *JoinAccounts) handleQualifiedEOF(clientID int) {
 	state := j.stateFor(clientID)
-	state.prefilterEOFCount++
+	state.qualifiedEOFCount++
 	j.tryFinalize(clientID)
 }
 
 func (j *JoinAccounts) tryFinalize(clientID int) {
 	state := j.stateFor(clientID)
-	if !state.transferEOFReceived || state.prefilterEOFCount < j.preFilterAmount {
+	if !state.transferEOFReceived || state.qualifiedEOFCount < j.peerAmount {
 		return
 	}
 	j.finalize(clientID, state)

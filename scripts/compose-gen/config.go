@@ -24,7 +24,6 @@ type Config struct {
 
 	// Query 4
 	FilterAndSplitterQ4 int `yaml:"filter_and_splitter_q4"`
-	PreFilterQ4         int `yaml:"pre_filter_q4"`
 	JoinAccountsQ4      int `yaml:"join_accounts_q4"`
 	AcumAccountsQ4      int `yaml:"acum_accounts_q4"`
 	FilterAccountSeenQ4 int `yaml:"filter_account_seen_q4"`
