@@ -21,6 +21,10 @@ var codec = wire.Codec[QualifiedAccount]{
 	MinSize:   records.MinSizeAccountIdentifier + serializer.BOOL_SIZE,
 }
 
+func NewBatchBuilder(maxCount, maxBytes int) *batch.Builder[QualifiedAccount] {
+	return batch.NewBuilder(maxCount, maxBytes, codec)
+}
+
 func WriteBatch(clientID int, queryID uint8, recs []QualifiedAccount) []byte {
 	return batch.Write(clientID, queryID, recs, codec)
 }

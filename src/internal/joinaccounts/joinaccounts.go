@@ -45,6 +45,8 @@ type clientState struct {
 	qualifyingLeft  map[account.AccountIdentifier]struct{}
 	qualifyingRight map[account.AccountIdentifier]struct{}
 
+	qualifiedBatch *batch.Builder[qualifiedaccount.QualifiedAccount]
+
 	transferEOFReceived bool
 	transferEOFTotal    uint32
 	qualifiedEOFCount   int
@@ -275,9 +277,18 @@ func (j *JoinAccounts) accumulateRight(clientID int, record transfer.SplittedTra
 }
 
 func (j *JoinAccounts) broadcastQualified(clientID int, acc account.AccountIdentifier, isLeft bool) {
-	body := qualifiedaccount.WriteBatch(clientID, uint8(j.queryID), []qualifiedaccount.QualifiedAccount{{Account: acc, IsLeft: isLeft}})
+	state := j.stateFor(clientID)
+	qa := qualifiedaccount.QualifiedAccount{Account: acc, IsLeft: isLeft}
+	if !state.qualifiedBatch.TryAdd(&qa) {
+		j.flushQualifiedBatch(clientID, state.qualifiedBatch)
+		state.qualifiedBatch.TryAdd(&qa)
+	}
+}
+
+func (j *JoinAccounts) flushQualifiedBatch(clientID int, b *batch.Builder[qualifiedaccount.QualifiedAccount]) {
+	body := b.Flush(clientID, uint8(j.queryID))
 	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: string(body)}); err != nil {
-		slog.Error("While broadcasting qualified account", "err", err)
+		slog.Error("While flushing qualified batch", "err", err)
 	}
 }
 
@@ -285,6 +296,10 @@ func (j *JoinAccounts) handleTransferEOF(clientID int, total uint32) {
 	state := j.stateFor(clientID)
 	state.transferEOFReceived = true
 	state.transferEOFTotal = total
+
+	if !state.qualifiedBatch.IsEmpty() {
+		j.flushQualifiedBatch(clientID, state.qualifiedBatch)
+	}
 
 	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), 0)
 	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: string(eofBody)}); err != nil {
@@ -392,6 +407,7 @@ func (j *JoinAccounts) stateFor(clientID int) *clientState {
 			right:           map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
 			qualifyingLeft:  map[account.AccountIdentifier]struct{}{},
 			qualifyingRight: map[account.AccountIdentifier]struct{}{},
+			qualifiedBatch:  qualifiedaccount.NewBatchBuilder(j.maxBatchSize, j.maxBatchBytes),
 		}
 		j.clientsState[clientID] = st
 	}

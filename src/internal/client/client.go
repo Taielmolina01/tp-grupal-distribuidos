@@ -15,14 +15,13 @@ import (
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/byteconv"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/queryresult"
-	"tp-grupal-distribuidos/internal/common/byteconv"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
 const numQueries = 5
-
 
 type ClientConfig struct {
 	ServerHost               string
