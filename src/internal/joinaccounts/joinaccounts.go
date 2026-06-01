@@ -39,11 +39,11 @@ type JoinAccountsConfig struct {
 }
 
 type clientState struct {
-	left  map[account.AccountIdentifier]map[account.AccountIdentifier]account.AccountPair
-	right map[account.AccountIdentifier]map[account.AccountIdentifier]account.AccountPair
+	left  map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}
+	right map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}
 
-	qualifyingLeft  map[account.AccountIdentifier]bool
-	qualifyingRight map[account.AccountIdentifier]bool
+	qualifyingLeft  map[account.AccountIdentifier]struct{}
+	qualifyingRight map[account.AccountIdentifier]struct{}
 
 	transferEOFReceived bool
 	transferEOFTotal    uint32
@@ -213,9 +213,9 @@ func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(
 	state := j.stateFor(input.ClientID)
 	for _, rec := range input.Records {
 		if rec.IsLeft {
-			state.qualifyingLeft[rec.Account] = true
+			state.qualifyingLeft[rec.Account] = struct{}{}
 		} else {
-			state.qualifyingRight[rec.Account] = true
+			state.qualifyingRight[rec.Account] = struct{}{}
 		}
 	}
 }
@@ -241,10 +241,10 @@ func (j *JoinAccounts) accumulateLeft(clientID int, record transfer.SplittedTran
 	state := j.stateFor(clientID)
 	accMap, ok := state.left[identifier]
 	if !ok {
-		accMap = map[account.AccountIdentifier]account.AccountPair{}
+		accMap = map[account.AccountIdentifier]struct{}{}
 		state.left[identifier] = accMap
 	}
-	accMap[rightIdentifier] = account.AccountPair{Left: identifier, Right: rightIdentifier}
+	accMap[rightIdentifier] = struct{}{}
 
 	if len(accMap) == j.threshold {
 		j.broadcastQualified(clientID, identifier, true)
@@ -264,10 +264,10 @@ func (j *JoinAccounts) accumulateRight(clientID int, record transfer.SplittedTra
 	state := j.stateFor(clientID)
 	accMap, ok := state.right[identifier]
 	if !ok {
-		accMap = map[account.AccountIdentifier]account.AccountPair{}
+		accMap = map[account.AccountIdentifier]struct{}{}
 		state.right[identifier] = accMap
 	}
-	accMap[leftIdentifier] = account.AccountPair{Left: leftIdentifier, Right: identifier}
+	accMap[leftIdentifier] = struct{}{}
 
 	if len(accMap) == j.threshold {
 		j.broadcastQualified(clientID, identifier, false)
@@ -316,20 +316,25 @@ func (j *JoinAccounts) finalize(clientID int, state *clientState) {
 		if !ok {
 			continue
 		}
-		for _, aPair := range rightMap {
-			if _, ok := state.qualifyingLeft[aPair.Left]; !ok {
+		for r := range rightMap {
+			if _, ok := state.qualifyingLeft[r]; !ok {
 				continue
 			}
-			for _, cPair := range leftMap {
-				if _, ok := state.qualifyingRight[cPair.Right]; !ok {
+			for l := range leftMap {
+				if _, ok := state.qualifyingRight[l]; !ok {
 					continue
 				}
+				//Me quedó re confuso. Comentario para yo del futuro:
+				// El state.right desde la vista de la sharding key (B) tiene las transf de A->B dado que la shardingKey está a la derecha de la operación
+				// El state.left desde la vista de la sharding key (B) tiene las transf de B->C dado que la shardingKey está a la izquierda de la operación
+				// Acá parece que queda al reves, pero left es R=A, protagonist es B, L=C
 				chain := account.AccountChain{
-					Left:   aPair.Left,
-					Middle: aPair.Right,
-					Right:  cPair.Right,
+					Left:   r,
+					Middle: protagonistKey,
+					Right:  l,
 				}
 				rk := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, chain.Left.GetKey(), chain.Right.GetKey()))
+				slog.Info("CHAIN REAL", "", chain.Left.AccountNumber+"->"+chain.Middle.AccountNumber+"->"+chain.Right.AccountNumber)
 				b := j.builderFor(batches, rk)
 				if !b.TryAdd(&chain) {
 					j.flushChainBatch(clientID, rk, b)
@@ -383,10 +388,10 @@ func (j *JoinAccounts) stateFor(clientID int) *clientState {
 	st, ok := j.clientsState[clientID]
 	if !ok {
 		st = &clientState{
-			left:            map[account.AccountIdentifier]map[account.AccountIdentifier]account.AccountPair{},
-			right:           map[account.AccountIdentifier]map[account.AccountIdentifier]account.AccountPair{},
-			qualifyingLeft:  map[account.AccountIdentifier]bool{},
-			qualifyingRight: map[account.AccountIdentifier]bool{},
+			left:            map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
+			right:           map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
+			qualifyingLeft:  map[account.AccountIdentifier]struct{}{},
+			qualifyingRight: map[account.AccountIdentifier]struct{}{},
 		}
 		j.clientsState[clientID] = st
 	}
