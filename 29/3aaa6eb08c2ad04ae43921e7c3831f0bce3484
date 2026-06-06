@@ -1,0 +1,95 @@
+src/internal/common/messageprotocol/rabbit/channels/summethod/summethod.go
+  s_d8e98971808961::t_ad7490b9f45641 18-19,22-23
+src/internal/common/messageprotocol/rabbit/channels/accountchain/accountchain.go
+  s_d8e98971808961::t_e62bc7dfbe521e 19-20,23-24
+src/internal/common/messageprotocol/rabbit/channels/avgmethod/avgmethod.go
+  s_d8e98971808961::t_ea3e5dc7265803 18-19,22-23
+src/internal/common/messageprotocol/rabbit/channels/accountid/accountid.go
+  s_d8e98971808961::t_a331e033abb33c 11-12,15-16
+src/internal/filter/distinctfilter.go
+  s_d8e98971808961::t_417554acc402f1 104
+  s_d8e98971808961::t_e4329fe144924b 71
+src/internal/common/messageprotocol/rabbit/channels/q3filter/q3filter.go
+  s_d8e98971808961::t_4343d9a89c0343 18-19,22-23
+src/internal/join/adapter.go
+  s_d8e98971808961::t_8760bb6b88c45f 172
+src/internal/reducer/count.go
+  s_d8e98971808961::t_9d7dd87f3f8d83 81-82
+  s_d8e98971808961::t_cb2604ae26fdbd 90
+src/internal/averagefilter/averagefilter.go
+  s_d8e98971808961::t_7dc43f989b486a 367
+  s_d8e98971808961::t_b09565533bd5b3 421
+  s_d8e98971808961::t_4e9e2ff45588fc 325
+src/internal/common/messageprotocol/rabbit/channels/splittransfer/splittransfer.go
+  s_d8e98971808961::t_9c0f29d3b01227 26-27,30-31
+src/internal/filter/convertedamountfilter.go
+  s_d8e98971808961::t_3e05d9c0a5d454 130
+  s_d8e98971808961::t_8fec5878effcdc 104
+src/internal/common/messageprotocol/rabbit/batch/batch.go
+  s_d8e98971808961::t_b17e7f3495585c 45-46
+  s_d8e98971808961::t_d434cade72863f 57-58,67-68,71,73,78,80,88,90
+  s_d8e98971808961::t_10a2ff0e47b4b6 101,107
+  s_d8e98971808961::t_93e2d8c7b7bf56 137
+src/internal/common/messageprotocol/rabbit/channels/daterange/daterange.go
+  s_d8e98971808961::t_d0908d39a72e3c 25-26,29-30
+src/internal/fetcher/fetcher.go
+  s_d8e98971808961::t_899615dd57143c 151
+  s_d8e98971808961::t_68c69fca25c1bb 105
+src/internal/acumaccounts/acumaccounts.go
+  s_d8e98971808961::t_cd4242b4b83cca 143
+  s_d8e98971808961::t_ea24050d540786 186
+src/internal/reducer/reducer.go
+  s_d8e98971808961::t_304153b205dd3f 131
+  s_d8e98971808961::t_9fad02a7cb20cd 125
+src/internal/join/join.go
+  s_d8e98971808961::t_0ec8bc962d834c 114
+src/internal/sum/sum.go
+  s_d8e98971808961::t_b33932ec578a71 251
+  s_d8e98971808961::t_0f1a37533d4d6c 242
+src/internal/daterangesplitter/daterangesplitter.go
+  s_d8e98971808961::t_946eb89f2050cd 266
+  s_d8e98971808961::t_e43d85007a67dc 173
+  s_d8e98971808961::t_ba66e74f1fe7e5 271
+src/internal/joinaccounts/joinaccounts.go
+  s_d8e98971808961::t_b4ce8dbbd23715 368
+  s_d8e98971808961::t_deefc606cdaf2c 396
+  s_d8e98971808961::t_a52bc1355c42ea 304
+  s_d8e98971808961::t_54fcf5611bf71e 289
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_d8e98971808961::t_3ed5a3f443affc 180
+  s_d8e98971808961::t_145e38b76ebe36 189
+src/internal/filter/filter.go
+  s_d8e98971808961::t_f0cb9f0a911f99 162
+  s_d8e98971808961::t_549b9b82d20741 108
+src/internal/aggregate/aggregate.go
+  s_d8e98971808961::t_d7511582f0bfce 260
+  s_d8e98971808961::t_5ac7206d057579 249
+src/internal/common/messageprotocol/rabbit/envelope/envelope.go
+  s_d8e98971808961::t_5004d5649315c6 9-10,17-18,26-27
+src/internal/gateway/gateway.go
+  s_d8e98971808961::t_cf4a5280ef016e 515
+  s_d8e98971808961::t_298ebcd7d6c363 471
+  s_d8e98971808961::t_76012fae1271a0 499
+src/internal/common/messageprotocol/rabbit/channels/qualifiedaccount/qualifiedaccount.go
+  s_d8e98971808961::t_d7f2fd3bae6746 28-29,32-33
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_d8e98971808961::t_5d108b4c190d92 135
+  s_d8e98971808961::t_6be5058a50e85d 204
+  s_d8e98971808961::t_3b0b2948b1d1cf 236
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "293aaa6eb08c2ad04ae43921e7c3831f0bce3484",
+  "prompts": {},
+  "sessions": {
+    "s_d8e98971808961": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6276a01e-4045-470a-a1a1-74f35219bb4b",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
