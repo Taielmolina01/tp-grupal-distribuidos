@@ -1,0 +1,27 @@
+src/internal/common/msgmonitor/msgmonitor.go
+  s_d8e98971808961::t_70a47647c7a511 68,70,73-85
+  s_d8e98971808961::t_31faead3085b38 12-13,19-21
+  h_3c9b41718876fe 22
+  s_d8e98971808961::t_bc5856b98bba3c 18,23-24,26-27,32,36-39,42-47,50-53,56-62,64-67,69,88-92,94-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "a8d5ead0878d63bb56c575a2b61dfcad09c2261a",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_d8e98971808961": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6276a01e-4045-470a-a1a1-74f35219bb4b",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
