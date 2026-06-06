@@ -1,10 +1,6 @@
 package filter
 
-import (
-	"time"
-	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/transfer"
-)
+import "time"
 
 type FilterType string
 
@@ -49,9 +45,4 @@ type FilterConfig struct {
 }
 
 type FilterAndSplitter struct {
-	id             uint32
-	inputExchange  middleware.Middleware
-	outputExchange middleware.Middleware
-	filterFunction func(transfer.Transfer) bool
-	splitFunction  func(transfer.Transfer) (transfer.SplittedTransfer, transfer.SplittedTransfer)
 }

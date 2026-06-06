@@ -40,16 +40,24 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 	defer func() {
 		if err != nil {
 			if eofOutput != nil {
-				eofOutput.Close()
+				if err := eofOutput.Close(); err != nil {
+					slog.Error("While closing EOF output", "err", err)
+				}
 			}
 			if eofInput != nil {
-				eofInput.Close()
+				if err := eofInput.Close(); err != nil {
+					slog.Error("While closing EOF input", "err", err)
+				}
 			}
 			if outputMiddleware != nil {
-				outputMiddleware.Close()
+				if err := outputMiddleware.Close(); err != nil {
+					slog.Error("While closing output middleware", "err", err)
+				}
 			}
 			if inputMiddleware != nil {
-				inputMiddleware.Close()
+				if err := inputMiddleware.Close(); err != nil {
+					slog.Error("While closing input middleware", "err", err)
+				}
 			}
 		}
 	}()
@@ -137,15 +145,27 @@ func (f *FilterAndSplitter) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	f.inputMiddleware.StopConsuming()
-	f.eofInput.StopConsuming()
+	if err := f.inputMiddleware.StopConsuming(); err != nil {
+		slog.Error("While stopping input middleware consumer", "filter_id", f.id, "err", err)
+	}
+	if err := f.eofInput.StopConsuming(); err != nil {
+		slog.Error("While stopping EOF input consumer", "filter_id", f.id, "err", err)
+	}
 }
 
 func (f *FilterAndSplitter) close() {
-	f.inputMiddleware.Close()
-	f.eofInput.Close()
-	f.eofOutput.Close()
-	f.outputMiddleware.Close()
+	if err := f.inputMiddleware.Close(); err != nil {
+		slog.Error("While closing input middleware", "filter_id", f.id, "err", err)
+	}
+	if err := f.eofInput.Close(); err != nil {
+		slog.Error("While closing EOF input", "filter_id", f.id, "err", err)
+	}
+	if err := f.eofOutput.Close(); err != nil {
+		slog.Error("While closing EOF output", "filter_id", f.id, "err", err)
+	}
+	if err := f.outputMiddleware.Close(); err != nil {
+		slog.Error("While closing output middleware", "filter_id", f.id, "err", err)
+	}
 }
 
 func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {

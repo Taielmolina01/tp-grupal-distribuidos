@@ -15,6 +15,11 @@ func run() int {
 
 	server, err := daterangeandpaymentfilter.CreateDateRangeAndPaymentMethod(config)
 
+	if err != nil {
+		slog.Error("While creating server", "err", err)
+		return 1
+	}
+
 	go server.HandleSignals()
 
 	server.Run()

@@ -10,11 +10,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/splitter"
 )
 
-const (
-	_DATE_LAYOUT            = "2006-01-02 15:04:05"
-	_DATES_DIFFERENCE_GUARD = 10
-)
-
 func loadConfig() (filter.FilterConfig, error) {
 	id, err := strconv.Atoi(os.Getenv("ID"))
 	if err != nil {

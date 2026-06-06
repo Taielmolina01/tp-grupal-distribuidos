@@ -68,16 +68,24 @@ func NewSumByPaymentFormat(config SumConfig) (_ *SumByPaymentFormat, err error) 
 			return
 		}
 		if eofOutput != nil {
-			eofOutput.Close()
+			if err := eofOutput.Close(); err != nil {
+				slog.Error("While closing EOF output", "id", config.Id, "err", err)
+			}
 		}
 		if eofInput != nil {
-			eofInput.Close()
+			if err := eofInput.Close(); err != nil {
+				slog.Error("While closing EOF input", "id", config.Id, "err", err)
+			}
 		}
 		for _, q := range outputQueues {
-			q.Close()
+			if err := q.Close(); err != nil {
+				slog.Error("While closing output queue", "id", config.Id, "err", err)
+			}
 		}
 		if inputQueue != nil {
-			inputQueue.Close()
+			if err := inputQueue.Close(); err != nil {
+				slog.Error("While closing input queue", "id", config.Id, "err", err)
+			}
 		}
 	}()
 
@@ -155,16 +163,28 @@ func (s *SumByPaymentFormat) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	s.inputQueue.StopConsuming()
-	s.eofInput.StopConsuming()
+	if err := s.inputQueue.StopConsuming(); err != nil {
+		slog.Error("While stopping input queue consumer", "sum_id", s.id, "err", err)
+	}
+	if err := s.eofInput.StopConsuming(); err != nil {
+		slog.Error("While stopping EOF input consumer", "sum_id", s.id, "err", err)
+	}
 }
 
 func (s *SumByPaymentFormat) close() {
-	s.inputQueue.Close()
-	s.eofInput.Close()
-	s.eofOutput.Close()
+	if err := s.inputQueue.Close(); err != nil {
+		slog.Error("While closing input queue", "sum_id", s.id, "err", err)
+	}
+	if err := s.eofInput.Close(); err != nil {
+		slog.Error("While closing EOF input", "sum_id", s.id, "err", err)
+	}
+	if err := s.eofOutput.Close(); err != nil {
+		slog.Error("While closing EOF output", "sum_id", s.id, "err", err)
+	}
 	for _, q := range s.outputQueues {
-		q.Close()
+		if err := q.Close(); err != nil {
+			slog.Error("While closing output queue", "sum_id", s.id, "err", err)
+		}
 	}
 }
 

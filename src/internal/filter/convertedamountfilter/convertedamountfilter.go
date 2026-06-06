@@ -21,24 +21,6 @@ const (
 	eofRingQueuePrefix    = "FILTER_CONVERTED_AMOUNT"
 )
 
-var datasetToFrank = map[string]string{
-	"Australian Dollar": "AUD",
-	"Bitcoin":           "BTC",
-	"Brazil Real":       "BRL",
-	"Canadian Dollar":   "CAD",
-	"Euro":              "EUR",
-	"Mexican Peso":      "MXN",
-	"Ruble":             "RUB",
-	"Rupee":             "INR",
-	"Saudi Riyal":       "SAR",
-	"Shekel":            "ILS",
-	"Swiss Franc":       "CHF",
-	"UK Pound":          "GBP",
-	"US Dollar":         "USD",
-	"Yen":               "JPY",
-	"Yuan":              "CNY",
-}
-
 func CreateConvertedAmountFilter(config filter.FilterConfig) (worker.Worker, error) {
 	return newConvertedAmountFilter(
 		config,

@@ -123,7 +123,11 @@ func NewFilter[T any, O any](
 }
 
 func (filter *Filter[T, O]) Run() {
-	defer filter.close()
+	defer func() {
+		if err := filter.close(); err != nil {
+			slog.Error("While closing filter", "err", err)
+		}
+	}()
 
 	go filter.eofHandler.Run()
 	if err := filter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
