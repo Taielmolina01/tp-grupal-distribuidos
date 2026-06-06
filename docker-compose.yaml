@@ -62,7 +62,7 @@ services:
   q1234_filter_currency_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/currencyfilter/Dockerfile
     container_name: q1234_filter_currency_0
     depends_on:
       rabbitmq:
@@ -90,7 +90,7 @@ services:
   q1234_filter_currency_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/currencyfilter/Dockerfile
     container_name: q1234_filter_currency_1
     depends_on:
       rabbitmq:
@@ -118,7 +118,7 @@ services:
   q1_filter_amount_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/amountfilter/Dockerfile
     container_name: q1_filter_amount_0
     depends_on:
       rabbitmq:
@@ -146,7 +146,7 @@ services:
   q1_filter_amount_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/amountfilter/Dockerfile
     container_name: q1_filter_amount_1
     depends_on:
       rabbitmq:
@@ -229,7 +229,7 @@ services:
   q2_filter_bank_distinct_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/bankdistinctfilter/Dockerfile
     container_name: q2_filter_bank_distinct_0
     depends_on:
       rabbitmq:
@@ -247,7 +247,7 @@ services:
   q2_filter_bank_distinct_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/bankdistinctfilter/Dockerfile
     container_name: q2_filter_bank_distinct_1
     depends_on:
       rabbitmq:
@@ -674,7 +674,7 @@ services:
   q5_filter_date_and_payment_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/daterangeandpaymentfilter/Dockerfile
     container_name: q5_filter_date_and_payment_0
     depends_on:
       rabbitmq:
@@ -697,7 +697,7 @@ services:
   q5_filter_date_and_payment_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/daterangeandpaymentfilter/Dockerfile
     container_name: q5_filter_date_and_payment_1
     depends_on:
       rabbitmq:
@@ -738,7 +738,7 @@ services:
   q5_filter_amount_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/convertedamountfilter/Dockerfile
     container_name: q5_filter_amount_0
     depends_on:
       rabbitmq:
@@ -758,7 +758,7 @@ services:
   q5_filter_amount_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/convertedamountfilter/Dockerfile
     container_name: q5_filter_amount_1
     depends_on:
       rabbitmq:

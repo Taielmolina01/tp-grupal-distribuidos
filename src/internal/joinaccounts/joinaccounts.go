@@ -369,7 +369,6 @@ func (j *JoinAccounts) finalize(clientID int, state *clientState) {
 					Right:  l,
 				}
 				rk := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, chain.Left.GetKey(), chain.Right.GetKey()))
-				slog.Info("CHAIN REAL", "", chain.Left.AccountNumber+"->"+chain.Middle.AccountNumber+"->"+chain.Right.AccountNumber)
 				b := j.builderFor(batches, rk)
 				if !b.TryAdd(&chain) {
 					j.flushChainBatch(clientID, rk, b)
