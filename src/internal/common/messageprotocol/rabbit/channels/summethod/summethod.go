@@ -15,11 +15,11 @@ var codec = wire.Codec[transfer.SumByMethod]{
 	MinSize:   serializer.UINT64_SIZE + serializer.UINT32_SIZE + serializer.UINT16_SIZE,
 }
 
-func WriteBatch(clientID int, queryID uint8, senderID uint32, seq uint32, records []transfer.SumByMethod) []byte {
+func WriteBatch(clientID int, queryID uint8, senderID uint8, seq uint64, records []transfer.SumByMethod) []byte {
 	return batch.Write(clientID, queryID, senderID, seq, records, codec)
 }
 
-func WriteEOF(clientID int, queryID uint8, senderID uint32, seq uint32, total uint32) []byte {
+func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uint32) []byte {
 	return batch.WriteEOF(clientID, queryID, senderID, seq, total)
 }
 

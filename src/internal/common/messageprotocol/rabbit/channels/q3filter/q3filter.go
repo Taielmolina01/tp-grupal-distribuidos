@@ -15,11 +15,11 @@ var codec = wire.Codec[transfer.TransferForQ3Filter]{
 	MinSize:   3*serializer.UINT16_SIZE + serializer.UINT64_SIZE,
 }
 
-func WriteBatch(clientID int, queryID uint8, senderID uint32, seq uint32, records []transfer.TransferForQ3Filter) []byte {
+func WriteBatch(clientID int, queryID uint8, senderID uint8, seq uint64, records []transfer.TransferForQ3Filter) []byte {
 	return batch.Write(clientID, queryID, senderID, seq, records, codec)
 }
 
-func WriteEOF(clientID int, queryID uint8, senderID uint32, seq uint32, total uint32) []byte {
+func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uint32) []byte {
 	return batch.WriteEOF(clientID, queryID, senderID, seq, total)
 }
 

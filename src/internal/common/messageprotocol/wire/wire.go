@@ -30,6 +30,7 @@ func NewWriter() *Writer { return &Writer{} }
 func (w *Writer) Uint8(v uint8)     { w.buf = byteconv.AppendUint8(w.buf, v) }
 func (w *Writer) Uint16(v uint16)   { w.buf = byteconv.AppendUint16(w.buf, v) }
 func (w *Writer) Uint32(v uint32)   { w.buf = byteconv.AppendUint32(w.buf, v) }
+func (w *Writer) Uint64(v uint64)   { w.buf = byteconv.AppendUint64(w.buf, v) }
 func (w *Writer) Float64(v float64) { w.buf = byteconv.AppendFloat64(w.buf, v) }
 func (w *Writer) String(v string)   { w.buf = byteconv.AppendString(w.buf, v) }
 func (w *Writer) Bool(v bool)       { w.buf = byteconv.AppendBool(w.buf, v) }
@@ -91,14 +92,17 @@ func (r *Reader) Uint32() uint32 {
 	return uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
 }
 
-func (r *Reader) Float64() float64 {
+func (r *Reader) Uint64() uint64 {
 	b := r.read(8)
 	if r.err != nil {
 		return 0
 	}
-	bits := uint64(b[0])<<56 | uint64(b[1])<<48 | uint64(b[2])<<40 | uint64(b[3])<<32 |
+	return uint64(b[0])<<56 | uint64(b[1])<<48 | uint64(b[2])<<40 | uint64(b[3])<<32 |
 		uint64(b[4])<<24 | uint64(b[5])<<16 | uint64(b[6])<<8 | uint64(b[7])
-	return math.Float64frombits(bits)
+}
+
+func (r *Reader) Float64() float64 {
+	return math.Float64frombits(r.Uint64())
 }
 
 func (r *Reader) Bool() bool {

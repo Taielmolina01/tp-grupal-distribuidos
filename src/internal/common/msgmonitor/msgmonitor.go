@@ -9,8 +9,8 @@ type MessageMonitor interface {
 	AddProcessedMessagesAmountByClientId(int, uint32)
 	GetForwardedMessagesAmountByClientId(int) uint32
 	AddForwardedMessagesAmountByClientId(int, uint32)
-	NextSeqByClientId(clientID int) uint32
-	IsDuplicate(clientID, senderID int, seq uint32) bool
+	NextSeqByClientId(clientID int) uint64
+	IsDuplicate(clientID, senderID int, seq uint64) bool
 	RemoveClient(int)
 	Close()
 }
@@ -18,8 +18,8 @@ type MessageMonitor interface {
 type clientState struct {
 	processed   uint32
 	forwarded   uint32
-	seqSent     uint32
-	seqReceived map[int]uint32
+	seqSent     uint64
+	seqReceived map[int]uint64
 }
 
 type messageMonitorImpl struct {
@@ -61,7 +61,7 @@ func (m *messageMonitorImpl) AddForwardedMessagesAmountByClientId(clientID int, 
 	m.clients[clientID] = s
 }
 
-func (m *messageMonitorImpl) NextSeqByClientId(clientID int) uint32 {
+func (m *messageMonitorImpl) NextSeqByClientId(clientID int) uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s := m.clients[clientID]
@@ -70,12 +70,12 @@ func (m *messageMonitorImpl) NextSeqByClientId(clientID int) uint32 {
 	return s.seqSent
 }
 
-func (m *messageMonitorImpl) IsDuplicate(clientID, senderID int, seq uint32) bool {
+func (m *messageMonitorImpl) IsDuplicate(clientID, senderID int, seq uint64) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s := m.clients[clientID]
 	if s.seqReceived == nil {
-		s.seqReceived = map[int]uint32{}
+		s.seqReceived = map[int]uint64{}
 	}
 	if seq <= s.seqReceived[senderID] {
 		return true

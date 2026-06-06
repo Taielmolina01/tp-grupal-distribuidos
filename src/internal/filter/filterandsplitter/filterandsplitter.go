@@ -233,7 +233,7 @@ func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.Transfe
 	}
 
 	for routingKey, group := range byShard {
-		body := splittransfer.WriteBatch(clientID, f.queryID, uint32(f.id), seq, group)
+		body := splittransfer.WriteBatch(clientID, f.queryID, uint8(f.id), seq, group)
 		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(body), RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output batch", "err", err)
 		}

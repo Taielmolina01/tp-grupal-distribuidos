@@ -23,11 +23,11 @@ var codec = wire.Codec[transfer.SplittedTransfer]{
 	MinSize:   records.MinSizeTransferForQ4 + serializer.BOOL_SIZE,
 }
 
-func WriteBatch(clientID int, queryID uint8, senderID uint32, seq uint32, recs []transfer.SplittedTransfer) []byte {
+func WriteBatch(clientID int, queryID uint8, senderID uint8, seq uint64, recs []transfer.SplittedTransfer) []byte {
 	return batch.Write(clientID, queryID, senderID, seq, recs, codec)
 }
 
-func WriteEOF(clientID int, queryID uint8, senderID uint32, seq uint32, total uint32) []byte {
+func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uint32) []byte {
 	return batch.WriteEOF(clientID, queryID, senderID, seq, total)
 }
 
