@@ -2,11 +2,7 @@ package filter
 
 import (
 	"time"
-
-	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
@@ -52,48 +48,10 @@ type FilterConfig struct {
 	Quote                 string
 }
 
-type Filter[T any, O any] struct {
-	id              uint32
-	inputExchange   middleware.Middleware
-	outputExchange  middleware.Middleware
-	filterFunction  func(T) bool
-	eofHandler      eofring.EofRingAlgorithm
-	handlerMessages msgmonitor.MessageMonitor
-	outputQueueEof  middleware.Middleware
-	filterType      FilterType
-	outputTransform func(T) O
-	queryId         uint8
-	inputCodec      wire.Codec[T]
-	outputCodec     wire.Codec[O]
-}
-
 type FilterAndSplitter struct {
 	id             uint32
 	inputExchange  middleware.Middleware
 	outputExchange middleware.Middleware
 	filterFunction func(transfer.Transfer) bool
 	splitFunction  func(transfer.Transfer) (transfer.SplittedTransfer, transfer.SplittedTransfer)
-}
-
-type DistinctFilter[T comparable, S comparable] struct {
-	id            uint32
-	inputQueue    middleware.Middleware
-	outputQueues  []middleware.Middleware
-	alreadySeen   map[int]map[S]bool
-	compareFunc   func(T, T) bool
-	keyFunc       func(T) S
-	shardCriteria func(T) string
-	codec         wire.Codec[T]
-	queryId       uint8
-}
-
-type ConvertedAmountFilter struct {
-	inputQueue      middleware.Middleware
-	outputQueue     middleware.Middleware
-	queryId         uint8
-	handlerMessages msgmonitor.MessageMonitor
-	id              uint32
-	quote           string
-	amountThreshold float64
-	pending         map[int][]transfer.FinalTransferForQ5
 }

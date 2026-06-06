@@ -1,10 +1,11 @@
-package filter
+package convertedamountfilter
 
 import (
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
@@ -38,8 +39,14 @@ var datasetToFrank = map[string]string{
 	"Yuan":              "CNY",
 }
 
+func CreateConvertedAmountFilter(config filter.FilterConfig) (worker.Worker, error) {
+	return newConvertedAmountFilter(
+		config,
+	)
+}
+
 func newConvertedAmountFilter(
-	config FilterConfig,
+	config filter.FilterConfig,
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{
 		Hostname: config.MomHost,
@@ -69,14 +76,14 @@ func newConvertedAmountFilter(
 	messagesMonitor := msgmonitor.NewMessageMonitor()
 
 	filter := &ConvertedAmountFilter{
-		inputQueue:      inputQueue,
-		outputQueue:     outputQueue,
-		queryId:         config.QueryId,
-		handlerMessages: messagesMonitor,
-		id:              uint32(config.Id),
-		quote:           config.Quote,
-		amountThreshold: config.Amount,
-		pending:         make(map[int][]transfer.FinalTransferForQ5),
+		InputQueue:      inputQueue,
+		OutputQueue:     outputQueue,
+		QueryId:         config.QueryId,
+		HandlerMessages: messagesMonitor,
+		Id:              uint32(config.Id),
+		Quote:           config.Quote,
+		AmountThreshold: config.Amount,
+		Pending:         make(map[int][]transfer.FinalTransferForQ5),
 	}
 
 	return filter, nil
@@ -85,7 +92,7 @@ func newConvertedAmountFilter(
 func (filter *ConvertedAmountFilter) Run() {
 	defer filter.close()
 
-	if err := filter.inputQueue.StartConsuming(filter.consume); err != nil {
+	if err := filter.InputQueue.StartConsuming(filter.consume); err != nil {
 		slog.Error("while starting consuming from left input queue", "err", err)
 		return
 	}
@@ -101,14 +108,14 @@ func (filter *ConvertedAmountFilter) consume(msg middleware.Message, ack, _ func
 	}
 	if input.EOF {
 		filter.flush(input.ClientID)
-		if err := filter.outputQueue.Send(middleware.Message{Body: string(batch.WriteEOF(input.ClientID, filter.queryId, input.Total))}); err != nil {
+		if err := filter.OutputQueue.Send(middleware.Message{Body: string(batch.WriteEOF(input.ClientID, filter.QueryId, input.Total))}); err != nil {
 			slog.Error("while forwarding EOF", "client_id", input.ClientID, "err", err)
 		}
 		return
 	}
 
 	for _, t := range input.Records {
-		if t.ConvertedAmount < filter.amountThreshold {
+		if t.ConvertedAmount < filter.AmountThreshold {
 			filter.emit(input.ClientID, transfer.ProjectForQ5Final())
 		}
 	}
@@ -117,18 +124,18 @@ func (filter *ConvertedAmountFilter) consume(msg middleware.Message, ack, _ func
 // Helpers
 
 func (filter *ConvertedAmountFilter) emit(clientID int, response transfer.FinalTransferForQ5) {
-	filter.pending[clientID] = append(filter.pending[clientID], response)
+	filter.Pending[clientID] = append(filter.Pending[clientID], response)
 }
 
 func (filter *ConvertedAmountFilter) flush(clientID int) {
-	results := filter.pending[clientID]
-	delete(filter.pending, clientID)
+	results := filter.Pending[clientID]
+	delete(filter.Pending, clientID)
 
 	if len(results) == 0 {
 		return
 	}
-	body := batch.Write(clientID, filter.queryId, results, records.FinalTransferForQ5Codec)
-	if err := filter.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
+	body := batch.Write(clientID, filter.QueryId, results, records.FinalTransferForQ5Codec)
+	if err := filter.OutputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Error("while sending results batch", "err", err)
 	}
 }
@@ -141,16 +148,16 @@ func (filter *ConvertedAmountFilter) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received")
 
-	if err := filter.inputQueue.StopConsuming(); err != nil {
+	if err := filter.InputQueue.StopConsuming(); err != nil {
 		slog.Error("while stopping consuming from left input queue", "err", err)
 	}
 }
 
 func (filter *ConvertedAmountFilter) close() {
-	if err := filter.inputQueue.Close(); err != nil {
+	if err := filter.InputQueue.Close(); err != nil {
 		slog.Error("while closing left input queue", "err", err)
 	}
-	if err := filter.outputQueue.Close(); err != nil {
+	if err := filter.OutputQueue.Close(); err != nil {
 		slog.Error("while closing output queue", "err", err)
 	}
 }

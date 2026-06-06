@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/splitter"
-	"tp-grupal-distribuidos/internal/filter"
 )
 
 const (
@@ -106,25 +106,6 @@ func loadConfig() (filter.FilterConfig, error) {
 
 // Helpers
 
-func loadCurrenciesVenv(config *filter.FilterConfig) error {
-	currencies := strings.Split(os.Getenv("CURRENCIES"), ",")
-	if len(currencies) < 1 {
-		return errors.New("CURRENCIES environment variable is required if FILTER_TYPE is CURRENCY")
-	}
-	config.Currencies = currencies
-	return nil
-}
-
-func loadAmountVenv(config *filter.FilterConfig) error {
-	amountStr := os.Getenv("AMOUNT")
-	amount, err := strconv.ParseFloat(amountStr, 32)
-	if err != nil {
-		return errors.New("AMOUNT environment variable is required if FILTER_TYPE is AMOUNT or CONVERTED_AMOUNT_FILTER")
-	}
-	config.Amount = float64(amount)
-	return nil
-}
-
 func loadDateRangeVenv(config *filter.FilterConfig) error {
 	dateRangeStr := strings.Split(os.Getenv("DATE_RANGE"), ",")
 	if len(dateRangeStr) != 2 {
@@ -167,34 +148,6 @@ func loadPaymentMethods(config *filter.FilterConfig) error {
 	return nil
 }
 
-func loadCountAndFilterVenv(config *filter.FilterConfig) error {
-	amountTresholdStr := os.Getenv("AMOUNT_TRESHOLD")
-	amountTreshold, err := strconv.Atoi(amountTresholdStr)
-	if err != nil {
-		return errors.New("AMOUNT_TRESHOLD environment variable is required if FILTER_TYPE is COUNT_AND_FILTER and must be a number")
-	}
-	config.AmountTreshold = amountTreshold
-	return nil
-}
-
-func loadBankDistinctVenv(config *filter.FilterConfig) error {
-	outputQueues := os.Getenv("OUTPUT_QUEUES")
-	if outputQueues == "" {
-		return errors.New("OUTPUT_QUEUES environment variable is required if FILTER_TYPE is BANK_DISTINCT")
-	}
-	config.OutputQueues = strings.Split(outputQueues, ",")
-	return nil
-}
-
-func loadQuoteVenv(config *filter.FilterConfig) error {
-	quote := os.Getenv("QUOTE")
-	if quote == "" {
-		return errors.New("QUOTE environment variable is required if FILTER_TYPE is CONVERTED_AMOUNT_FILTER")
-	}
-	config.Quote = quote
-	return nil
-}
-
 func loadFilterTypeConfig(config *filter.FilterConfig) error {
 	filterTypeVenv := os.Getenv("FILTER_TYPE")
 	if filterTypeVenv == "" {
@@ -203,45 +156,11 @@ func loadFilterTypeConfig(config *filter.FilterConfig) error {
 
 	config.Type = filter.FilterType(filterTypeVenv)
 
-	switch config.Type {
-	case filter.CURRENCY:
-		if err := loadCurrenciesVenv(config); err != nil {
-			return err
-		}
-	case filter.AMOUNT:
-		if err := loadAmountVenv(config); err != nil {
-			return err
-		}
-	case filter.CONVERTED_AMOUNT_FILTER:
-		if err := loadAmountVenv(config); err != nil {
-			return err
-		}
-		if err := loadQuoteVenv(config); err != nil {
-			return err
-		}
-	case filter.DATE_RANGE:
-		if err := loadDateRangeVenv(config); err != nil {
-			return err
-		}
-	case filter.DATE_RANGE_AND_PAYMENT:
-		if err := loadDateRangeVenv(config); err != nil {
-			return err
-		}
-		if err := loadPaymentMethods(config); err != nil {
-			return err
-		}
-	case filter.COUNT_AND_FILTER:
-		if err := loadCountAndFilterVenv(config); err != nil {
-			return err
-		}
-	case filter.TRANSFER_DISTINCT:
-		break
-	case filter.BANK_DISTINCT:
-		if err := loadBankDistinctVenv(config); err != nil {
-			return err
-		}
-	default:
-		return errors.New("FILTER_TYPE environment variable hasn't a valid value")
+	if err := loadDateRangeVenv(config); err != nil {
+		return err
+	}
+	if err := loadPaymentMethods(config); err != nil {
+		return err
 	}
 
 	return nil

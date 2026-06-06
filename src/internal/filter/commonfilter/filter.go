@@ -1,4 +1,4 @@
-package filter
+package commonfilter
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
+	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
@@ -16,10 +17,10 @@ import (
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-const eofRingQueueNamePrefix = "FILTER_%s_"
+const _EOF_RING_QUEUE_PREFIX = "FILTER_%s_"
 
-func newFilter[T any, O any](
-	config FilterConfig,
+func NewFilter[T any, O any](
+	config filter.FilterConfig,
 	filterFunction func(T) bool,
 	inputToOutput func(T) O,
 	inputCodec wire.Codec[T],
@@ -53,8 +54,8 @@ func newFilter[T any, O any](
 	eofInputQueueName, eofOutputQueueName := eofring.GetInputAndOutputQueueNames(
 		config.Id,
 		config.FilterAmount,
-		fmt.Sprintf(eofRingQueueNamePrefix, config.Type),
-		fmt.Sprintf(eofRingQueueNamePrefix, config.Type),
+		fmt.Sprintf(_EOF_RING_QUEUE_PREFIX, config.Type),
+		fmt.Sprintf(_EOF_RING_QUEUE_PREFIX, config.Type),
 	)
 
 	eofInput, err := middleware.CreateQueueMiddleware(

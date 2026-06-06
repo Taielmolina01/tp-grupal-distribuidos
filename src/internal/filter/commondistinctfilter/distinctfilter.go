@@ -1,8 +1,9 @@
-package filter
+package commondistinctfilter
 
 import (
 	"log/slog"
 
+	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
@@ -12,8 +13,8 @@ import (
 
 // Inicializadores
 
-func newDistinctFilter[T comparable, S comparable](
-	config FilterConfig,
+func NewDistinctFilter[T comparable, S comparable](
+	config filter.FilterConfig,
 	compareFunc func(T, T) bool,
 	keyFunc func(T) S,
 	shardCriteria func(T) string,

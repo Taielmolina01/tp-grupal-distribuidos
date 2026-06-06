@@ -5,9 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
-	"time"
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
@@ -18,56 +16,14 @@ import (
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-type FilterAndSplitterConfig struct {
-	Id        int
-	StartDate time.Time
-	EndDate   time.Time
+const (
+	_EOF_RING_QUEUE_PREFIX = "FILTER_AND_SPLIITER_EOF_"
+)
 
-	OutputMiddlewareAmount int
-	OutputMiddlewarePrefix string
-
-	FilterAndSpliterAmount int
-
-	MomHost string
-	MomPort int
-
-	InputMiddlewareName  string
-	InputMiddlewareQueue string
-	InputRoutingKeys     []string
-
-	QueryID uint8
-}
-
-type FilterAndSplitter struct {
-	id        int
-	startDate time.Time
-	endDate   time.Time
-
-	hasher shard.Hasher
-
-	inputMiddleware  middleware.Middleware
-	outputMiddleware newmiddleware.Middleware
-	eofInput         middleware.Middleware
-	eofOutput        middleware.Middleware
-	eofHandler       eofring.EofRingAlgorithm
-
-	handlerMessages msgmonitor.MessageMonitor
-
-	queryID uint8
-}
-
-func getRingNextIndex(config FilterAndSplitterConfig) int {
-	if config.Id == config.FilterAndSpliterAmount-1 {
-		return 0
-	}
-	return config.Id + 1
-}
-
-func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter, err error) {
-	const ring_prefix = "FILTER_AND_SPLIITER_EOF_"
-
+func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error) {
 	oldConnSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
@@ -78,6 +34,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		outputMiddleware newmiddleware.Middleware
 		eofInput         middleware.Middleware
 		eofOutput        middleware.Middleware
+		err              error
 	)
 
 	defer func() {
@@ -112,12 +69,19 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
-	eofInput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(config.Id), oldConnSettings)
+	eofInputQueueName, eofOutputQueueName := eofring.GetInputAndOutputQueueNames(
+		config.Id,
+		config.FilterAndSpliterAmount,
+		_EOF_RING_QUEUE_PREFIX,
+		_EOF_RING_QUEUE_PREFIX,
+	)
+
+	eofInput, err = middleware.CreateQueueMiddleware(eofInputQueueName, oldConnSettings)
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF input queue: %w", err)
 	}
 
-	eofOutput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(getRingNextIndex(config)), oldConnSettings)
+	eofOutput, err = middleware.CreateQueueMiddleware(eofOutputQueueName, oldConnSettings)
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF output queue: %w", err)
 	}
