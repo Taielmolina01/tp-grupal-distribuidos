@@ -1,0 +1,16 @@
+src/internal/common/messageprotocol/rabbit/channels/daterange/daterange.go
+  h_3c9b41718876fe 5
+src/internal/common/messageprotocol/rabbit/channels/splittransfer/splittransfer.go
+  h_3c9b41718876fe 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "70f8f588884741375a873d5c39d024e5767f6ccf",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
