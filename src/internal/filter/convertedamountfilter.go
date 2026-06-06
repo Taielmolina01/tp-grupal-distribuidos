@@ -101,7 +101,7 @@ func (filter *ConvertedAmountFilter) consume(msg middleware.Message, ack, _ func
 	}
 	if input.EOF {
 		filter.flush(input.ClientID)
-		if err := filter.outputQueue.Send(middleware.Message{Body: string(batch.WriteEOF(input.ClientID, filter.queryId, input.Total))}); err != nil {
+		if err := filter.outputQueue.Send(middleware.Message{Body: string(batch.WriteEOF(input.ClientID, filter.queryId, 0, 0, input.Total))}); err != nil {
 			slog.Error("while forwarding EOF", "client_id", input.ClientID, "err", err)
 		}
 		return
@@ -127,7 +127,7 @@ func (filter *ConvertedAmountFilter) flush(clientID int) {
 	if len(results) == 0 {
 		return
 	}
-	body := batch.Write(clientID, filter.queryId, results, records.FinalTransferForQ5Codec)
+	body := batch.Write(clientID, filter.queryId, 0, 0, results, records.FinalTransferForQ5Codec)
 	if err := filter.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Error("while sending results batch", "err", err)
 	}

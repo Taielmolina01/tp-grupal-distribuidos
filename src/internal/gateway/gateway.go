@@ -468,7 +468,7 @@ func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
 }
 
 func (gateway *Gateway) sendEOF(clientID int, total uint32, targets ...middleware.Middleware) error {
-	body := batch.WriteEOF(clientID, 0, total)
+	body := batch.WriteEOF(clientID, 0, 0, 0, total)
 	var errs []error
 	for _, t := range targets {
 		if err := t.Send(middleware.Message{Body: string(body)}); err != nil {
@@ -496,7 +496,7 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState, r 
 		byShard[idx] = append(byShard[idx], acc)
 	}
 	for idx, group := range byShard {
-		body := batch.Write(client.ID, 0, group, records.AccountCodec)
+		body := batch.Write(client.ID, 0, 0, 0, group, records.AccountCodec)
 		if err := gateway.accountQueues[idx].Send(middleware.Message{Body: string(body)}); err != nil {
 			slog.Debug("While sending accounts batch", "err", err)
 			return err
@@ -512,7 +512,7 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 		slog.Debug("While reading TRANS_BATCH", "err", err)
 		return err
 	}
-	body := batch.WriteRaw(client.ID, 0, count, payload)
+	body := batch.WriteRaw(client.ID, 0, 0, 0, count, payload)
 	if err := gateway.transfersExchange.Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Debug("While sending transfers batch", "err", err)
 		return err

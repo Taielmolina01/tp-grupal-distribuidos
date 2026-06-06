@@ -8,12 +8,12 @@ import (
 
 type Msg = batch.Msg[account.AccountIdentifier]
 
-func WriteBatch(clientID int, queryID uint8, ids []account.AccountIdentifier) []byte {
-	return batch.Write(clientID, queryID, ids, records.AccountIdentifierCodec)
+func WriteBatch(clientID int, queryID uint8, senderID uint32, seq uint32, ids []account.AccountIdentifier) []byte {
+	return batch.Write(clientID, queryID, senderID, seq, ids, records.AccountIdentifierCodec)
 }
 
-func WriteEOF(clientID int, queryID uint8, total uint32) []byte {
-	return batch.WriteEOF(clientID, queryID, total)
+func WriteEOF(clientID int, queryID uint8, senderID uint32, seq uint32, total uint32) []byte {
+	return batch.WriteEOF(clientID, queryID, senderID, seq, total)
 }
 
 func Read(body []byte) (Msg, error) {

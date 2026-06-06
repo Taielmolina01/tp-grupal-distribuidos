@@ -140,7 +140,7 @@ func (a *AcumAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 	}
 
 	for routingKey, ids := range outgoing {
-		body := accountid.WriteBatch(input.ClientID, uint8(a.queryID), ids)
+		body := accountid.WriteBatch(input.ClientID, uint8(a.queryID), 0, 0, ids)
 		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: string(body), RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output batch", "err", err)
 		}
@@ -183,7 +183,7 @@ func (a *AcumAccounts) handleEOF(clientID int, total uint32) {
 		return
 	}
 
-	eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), total)
+	eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), 0, 0, total)
 	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: string(eofBody), RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}

@@ -122,13 +122,13 @@ func newReducer[T, O comparable](
 				byShard[idx] = append(byShard[idx], projectFunc(v))
 			}
 			for idx, group := range byShard {
-				body := batch.Write(clientID, reducer.queryId, group, reducer.outputCodec)
+				body := batch.Write(clientID, reducer.queryId, 0, 0, group, reducer.outputCodec)
 				if err := reducer.outputQueues[idx].Send(middleware.Message{Body: string(body)}); err != nil {
 					return err
 				}
 			}
 
-			eofBody := batch.WriteEOF(clientID, reducer.queryId, total)
+			eofBody := batch.WriteEOF(clientID, reducer.queryId, 0, 0, total)
 			for _, outputQueue := range reducer.outputQueues {
 				if err := outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 					return err

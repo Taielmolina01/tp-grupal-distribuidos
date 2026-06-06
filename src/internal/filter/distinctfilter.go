@@ -68,7 +68,7 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 	}
 
 	if input.EOF {
-		eofBody := batch.WriteEOF(input.ClientID, distinctfilter.queryId, input.Total)
+		eofBody := batch.WriteEOF(input.ClientID, distinctfilter.queryId, 0, 0, input.Total)
 		for _, outputQueue := range distinctfilter.outputQueues {
 			if err := outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 				slog.Error("While broadcasting EOF to output queue", "err", err)
@@ -101,7 +101,7 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 	}
 
 	for idx, group := range byShard {
-		body := batch.Write(input.ClientID, distinctfilter.queryId, group, distinctfilter.codec)
+		body := batch.Write(input.ClientID, distinctfilter.queryId, 0, 0, group, distinctfilter.codec)
 		if err := distinctfilter.outputQueues[idx].Send(middleware.Message{Body: string(body)}); err != nil {
 			slog.Error("While sending output batch", "err", err)
 		}

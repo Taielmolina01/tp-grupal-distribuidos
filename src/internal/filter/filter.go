@@ -105,7 +105,7 @@ func newFilter[T any, O any](
 			handlerMessages,
 			func(clientID int, total uint32, isCoordinator bool) error {
 				if isCoordinator {
-					return outputExchange.Send(middleware.Message{Body: string(batch.WriteEOF(clientID, config.QueryId, total))})
+					return outputExchange.Send(middleware.Message{Body: string(batch.WriteEOF(clientID, config.QueryId, 0, 0, total))})
 				}
 				return nil
 			},
@@ -159,7 +159,7 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, _ func())
 		return
 	}
 
-	body := batch.Write(input.ClientID, filter.queryId, outputs, filter.outputCodec)
+	body := batch.Write(input.ClientID, filter.queryId, 0, 0, outputs, filter.outputCodec)
 	if err := filter.outputExchange.Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Error("While sending batch to output exchange", "err", err)
 	}

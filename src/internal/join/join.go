@@ -111,7 +111,7 @@ func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
 	if len(results) == 0 {
 		return
 	}
-	body := batch.Write(clientID, j.queryID, results, j.outputCodec)
+	body := batch.Write(clientID, j.queryID, 0, 0, results, j.outputCodec)
 	if err := j.output.Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Error("while sending join results", "err", err)
 	}

@@ -170,7 +170,7 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (_ *DateRangeSplitter,
 				if !isCoordinator {
 					return nil
 				}
-				if err := s.outputQueues[idx].Send(middleware.Message{Body: string(batch.WriteEOF(clientID, s.queryID, total))}); err != nil {
+				if err := s.outputQueues[idx].Send(middleware.Message{Body: string(batch.WriteEOF(clientID, s.queryID, 0, 0, total))}); err != nil {
 					return err
 				}
 				return nil
@@ -263,12 +263,12 @@ func (s *DateRangeSplitter) handleBatch(clientID int, recs []transfer.TransferAf
 	}
 
 	if len(avg) > 0 {
-		if err := s.outputQueues[0].Send(middleware.Message{Body: string(daterange.WriteBatch(clientID, s.queryID, avg))}); err != nil {
+		if err := s.outputQueues[0].Send(middleware.Message{Body: string(daterange.WriteBatch(clientID, s.queryID, 0, 0, avg))}); err != nil {
 			slog.Error("While sending Q3 avg batch", "err", err)
 		}
 	}
 	if len(filter) > 0 {
-		if err := s.outputQueues[1].Send(middleware.Message{Body: string(q3filter.WriteBatch(clientID, s.queryID, filter))}); err != nil {
+		if err := s.outputQueues[1].Send(middleware.Message{Body: string(q3filter.WriteBatch(clientID, s.queryID, 0, 0, filter))}); err != nil {
 			slog.Error("While sending Q3 filter batch", "err", err)
 		}
 	}

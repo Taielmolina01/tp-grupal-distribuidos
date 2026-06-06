@@ -246,7 +246,7 @@ func (a *AvgAggregator) onRingConverged(clientID int, total uint32, isCoordinato
 		})
 	}
 	if len(avgs) > 0 {
-		body := avgmethod.WriteBatch(clientID, a.queryID, avgs)
+		body := avgmethod.WriteBatch(clientID, a.queryID, 0, 0, avgs)
 		for _, q := range a.outputQueues {
 			if err := q.Send(middleware.Message{Body: string(body)}); err != nil {
 				return err
@@ -257,7 +257,7 @@ func (a *AvgAggregator) onRingConverged(clientID int, total uint32, isCoordinato
 	if !isCoordinator {
 		return nil
 	}
-	eofBody := avgmethod.WriteEOF(clientID, a.queryID, total)
+	eofBody := avgmethod.WriteEOF(clientID, a.queryID, 0, 0, total)
 	for _, q := range a.outputQueues {
 		if err := q.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 			return err

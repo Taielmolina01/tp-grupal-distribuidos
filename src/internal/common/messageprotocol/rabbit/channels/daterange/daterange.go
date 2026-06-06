@@ -22,12 +22,12 @@ var codec = wire.Codec[transfer.TransferForQ3Avg]{
 	MinSize:   serializer.UINT16_SIZE + serializer.UINT64_SIZE,
 }
 
-func WriteBatch(clientID int, queryID uint8, records []transfer.TransferForQ3Avg) []byte {
-	return batch.Write(clientID, queryID, records, codec)
+func WriteBatch(clientID int, queryID uint8, senderID uint32, seq uint32, records []transfer.TransferForQ3Avg) []byte {
+	return batch.Write(clientID, queryID, senderID, seq, records, codec)
 }
 
-func WriteEOF(clientID int, queryID uint8, total uint32) []byte {
-	return batch.WriteEOF(clientID, queryID, total)
+func WriteEOF(clientID int, queryID uint8, senderID uint32, seq uint32, total uint32) []byte {
+	return batch.WriteEOF(clientID, queryID, senderID, seq, total)
 }
 
 func Read(body []byte) (Msg, error) {

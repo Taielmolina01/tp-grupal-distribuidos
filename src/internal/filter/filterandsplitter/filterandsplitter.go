@@ -132,7 +132,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 			handlerMessages.RemoveClient(clientID)
 			if isCoordinator {
 				return outputMiddleware.Send(newmiddleware.Message{
-					Body:       string(batch.WriteEOF(clientID, config.QueryID, total)),
+					Body:       string(batch.WriteEOF(clientID, config.QueryID, 0, 0, total)),
 					RoutingKey: newmiddleware.BroadcastRoutingKey,
 				})
 			}
@@ -201,6 +201,7 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
 }
 
 func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.TransferAfterCurrency) {
+	seq := f.handlerMessages.NextSeqByClientId(clientID)
 	byShard := make(map[string][]transfer.SplittedTransfer)
 
 	for i := range records {
@@ -232,7 +233,7 @@ func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.Transfe
 	}
 
 	for routingKey, group := range byShard {
-		body := splittransfer.WriteBatch(clientID, f.queryID, group)
+		body := splittransfer.WriteBatch(clientID, f.queryID, uint32(f.id), seq, group)
 		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(body), RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output batch", "err", err)
 		}

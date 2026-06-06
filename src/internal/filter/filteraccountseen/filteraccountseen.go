@@ -177,7 +177,7 @@ func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
 		f.flushResults(clientID, state)
 	}
 
-	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), total)
+	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), 0, 0, total)
 	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(eofBody)}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
@@ -186,7 +186,7 @@ func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
 }
 
 func (f *FilterAccountSeen) flushResults(clientID int, state *clientState) {
-	body := state.builder.Flush(clientID, uint8(f.queryID))
+	body := state.builder.Flush(clientID, uint8(f.queryID), 0, 0)
 	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(body)}); err != nil {
 		slog.Error("While sending Q4 results batch", "err", err)
 	}

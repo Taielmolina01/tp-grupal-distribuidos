@@ -286,7 +286,7 @@ func (j *JoinAccounts) broadcastQualified(clientID int, acc account.AccountIdent
 }
 
 func (j *JoinAccounts) flushQualifiedBatch(clientID int, b *batch.Builder[qualifiedaccount.QualifiedAccount]) {
-	body := b.Flush(clientID, uint8(j.queryID))
+	body := b.Flush(clientID, uint8(j.queryID), 0, 0)
 	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: string(body)}); err != nil {
 		slog.Error("While flushing qualified batch", "err", err)
 	}
@@ -301,7 +301,7 @@ func (j *JoinAccounts) handleTransferEOF(clientID int, total uint32) {
 		j.flushQualifiedBatch(clientID, state.qualifiedBatch)
 	}
 
-	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), 0)
+	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), 0, 0, 0)
 	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: string(eofBody)}); err != nil {
 		slog.Error("While sending qualified EOF", "err", err)
 	}
@@ -365,7 +365,7 @@ func (j *JoinAccounts) finalize(clientID int, state *clientState) {
 		}
 	}
 
-	eofBody := accountchain.WriteEOF(clientID, uint8(j.queryID), state.transferEOFTotal)
+	eofBody := accountchain.WriteEOF(clientID, uint8(j.queryID), 0, 0, state.transferEOFTotal)
 	if err := j.outputMiddleware.Send(newmiddleware.Message{Body: string(eofBody), RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
@@ -393,7 +393,7 @@ func (j *JoinAccounts) builderFor(batches map[string]*batch.Builder[account.Acco
 }
 
 func (j *JoinAccounts) flushChainBatch(clientID int, rk string, b *batch.Builder[account.AccountChain]) {
-	body := b.Flush(clientID, uint8(j.queryID))
+	body := b.Flush(clientID, uint8(j.queryID), 0, 0)
 	if err := j.outputMiddleware.Send(newmiddleware.Message{Body: string(body), RoutingKey: rk}); err != nil {
 		slog.Error("While sending chain batch", "err", err)
 	}

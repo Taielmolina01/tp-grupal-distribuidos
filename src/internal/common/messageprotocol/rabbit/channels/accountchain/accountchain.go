@@ -16,12 +16,12 @@ var codec = wire.Codec[account.AccountChain]{
 	MinSize:   3 * records.MinSizeAccountIdentifier,
 }
 
-func WriteBatch(clientID int, queryID uint8, chains []account.AccountChain) []byte {
-	return batch.Write(clientID, queryID, chains, codec)
+func WriteBatch(clientID int, queryID uint8, senderID uint32, seq uint32, chains []account.AccountChain) []byte {
+	return batch.Write(clientID, queryID, senderID, seq, chains, codec)
 }
 
-func WriteEOF(clientID int, queryID uint8, total uint32) []byte {
-	return batch.WriteEOF(clientID, queryID, total)
+func WriteEOF(clientID int, queryID uint8, senderID uint32, seq uint32, total uint32) []byte {
+	return batch.WriteEOF(clientID, queryID, senderID, seq, total)
 }
 
 func Read(body []byte) (Msg, error) {

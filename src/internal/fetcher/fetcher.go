@@ -102,7 +102,7 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 	}
 
 	if input.EOF {
-		eofBody := batch.WriteEOF(input.ClientID, fetcher.queryId, input.Total)
+		eofBody := batch.WriteEOF(input.ClientID, fetcher.queryId, 0, 0, input.Total)
 		for _, outputQueue := range fetcher.outputQueues {
 			if err := outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 				slog.Error("while sending EOF to filter amount", "err", err)
@@ -148,7 +148,7 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 	if len(responses) == 0 {
 		return
 	}
-	body := batch.Write(input.ClientID, fetcher.queryId, responses, records.FetcherResponseCodec)
+	body := batch.Write(input.ClientID, fetcher.queryId, 0, 0, responses, records.FetcherResponseCodec)
 	fetcher.actualIndex = (fetcher.actualIndex + 1) % len(fetcher.outputQueues)
 	if err := fetcher.outputQueues[fetcher.actualIndex].Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Error("while publishing batch to output queue", "err", err)

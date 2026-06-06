@@ -322,7 +322,7 @@ func (af *AverageFilter) flushPendingLocked(clientID int, state *clientState) {
 	if len(state.pending) == 0 {
 		return
 	}
-	body := batch.Write(clientID, af.queryID, state.pending, records.Query3ResultCodec)
+	body := batch.Write(clientID, af.queryID, 0, 0, state.pending, records.Query3ResultCodec)
 	if err := af.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Error("While sending Q3 results batch", "err", err)
 	}
@@ -364,7 +364,7 @@ func (af *AverageFilter) onTransfersRingConverged(clientID int, total uint32, is
 	}
 
 	af.finalizeClientLocked(clientID, state)
-	eofBody := batch.WriteEOF(clientID, af.queryID, total)
+	eofBody := batch.WriteEOF(clientID, af.queryID, 0, 0, total)
 	if err := af.outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 		return err
 	}
@@ -418,7 +418,7 @@ func (af *AverageFilter) finalizeClientLocked(clientID int, state *clientState) 
 func (af *AverageFilter) finalizeAndEmitEOFLocked(clientID int, state *clientState) {
 	af.finalizeClientLocked(clientID, state)
 
-	eofBody := batch.WriteEOF(clientID, af.queryID, 0)
+	eofBody := batch.WriteEOF(clientID, af.queryID, 0, 0, 0)
 	if err := af.outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}

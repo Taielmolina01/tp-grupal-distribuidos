@@ -78,6 +78,8 @@ func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func(
 	resultBody := batch.Write(
 		input.ClientID,
 		count.queryId,
+		0,
+		0,
 		[]queryresult.Query5Result{{Qty: count.countByClient[input.ClientID]}},
 		records.Query5ResultCodec,
 	)
@@ -85,7 +87,7 @@ func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func(
 		slog.Error("while sending result message", "err", err)
 	}
 
-	eofBody := batch.WriteEOF(input.ClientID, count.queryId, 1)
+	eofBody := batch.WriteEOF(input.ClientID, count.queryId, 0, 0, 1)
 	if err := count.outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 		slog.Error("while sending EOF message", "err", err)
 	}

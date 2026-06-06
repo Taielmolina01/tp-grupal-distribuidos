@@ -169,7 +169,7 @@ func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
 
 	a.join.HandleQueryEOF(clientID)
 
-	eofBody := batch.WriteEOF(clientID, a.queryID, 0)
+	eofBody := batch.WriteEOF(clientID, a.queryID, 0, 0, 0)
 	if err := a.output.Send(middleware.Message{Body: string(eofBody)}); err != nil {
 		slog.Error("while sending join EOF downstream", "err", err)
 	}

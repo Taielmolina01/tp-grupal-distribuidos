@@ -25,12 +25,12 @@ func NewBatchBuilder(maxCount, maxBytes int) *batch.Builder[QualifiedAccount] {
 	return batch.NewBuilder(maxCount, maxBytes, codec)
 }
 
-func WriteBatch(clientID int, queryID uint8, recs []QualifiedAccount) []byte {
-	return batch.Write(clientID, queryID, recs, codec)
+func WriteBatch(clientID int, queryID uint8, senderID uint32, seq uint32, recs []QualifiedAccount) []byte {
+	return batch.Write(clientID, queryID, senderID, seq, recs, codec)
 }
 
-func WriteEOF(clientID int, queryID uint8, total uint32) []byte {
-	return batch.WriteEOF(clientID, queryID, total)
+func WriteEOF(clientID int, queryID uint8, senderID uint32, seq uint32, total uint32) []byte {
+	return batch.WriteEOF(clientID, queryID, senderID, seq, total)
 }
 
 func Read(body []byte) (Msg, error) {
