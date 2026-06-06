@@ -1,16 +1,9 @@
-// Package splittransfer is the protocol of the filterandsplitter -> joinaccounts
-// channel. It carries batches of transfer.SplittedTransfer (a TransferForQ4 plus
-// the IsLeftPart flag), plus an EOF that closes the stream for a client.
-//
-// The batch/EOF framing lives in the batch package. The record embeds the shared
-// TransferForQ4, whose codec is reused from the records package; this file owns
-// only the channel-specific IsLeftPart field.
 package splittransfer
 
 import (
-	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )

@@ -1,15 +1,8 @@
-// Package daterange is the protocol of the daterangesplitter -> sum channel.
-// It carries batches of transfer.TransferForQ3Avg records, plus an EOF that
-// closes the stream for a client.
-//
-// The batch/EOF framing lives in the batch package; this file only declares the
-// record type and how to (de)serialize a single TransferForQ3Avg, which is the
-// only part specific to this channel.
 package daterange
 
 import (
-	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )

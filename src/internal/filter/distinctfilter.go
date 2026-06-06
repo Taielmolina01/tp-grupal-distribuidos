@@ -83,7 +83,6 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 		distinctfilter.alreadySeen[input.ClientID] = seen
 	}
 
-	// Keep only records not seen before, grouped by output shard.
 	byShard := make(map[int][]T)
 	for i := range input.Records {
 		record := input.Records[i]

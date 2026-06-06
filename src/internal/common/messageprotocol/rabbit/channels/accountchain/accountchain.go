@@ -9,7 +9,6 @@ import (
 
 type Msg = batch.Msg[account.AccountChain]
 
-// codec: a chain is three account identifiers, reusing the shared codec.
 var codec = wire.Codec[account.AccountChain]{
 	Marshal:   marshalRecord,
 	Unmarshal: unmarshalRecord,
