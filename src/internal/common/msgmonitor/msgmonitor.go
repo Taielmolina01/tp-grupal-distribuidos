@@ -9,69 +9,90 @@ type MessageMonitor interface {
 	AddProcessedMessagesAmountByClientId(int, uint32)
 	GetForwardedMessagesAmountByClientId(int) uint32
 	AddForwardedMessagesAmountByClientId(int, uint32)
+	NextSeqByClientId(clientID int) uint32
+	IsDuplicate(clientID, senderID int, seq uint32) bool
 	RemoveClient(int)
 	Close()
 }
 
+type clientState struct {
+	processed   uint32
+	forwarded   uint32
+	seqSent     uint32
+	seqReceived map[int]uint32
+}
+
 type messageMonitorImpl struct {
-	processedByClient      map[int]uint32
-	forwardedByClient      map[int]uint32
-	processedMessagesMutex sync.Mutex
-	forwardedMessagesMutex sync.Mutex
+	clients map[int]clientState
+	mu      sync.Mutex
 }
 
 func NewMessageMonitor() MessageMonitor {
 	return &messageMonitorImpl{
-		processedByClient:      map[int]uint32{},
-		forwardedByClient:      map[int]uint32{},
-		processedMessagesMutex: sync.Mutex{},
-		forwardedMessagesMutex: sync.Mutex{},
+		clients: map[int]clientState{},
 	}
 }
 
-func (monitor *messageMonitorImpl) GetProcessedMessagesAmountByClientId(clientID int) uint32 {
-	monitor.processedMessagesMutex.Lock()
-	defer monitor.processedMessagesMutex.Unlock()
-
-	amount := monitor.processedByClient[clientID]
-	return amount
+func (m *messageMonitorImpl) GetProcessedMessagesAmountByClientId(clientID int) uint32 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.clients[clientID].processed
 }
 
-func (monitor *messageMonitorImpl) AddProcessedMessagesAmountByClientId(clientID int, amount uint32) {
-	monitor.processedMessagesMutex.Lock()
-	defer monitor.processedMessagesMutex.Unlock()
-
-	actual := monitor.processedByClient[clientID]
-	actual += amount
-	monitor.processedByClient[clientID] = actual
+func (m *messageMonitorImpl) AddProcessedMessagesAmountByClientId(clientID int, amount uint32) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.clients[clientID]
+	s.processed += amount
+	m.clients[clientID] = s
 }
 
-func (monitor *messageMonitorImpl) GetForwardedMessagesAmountByClientId(clientID int) uint32 {
-	monitor.forwardedMessagesMutex.Lock()
-	defer monitor.forwardedMessagesMutex.Unlock()
-
-	amount := monitor.forwardedByClient[clientID]
-	return amount
+func (m *messageMonitorImpl) GetForwardedMessagesAmountByClientId(clientID int) uint32 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.clients[clientID].forwarded
 }
 
-func (monitor *messageMonitorImpl) AddForwardedMessagesAmountByClientId(clientID int, amount uint32) {
-	monitor.forwardedMessagesMutex.Lock()
-	defer monitor.forwardedMessagesMutex.Unlock()
-
-	actual := monitor.forwardedByClient[clientID]
-	actual += amount
-	monitor.forwardedByClient[clientID] = actual
+func (m *messageMonitorImpl) AddForwardedMessagesAmountByClientId(clientID int, amount uint32) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.clients[clientID]
+	s.forwarded += amount
+	m.clients[clientID] = s
 }
 
-func (monitor *messageMonitorImpl) RemoveClient(clientID int) {
-	monitor.processedMessagesMutex.Lock()
-	defer monitor.processedMessagesMutex.Unlock()
-	delete(monitor.processedByClient, clientID)
+func (m *messageMonitorImpl) NextSeqByClientId(clientID int) uint32 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.clients[clientID]
+	s.seqSent++
+	m.clients[clientID] = s
+	return s.seqSent
 }
 
-func (monitor *messageMonitorImpl) Close() {
-	monitor.processedMessagesMutex.Lock()
-	defer monitor.processedMessagesMutex.Unlock()
+func (m *messageMonitorImpl) IsDuplicate(clientID, senderID int, seq uint32) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.clients[clientID]
+	if s.seqReceived == nil {
+		s.seqReceived = map[int]uint32{}
+	}
+	if seq <= s.seqReceived[senderID] {
+		return true
+	}
+	s.seqReceived[senderID] = seq
+	m.clients[clientID] = s
+	return false
+}
 
-	clear(monitor.processedByClient)
+func (m *messageMonitorImpl) RemoveClient(clientID int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.clients, clientID)
+}
+
+func (m *messageMonitorImpl) Close() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	clear(m.clients)
 }
