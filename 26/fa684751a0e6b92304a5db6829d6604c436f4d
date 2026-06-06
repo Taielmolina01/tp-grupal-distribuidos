@@ -1,0 +1,49 @@
+src/internal/common/messageprotocol/wire/wire.go
+  s_d8e98971808961::t_1dae2bc8cebf24 33
+  s_d8e98971808961::t_9ea824e814a87b 95,100,102-105
+src/internal/common/messageprotocol/rabbit/channels/avgmethod/avgmethod.go
+  ai_agent 18,22
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_d8e98971808961::t_4b04b7570b19c7 236
+src/internal/common/messageprotocol/rabbit/batch/batch.go
+  s_d8e98971808961::t_55a53cc9e215f8 45,58,68,71,78,88,131
+  s_d8e98971808961::t_bf46db70785523 57,67
+src/internal/common/messageprotocol/rabbit/channels/accountchain/accountchain.go
+  ai_agent 19,23
+src/internal/common/messageprotocol/rabbit/channels/daterange/daterange.go
+  ai_agent 25,29
+src/internal/common/messageprotocol/rabbit/channels/q3filter/q3filter.go
+  ai_agent 18,22
+src/internal/common/msgmonitor/msgmonitor.go
+  s_d8e98971808961::t_5592ab8d16dbb5 12
+  s_d8e98971808961::t_a2bebc914e887f 22,78
+  s_d8e98971808961::t_c3126728e1bf0b 64
+  s_d8e98971808961::t_7e488fccdce65d 21
+  s_d8e98971808961::t_2cbe12e5e6eb75 13,73
+src/internal/common/messageprotocol/rabbit/channels/summethod/summethod.go
+  ai_agent 18,22
+src/internal/common/messageprotocol/rabbit/channels/accountid/accountid.go
+  ai_agent 11,15
+src/internal/common/messageprotocol/rabbit/channels/qualifiedaccount/qualifiedaccount.go
+  ai_agent 28,32
+src/internal/common/messageprotocol/rabbit/channels/splittransfer/splittransfer.go
+  ai_agent 26,30
+src/internal/common/messageprotocol/rabbit/envelope/envelope.go
+  s_d8e98971808961::t_50b1ae9767f48c 9-10,17-18,26-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "26fa684751a0e6b92304a5db6829d6604c436f4d",
+  "prompts": {},
+  "sessions": {
+    "s_d8e98971808961": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6276a01e-4045-470a-a1a1-74f35219bb4b",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
