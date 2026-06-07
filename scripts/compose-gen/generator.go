@@ -113,8 +113,6 @@ func writeGateway(b *strings.Builder, cfg *Config) {
 }
 
 func writeFetcher(b *strings.Builder, cfg *Config) {
-	outputQueues := queues("Q5_fetcher_output", cfg.FilterAmtQ5)
-
 	b.WriteString("  q5_fetcher:\n")
 	b.WriteString("    build:\n")
 	b.WriteString("      context: ./src/\n")
@@ -127,7 +125,7 @@ func writeFetcher(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - INPUT_QUEUE=Q5_filtered_fetcher_q\n")
 	b.WriteString("      - INPUT_EXCHANGE=Q5_filtered_exchange\n")
 	b.WriteString("      - INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY\n")
-	fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
+	b.WriteString("      - OUTPUT_QUEUE=Q5_fetcher_output\n")
 	b.WriteString("      - QUERY_ID=5\n")
 	b.WriteString("      - QUOTE=USD\n")
 	b.WriteString("\n")
@@ -531,7 +529,7 @@ func writeFilterAmtQ5(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - MOM_PORT=5672\n")
 		fmt.Fprintf(b, "      - ID=%d\n", i)
 		b.WriteString("      - AMOUNT=1\n")
-		fmt.Fprintf(b, "      - INPUT_QUEUE=Q5_fetcher_output_%d\n", i)
+		b.WriteString("      - INPUT_QUEUE=Q5_fetcher_output\n")
 		b.WriteString("      - OUTPUT_QUEUE=Q5_filtered_to_count_q\n")
 		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterAmtQ5)
 		b.WriteString("      - FILTER_TYPE=CONVERTED_AMOUNT_FILTER\n")

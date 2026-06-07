@@ -731,7 +731,7 @@ services:
       - INPUT_QUEUE=Q5_filtered_fetcher_q
       - INPUT_EXCHANGE=Q5_filtered_exchange
       - INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
-      - OUTPUT_QUEUES=Q5_fetcher_output_0,Q5_fetcher_output_1
+      - OUTPUT_QUEUE=Q5_fetcher_output
       - QUERY_ID=5
       - QUOTE=USD
 
@@ -748,7 +748,7 @@ services:
       - MOM_PORT=5672
       - ID=0
       - AMOUNT=1
-      - INPUT_QUEUE=Q5_fetcher_output_0
+      - INPUT_QUEUE=Q5_fetcher_output
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
@@ -768,7 +768,7 @@ services:
       - MOM_PORT=5672
       - ID=1
       - AMOUNT=1
-      - INPUT_QUEUE=Q5_fetcher_output_1
+      - INPUT_QUEUE=Q5_fetcher_output
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
@@ -788,7 +788,7 @@ services:
       - MOM_PORT=5672
       - ID=0
       - REDUCER_AMOUNT=1
-      - INPUT_EOFS_EXPECTED=2
+      - INPUT_EOFS_EXPECTED=1
       - INPUT_QUEUE=Q5_filtered_to_count_q
       - OUTPUT_QUEUES=results_queue
       - REDUCER_TYPE=COUNT

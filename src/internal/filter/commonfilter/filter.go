@@ -152,8 +152,8 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, _ func())
 	}
 
 	outputs := make([]O, 0, len(input.Records))
+	filter.handlerMessages.AddProcessedMessagesAmountByClientId(input.ClientID, uint32(len(input.Records)))
 	for i := range input.Records {
-		filter.handlerMessages.AddProcessedMessagesAmountByClientId(input.ClientID, 1)
 		if filter.filterFunction(input.Records[i]) {
 			filter.handlerMessages.AddForwardedMessagesAmountByClientId(input.ClientID, 1)
 			outputs = append(outputs, filter.outputTransform(input.Records[i]))
