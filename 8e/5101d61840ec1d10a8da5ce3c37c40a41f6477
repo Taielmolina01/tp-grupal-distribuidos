@@ -1,0 +1,54 @@
+src/internal/joinaccounts/joinaccounts.go
+  s_d8e98971808961::t_11925ba89d508a 64-66
+  s_d8e98971808961::t_d24668bc18bf6e 439
+  h_3c9b41718876fe 55
+  s_d8e98971808961::t_a85af0a134ee86 53,61-63,67-71
+  s_d8e98971808961::t_002e423a4d0435 209
+  s_d8e98971808961::t_b46b35eeaa8d23 423-424
+  s_d8e98971808961::t_99ddac30228104 230-233
+  s_d8e98971808961::t_ad72e54f5332ce 312-313
+  s_d8e98971808961::t_395f6cd16dde89 332
+  s_d8e98971808961::t_e175731d5de670 395
+  s_d8e98971808961::t_39fb59d4600ee2 54,56-60
+  s_d8e98971808961::t_f2328052ee5d1a 320
+  s_d8e98971808961::t_e856ec72904954 319,321-323
+src/internal/common/msgmonitor/msgmonitor.go
+  s_d8e98971808961::t_5e91cabdde6c6b 74-76
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_d8e98971808961::t_26306c771e25ec 147
+  s_d8e98971808961::t_f0109cf9a0a590 177,182-187
+  s_d8e98971808961::t_1a53e725fef5db 56-67
+  s_d8e98971808961::t_bcf25c9a0effe8 219
+src/internal/acumaccounts/acumaccounts.go
+  s_d8e98971808961::t_ffd60fe0d2cfbb 37,39-43
+  s_d8e98971808961::t_2f948cf6dc574e 232-233
+  s_d8e98971808961::t_dc1a74898562eb 35-36,38,44-54
+  s_d8e98971808961::t_0396b99ce04f4c 148-149,151-154,159-160
+  h_3c9b41718876fe 171-173
+  s_d8e98971808961::t_360444bd916ddd 174,176
+  s_d8e98971808961::t_0b4dd25d526764 219
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_d8e98971808961::t_6ad1b1b264c56a 202-206
+  s_d8e98971808961::t_22ca2d2ef4c6b6 133-134,136,140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "8e5101d61840ec1d10a8da5ce3c37c40a41f6477",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_d8e98971808961": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6276a01e-4045-470a-a1a1-74f35219bb4b",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
