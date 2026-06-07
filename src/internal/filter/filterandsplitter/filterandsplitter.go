@@ -199,10 +199,10 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
 		return
 	}
 
-	if f.handlerMessages.IsDuplicate(input.ClientID, int(input.SenderID), input.Seq) {
-		slog.Warn("Discarding duplicate batch", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
-		return
-	}
+	// if f.handlerMessages.IsDuplicate(input.ClientID, int(input.SenderID), input.Seq) {
+	// 	slog.Warn("Discarding duplicate batch", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
+	// 	return
+	// }
 
 	f.handleBatch(input.ClientID, input.Records)
 }

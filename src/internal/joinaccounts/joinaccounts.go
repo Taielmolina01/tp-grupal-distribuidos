@@ -51,8 +51,9 @@ type clientState struct {
 	transferEOFTotal    uint32
 	qualifiedEOFCount   int
 
-	seqSent     uint64
-	seqReceived map[int]uint64
+	seqSent              uint64
+	transferSeqReceived  map[int]uint64
+	qualifiedSeqReceived map[int]uint64
 }
 
 func (s *clientState) nextSeq() uint64 {
@@ -60,14 +61,25 @@ func (s *clientState) nextSeq() uint64 {
 	return s.seqSent
 }
 
-func (s *clientState) isDuplicate(senderID int, seq uint64) bool {
+func (s *clientState) isDuplicateTransfer(senderID int, seq uint64) bool {
 	if seq == 0 {
 		return false
 	}
-	if seq <= s.seqReceived[senderID] {
+	if seq <= s.transferSeqReceived[senderID] {
 		return true
 	}
-	s.seqReceived[senderID] = seq
+	s.transferSeqReceived[senderID] = seq
+	return false
+}
+
+func (s *clientState) isDuplicateQualified(senderID int, seq uint64) bool {
+	if seq == 0 {
+		return false
+	}
+	if seq <= s.qualifiedSeqReceived[senderID] {
+		return true
+	}
+	s.qualifiedSeqReceived[senderID] = seq
 	return false
 }
 
@@ -227,7 +239,7 @@ func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(
 	defer j.mu.Unlock()
 
 	if input.EOF {
-		if j.stateFor(input.ClientID).isDuplicate(int(input.SenderID), input.Seq) {
+		if j.stateFor(input.ClientID).isDuplicateQualified(int(input.SenderID), input.Seq) {
 			slog.Warn("Discarding duplicate qualified EOF", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
 			return
 		}
@@ -317,7 +329,7 @@ func (j *JoinAccounts) flushQualifiedBatch(clientID int, b *batch.Builder[qualif
 }
 
 func (j *JoinAccounts) handleTransferEOF(clientID int, senderID uint8, seq uint64, total uint32) {
-	if j.stateFor(clientID).isDuplicate(int(senderID), seq) {
+	if j.stateFor(clientID).isDuplicateTransfer(int(senderID), seq) {
 		slog.Warn("Discarding duplicate EOF", "clientID", clientID, "senderID", senderID, "seq", seq)
 		return
 	}
@@ -431,12 +443,13 @@ func (j *JoinAccounts) stateFor(clientID int) *clientState {
 	st, ok := j.clientsState[clientID]
 	if !ok {
 		st = &clientState{
-			left:            map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
-			right:           map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
-			qualifyingLeft:  map[account.AccountIdentifier]struct{}{},
-			qualifyingRight: map[account.AccountIdentifier]struct{}{},
-			qualifiedBatch:  qualifiedaccount.NewBatchBuilder(j.maxBatchSize, j.maxBatchBytes),
-			seqReceived:     map[int]uint64{},
+			left:                 map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
+			right:                map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
+			qualifyingLeft:       map[account.AccountIdentifier]struct{}{},
+			qualifyingRight:      map[account.AccountIdentifier]struct{}{},
+			qualifiedBatch:       qualifiedaccount.NewBatchBuilder(j.maxBatchSize, j.maxBatchBytes),
+			transferSeqReceived:  map[int]uint64{},
+			qualifiedSeqReceived: map[int]uint64{},
 		}
 		j.clientsState[clientID] = st
 	}
