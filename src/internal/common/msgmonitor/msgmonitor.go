@@ -71,6 +71,9 @@ func (m *messageMonitorImpl) NextSeqByClientId(clientID int) uint64 {
 }
 
 func (m *messageMonitorImpl) IsDuplicate(clientID, senderID int, seq uint64) bool {
+	if seq == 0 {
+		return false
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s := m.clients[clientID]

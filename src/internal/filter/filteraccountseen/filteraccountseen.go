@@ -53,6 +53,18 @@ type clientState struct {
 	eofAmt       int
 	seenAccounts map[account.AccountIdentifier]struct{}
 	builder      *batch.Builder[queryresult.Query4Result]
+	seqReceived  map[int]uint64
+}
+
+func (s *clientState) isDuplicateEOF(senderID int, seq uint64) bool {
+	if seq == 0 {
+		return false
+	}
+	if seq <= s.seqReceived[senderID] {
+		return true
+	}
+	s.seqReceived[senderID] = seq
+	return false
 }
 
 func NewFilterAccountSeen(config FilterAccountSeenConfig) (_ *FilterAccountSeen, err error) {
@@ -132,7 +144,7 @@ func (f *FilterAccountSeen) handleInput(msg newmiddleware.Message, ack func()) {
 	}
 
 	if input.EOF {
-		f.handleEOF(input.ClientID, input.Total)
+		f.handleEOF(input.ClientID, input.SenderID, input.Seq, input.Total)
 		return
 	}
 
@@ -162,11 +174,17 @@ func (f *FilterAccountSeen) handleRecord(clientID int, record account.AccountIde
 	}
 }
 
-func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
+func (f *FilterAccountSeen) handleEOF(clientID int, senderID uint8, seq uint64, total uint32) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	state := f.stateFor(clientID)
+
+	if state.isDuplicateEOF(int(senderID), seq) {
+		slog.Warn("Discarding duplicate EOF", "clientID", clientID, "senderID", senderID, "seq", seq)
+		return
+	}
+
 	state.eofAmt++
 
 	if state.eofAmt < f.expectedEOFs {
@@ -198,6 +216,7 @@ func (f *FilterAccountSeen) stateFor(clientID int) *clientState {
 		st = &clientState{
 			seenAccounts: map[account.AccountIdentifier]struct{}{},
 			builder:      batch.NewBuilder(f.maxBatchSize, f.maxBatchBytes, records.Query4ResultCodec),
+			seqReceived:  map[int]uint64{},
 		}
 		f.clientsState[clientID] = st
 	}

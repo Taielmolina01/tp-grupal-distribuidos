@@ -129,13 +129,15 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		uint32(config.Id),
 		handlerMessages,
 		func(clientID int, total uint32, isCoordinator bool) error {
-			handlerMessages.RemoveClient(clientID)
 			if isCoordinator {
+				seq := handlerMessages.NextSeqByClientId(clientID)
+				handlerMessages.RemoveClient(clientID)
 				return outputMiddleware.Send(newmiddleware.Message{
-					Body:       string(batch.WriteEOF(clientID, config.QueryID, 0, 0, total)),
+					Body:       string(batch.WriteEOF(clientID, config.QueryID, uint8(config.Id), seq, total)),
 					RoutingKey: newmiddleware.BroadcastRoutingKey,
 				})
 			}
+			handlerMessages.RemoveClient(clientID)
 			return nil
 		},
 		uint8(config.QueryID),
@@ -194,6 +196,11 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
 
 	if input.EOF {
 		f.handleEOF(input.ClientID, input.Total)
+		return
+	}
+
+	if f.handlerMessages.IsDuplicate(input.ClientID, int(input.SenderID), input.Seq) {
+		slog.Warn("Discarding duplicate batch", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
 		return
 	}
 
