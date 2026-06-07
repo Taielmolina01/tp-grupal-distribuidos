@@ -69,6 +69,7 @@ type clientState struct {
 	avgsReady           bool
 	ringeof             bool
 	avgsEofsReceived    int
+	expectedAvgRecords  int
 	transfersEofPending bool
 	transfersEofRealAmt uint32
 	pending             []queryresult.Query3Result
@@ -304,7 +305,7 @@ func (af *AverageFilter) handleAvgInput(msg middleware.Message, ack func()) {
 	state := af.getOrInitState(input.ClientID)
 
 	if input.EOF {
-		af.handleAvgEOFLocked(input.ClientID, state)
+		af.handleAvgEOFLocked(input.ClientID, state, input.Total)
 		return
 	}
 
@@ -314,6 +315,7 @@ func (af *AverageFilter) handleAvgInput(msg middleware.Message, ack func()) {
 		af.drainFileForMethod(input.ClientID, rec.Method, state)
 	}
 	af.flushPendingLocked(input.ClientID, state)
+	af.checkAvgsReady(input.ClientID, state)
 }
 
 const pendingFlushThreshold = 1000
@@ -329,9 +331,22 @@ func (af *AverageFilter) flushPendingLocked(clientID int, state *clientState) {
 	state.pending = state.pending[:0]
 }
 
-func (af *AverageFilter) handleAvgEOFLocked(clientID int, state *clientState) {
+func (af *AverageFilter) handleAvgEOFLocked(clientID int, state *clientState, totalAvgs uint32) {
 	state.avgsEofsReceived++
-	if state.avgsEofsReceived < af.avgsExpectedEofs {
+	if int(totalAvgs) > state.expectedAvgRecords {
+		state.expectedAvgRecords = int(totalAvgs)
+	}
+	af.checkAvgsReady(clientID, state)
+}
+
+func (af *AverageFilter) checkAvgsReady(clientID int, state *clientState) {
+	if state.avgsReady {
+		return
+	}
+	if state.avgsEofsReceived == 0 {
+		return
+	}
+	if len(state.avgs) < state.expectedAvgRecords {
 		return
 	}
 	state.avgsReady = true
