@@ -55,13 +55,19 @@ func New(config Config) (_ *BankJoin, err error) {
 			return
 		}
 		if output != nil {
-			output.Close()
+			if err := output.Close(); err != nil {
+				slog.Error("While closing output queue", "err", err)
+			}
 		}
 		if rightInput != nil {
-			rightInput.Close()
+			if err := rightInput.Close(); err != nil {
+				slog.Error("While closing right input queue", "err", err)
+			}
 		}
 		if leftInput != nil {
-			leftInput.Close()
+			if err := leftInput.Close(); err != nil {
+				slog.Error("While closing left input queue", "err", err)
+			}
 		}
 	}()
 
@@ -140,9 +146,15 @@ func (j *BankJoin) HandleSignals() {
 }
 
 func (j *BankJoin) close() {
-	j.leftInput.Close()
-	j.rightInput.Close()
-	j.output.Close()
+	if err := j.leftInput.Close(); err != nil {
+		slog.Error("While closing left input queue", "err", err)
+	}
+	if err := j.rightInput.Close(); err != nil {
+		slog.Error("While closing right input queue", "err", err)
+	}
+	if err := j.output.Close(); err != nil {
+		slog.Error("While closing output queue", "err", err)
+	}
 }
 
 func (j *BankJoin) handleLeft(msg middleware.Message, ack func()) {

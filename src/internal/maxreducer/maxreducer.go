@@ -63,16 +63,24 @@ func New(config Config) (_ *MaxReducer, err error) {
 			return
 		}
 		if eofOutput != nil {
-			eofOutput.Close()
+			if err := eofOutput.Close(); err != nil {
+				slog.Error("While closing EOF output queue", "err", err)
+			}
 		}
 		if eofInput != nil {
-			eofInput.Close()
+			if err := eofInput.Close(); err != nil {
+				slog.Error("While closing EOF input queue", "err", err)
+			}
 		}
 		for _, q := range outputQueues {
-			q.Close()
+			if err := q.Close(); err != nil {
+				slog.Error("While closing output queue", "err", err)
+			}
 		}
 		if inputExchange != nil {
-			inputExchange.Close()
+			if err := inputExchange.Close(); err != nil {
+				slog.Error("While closing input exchange", "err", err)
+			}
 		}
 	}()
 
@@ -156,11 +164,19 @@ func (r *MaxReducer) HandleSignals() {
 }
 
 func (r *MaxReducer) close() {
-	r.inputExchange.Close()
-	r.eofInput.Close()
-	r.eofOutput.Close()
+	if err := r.inputExchange.Close(); err != nil {
+		slog.Error("While closing input exchange", "err", err)
+	}
+	if err := r.eofInput.Close(); err != nil {
+		slog.Error("While closing EOF input queue", "err", err)
+	}
+	if err := r.eofOutput.Close(); err != nil {
+		slog.Error("While closing EOF output queue", "err", err)
+	}
 	for _, q := range r.outputQueues {
-		q.Close()
+		if err := q.Close(); err != nil {
+			slog.Error("While closing output queue", "err", err)
+		}
 	}
 }
 

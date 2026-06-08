@@ -49,10 +49,14 @@ func New(config Config) (_ *BankDistinctFilter, err error) {
 			return
 		}
 		for _, q := range outputQueues {
-			q.Close()
+			if err := q.Close(); err != nil {
+				slog.Error("While closing output queue", "err", err)
+			}
 		}
 		if inputQueue != nil {
-			inputQueue.Close()
+			if err := inputQueue.Close(); err != nil {
+				slog.Error("While closing input queue", "err", err)
+			}
 		}
 	}()
 
@@ -100,9 +104,13 @@ func (f *BankDistinctFilter) HandleSignals() {
 }
 
 func (f *BankDistinctFilter) close() {
-	f.inputQueue.Close()
+	if err := f.inputQueue.Close(); err != nil {
+		slog.Error("While closing input queue", "err", err)
+	}
 	for _, q := range f.outputQueues {
-		q.Close()
+		if err := q.Close(); err != nil {
+			slog.Error("While closing output queue", "err", err)
+		}
 	}
 }
 
