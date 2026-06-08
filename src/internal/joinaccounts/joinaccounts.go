@@ -85,16 +85,24 @@ func NewJoinAccounts(config JoinAccountsConfig) (_ *JoinAccounts, err error) {
 	defer func() {
 		if err != nil {
 			if outputMiddleware != nil {
-				outputMiddleware.Close()
+				if err := outputMiddleware.Close(); err != nil {
+					slog.Error("While closing output middleware", "err", err)
+				}
 			}
 			if qualifiedOutputMiddleware != nil {
-				qualifiedOutputMiddleware.Close()
+				if err := qualifiedOutputMiddleware.Close(); err != nil {
+					slog.Error("While closing qualified output middleware", "err", err)
+				}
 			}
 			if qualifiedInputMiddleware != nil {
-				qualifiedInputMiddleware.Close()
+				if err := qualifiedInputMiddleware.Close(); err != nil {
+					slog.Error("While closing qualified input middleware", "err", err)
+				}
 			}
 			if inputMiddleware != nil {
-				inputMiddleware.Close()
+				if err := inputMiddleware.Close(); err != nil {
+					slog.Error("While closing input middleware", "err", err)
+				}
 			}
 		}
 	}()
@@ -164,15 +172,27 @@ func (j *JoinAccounts) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	j.qualifiedInputMiddleware.StopConsuming()
-	j.inputMiddleware.StopConsuming()
+	if err := j.qualifiedInputMiddleware.StopConsuming(); err != nil {
+		slog.Error("While stopping qualified input consumer", "join_id", j.id, "err", err)
+	}
+	if err := j.inputMiddleware.StopConsuming(); err != nil {
+		slog.Error("While stopping input consumer", "join_id", j.id, "err", err)
+	}
 }
 
 func (j *JoinAccounts) close() {
-	j.inputMiddleware.Close()
-	j.qualifiedInputMiddleware.Close()
-	j.qualifiedOutputMiddleware.Close()
-	j.outputMiddleware.Close()
+	if err := j.inputMiddleware.Close(); err != nil {
+		slog.Error("While closing input middleware", "join_id", j.id, "err", err)
+	}
+	if err := j.qualifiedInputMiddleware.Close(); err != nil {
+		slog.Error("While closing qualified input middleware", "join_id", j.id, "err", err)
+	}
+	if err := j.qualifiedOutputMiddleware.Close(); err != nil {
+		slog.Error("While closing qualified output middleware", "join_id", j.id, "err", err)
+	}
+	if err := j.outputMiddleware.Close(); err != nil {
+		slog.Error("While closing output middleware", "join_id", j.id, "err", err)
+	}
 }
 
 func (j *JoinAccounts) handleInput(msg newmiddleware.Message, ack func()) {
@@ -349,7 +369,6 @@ func (j *JoinAccounts) finalize(clientID int, state *clientState) {
 					Right:  l,
 				}
 				rk := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, chain.Left.GetKey(), chain.Right.GetKey()))
-				slog.Info("CHAIN REAL", "", chain.Left.AccountNumber+"->"+chain.Middle.AccountNumber+"->"+chain.Right.AccountNumber)
 				b := j.builderFor(batches, rk)
 				if !b.TryAdd(&chain) {
 					j.flushChainBatch(clientID, rk, b)

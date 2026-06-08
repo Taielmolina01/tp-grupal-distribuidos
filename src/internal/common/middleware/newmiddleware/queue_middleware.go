@@ -1,6 +1,10 @@
 package newmiddleware
 
-import amqp "github.com/rabbitmq/amqp091-go"
+import (
+	"log/slog"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+)
 
 type queueMiddleware struct {
 	baseMiddleware
@@ -14,8 +18,12 @@ func NewQueueMiddleware(settings ConnSettings, queueName string) (Middleware, er
 
 	q, err := ch.QueueDeclare(queueName, false, false, false, false, nil)
 	if err != nil {
-		ch.Close()
-		conn.Close()
+		if err := ch.Close(); err != nil {
+			slog.Error("while closing channel after queue declare failure", "err", err)
+		}
+		if err := conn.Close(); err != nil {
+			slog.Error("while closing connection after queue declare failure", "err", err)
+		}
 		return nil, ErrDisconnected
 	}
 

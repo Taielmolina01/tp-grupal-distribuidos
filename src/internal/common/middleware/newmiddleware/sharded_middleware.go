@@ -1,6 +1,10 @@
 package newmiddleware
 
-import amqp "github.com/rabbitmq/amqp091-go"
+import (
+	"log/slog"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+)
 
 type shardedMiddleware struct {
 	baseMiddleware
@@ -14,8 +18,12 @@ func NewShardedMiddleware(settings ConnSettings, exchange string, inputQueue str
 	}
 
 	if err := ch.ExchangeDeclare(exchange, amqp.ExchangeDirect, false, false, false, false, nil); err != nil {
-		ch.Close()
-		conn.Close()
+		if err := ch.Close(); err != nil {
+			slog.Error("while closing channel after exchange declare failure", "err", err)
+		}
+		if err := conn.Close(); err != nil {
+			slog.Error("while closing connection after exchange declare failure", "err", err)
+		}
 		return nil, ErrDisconnected
 	}
 
@@ -30,15 +38,23 @@ func NewShardedMiddleware(settings ConnSettings, exchange string, inputQueue str
 	if inputQueue != "" {
 		q, err := ch.QueueDeclare(inputQueue, false, false, false, false, nil)
 		if err != nil {
-			ch.Close()
-			conn.Close()
+			if err := ch.Close(); err != nil {
+				slog.Error("while closing channel after queue declare failure", "err", err)
+			}
+			if err := conn.Close(); err != nil {
+				slog.Error("while closing connection after queue declare failure", "err", err)
+			}
 			return nil, ErrDisconnected
 		}
 
 		for _, key := range []string{shardKey, BroadcastRoutingKey} {
 			if err := ch.QueueBind(q.Name, key, exchange, false, nil); err != nil {
-				ch.Close()
-				conn.Close()
+				if err := ch.Close(); err != nil {
+					slog.Error("while closing channel after queue bind failure", "err", err)
+				}
+				if err := conn.Close(); err != nil {
+					slog.Error("while closing connection after queue bind failure", "err", err)
+				}
 				return nil, ErrDisconnected
 			}
 		}

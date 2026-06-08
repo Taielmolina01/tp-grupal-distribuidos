@@ -65,13 +65,20 @@ func (monitor *messageMonitorImpl) AddForwardedMessagesAmountByClientId(clientID
 
 func (monitor *messageMonitorImpl) RemoveClient(clientID int) {
 	monitor.processedMessagesMutex.Lock()
-	defer monitor.processedMessagesMutex.Unlock()
 	delete(monitor.processedByClient, clientID)
+	monitor.processedMessagesMutex.Unlock()
+
+	monitor.forwardedMessagesMutex.Lock()
+	delete(monitor.forwardedByClient, clientID)
+	defer monitor.forwardedMessagesMutex.Unlock()
 }
 
 func (monitor *messageMonitorImpl) Close() {
 	monitor.processedMessagesMutex.Lock()
-	defer monitor.processedMessagesMutex.Unlock()
-
 	clear(monitor.processedByClient)
+	monitor.processedMessagesMutex.Unlock()
+
+	monitor.forwardedMessagesMutex.Lock()
+	clear(monitor.forwardedByClient)
+	monitor.forwardedMessagesMutex.Unlock()
 }
