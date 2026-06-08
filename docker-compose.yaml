@@ -177,7 +177,7 @@ services:
   q2_reducer_0:
     build:
       context: ./src/
-      dockerfile: cmd/reducer/Dockerfile
+      dockerfile: cmd/maxreducer/Dockerfile
     container_name: q2_reducer_0
     depends_on:
       rabbitmq:
@@ -191,9 +191,7 @@ services:
       - INPUT_QUEUE=Q2_reducer_in_q
       - INPUT_ROUTING_KEYS=Q1234_filtered_key
       - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
-      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
       - QUERY_ID=2
-      - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
       driver: json-file
       options:
@@ -203,7 +201,7 @@ services:
   q2_reducer_1:
     build:
       context: ./src/
-      dockerfile: cmd/reducer/Dockerfile
+      dockerfile: cmd/maxreducer/Dockerfile
     container_name: q2_reducer_1
     depends_on:
       rabbitmq:
@@ -217,9 +215,7 @@ services:
       - INPUT_QUEUE=Q2_reducer_in_q
       - INPUT_ROUTING_KEYS=Q1234_filtered_key
       - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
-      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
       - QUERY_ID=2
-      - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
       driver: json-file
       options:
@@ -791,6 +787,5 @@ services:
       - INPUT_EOFS_EXPECTED=2
       - INPUT_QUEUE=Q5_filtered_to_count_q
       - OUTPUT_QUEUES=results_queue
-      - REDUCER_TYPE=COUNT
       - QUERY_ID=5
 

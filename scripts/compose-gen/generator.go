@@ -148,7 +148,6 @@ func writeCountReducerQ5(b *strings.Builder, cfg *Config) {
 	fmt.Fprintf(b, "      - INPUT_EOFS_EXPECTED=%d\n", cfg.FilterAmtQ5)
 	b.WriteString("      - INPUT_QUEUE=Q5_filtered_to_count_q\n")
 	b.WriteString("      - OUTPUT_QUEUES=results_queue\n")
-	b.WriteString("      - REDUCER_TYPE=COUNT\n")
 	b.WriteString("      - QUERY_ID=5\n")
 	b.WriteString("\n")
 }
@@ -238,7 +237,7 @@ func writeReducerQ2(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "  q2_reducer_%d:\n", i)
 		b.WriteString("    build:\n")
 		b.WriteString("      context: ./src/\n")
-		b.WriteString("      dockerfile: cmd/reducer/Dockerfile\n")
+		b.WriteString("      dockerfile: cmd/maxreducer/Dockerfile\n")
 		fmt.Fprintf(b, "    container_name: q2_reducer_%d\n", i)
 		rabbitmqDepends(b)
 		b.WriteString("    environment:\n")
@@ -250,9 +249,7 @@ func writeReducerQ2(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - INPUT_QUEUE=Q2_reducer_in_q\n")
 		b.WriteString("      - INPUT_ROUTING_KEYS=Q1234_filtered_key\n")
 		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
-		b.WriteString("      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key\n")
 		b.WriteString("      - QUERY_ID=2\n")
-		b.WriteString("      - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
