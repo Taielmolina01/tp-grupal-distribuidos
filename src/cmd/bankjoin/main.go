@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"os"
 
-	"tp-grupal-distribuidos/internal/join"
+	"tp-grupal-distribuidos/internal/bankjoin"
 )
 
 func run() int {
@@ -14,7 +14,7 @@ func run() int {
 		return 1
 	}
 
-	server, err := join.New(config)
+	server, err := bankjoin.New(config)
 	if err != nil {
 		slog.Error("While initializing join", "err", err)
 		return 1

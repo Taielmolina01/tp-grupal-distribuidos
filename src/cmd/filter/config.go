@@ -177,15 +177,6 @@ func loadCountAndFilterVenv(config *filter.FilterConfig) error {
 	return nil
 }
 
-func loadBankDistinctVenv(config *filter.FilterConfig) error {
-	outputQueues := os.Getenv("OUTPUT_QUEUES")
-	if outputQueues == "" {
-		return errors.New("OUTPUT_QUEUES environment variable is required if FILTER_TYPE is BANK_DISTINCT")
-	}
-	config.OutputQueues = strings.Split(outputQueues, ",")
-	return nil
-}
-
 func loadQuoteVenv(config *filter.FilterConfig) error {
 	quote := os.Getenv("QUOTE")
 	if quote == "" {
@@ -236,10 +227,6 @@ func loadFilterTypeConfig(config *filter.FilterConfig) error {
 		}
 	case filter.TRANSFER_DISTINCT:
 		break
-	case filter.BANK_DISTINCT:
-		if err := loadBankDistinctVenv(config); err != nil {
-			return err
-		}
 	default:
 		return errors.New("FILTER_TYPE environment variable hasn't a valid value")
 	}

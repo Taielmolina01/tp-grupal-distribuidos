@@ -21,7 +21,6 @@ const (
 	AVERAGE_FILTER          FilterType = "AVERAGE_FILTER"
 	COUNT_AND_FILTER        FilterType = "COUNT_AND_FILTER"
 	TRANSFER_DISTINCT       FilterType = "TRANSFER_DISTINCT"
-	BANK_DISTINCT           FilterType = "BANK_DISTINCT"
 	CONVERTED_AMOUNT_FILTER FilterType = "CONVERTED_AMOUNT_FILTER"
 )
 
@@ -73,18 +72,6 @@ type FilterAndSplitter struct {
 	outputExchange middleware.Middleware
 	filterFunction func(transfer.Transfer) bool
 	splitFunction  func(transfer.Transfer) (transfer.SplittedTransfer, transfer.SplittedTransfer)
-}
-
-type DistinctFilter[T comparable, S comparable] struct {
-	id            uint32
-	inputQueue    middleware.Middleware
-	outputQueues  []middleware.Middleware
-	alreadySeen   map[int]map[S]bool
-	compareFunc   func(T, T) bool
-	keyFunc       func(T) S
-	shardCriteria func(T) string
-	codec         wire.Codec[T]
-	queryId       uint8
 }
 
 type ConvertedAmountFilter struct {

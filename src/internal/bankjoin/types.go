@@ -1,6 +1,6 @@
-package join
+package bankjoin
 
-type JoinConfig struct {
+type Config struct {
 	Id                int
 	MomHost           string
 	MomPort           int

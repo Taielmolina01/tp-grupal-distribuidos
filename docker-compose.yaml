@@ -225,7 +225,7 @@ services:
   q2_filter_bank_distinct_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/bankdistinct/Dockerfile
     container_name: q2_filter_bank_distinct_0
     depends_on:
       rabbitmq:
@@ -236,14 +236,12 @@ services:
       - ID=0
       - INPUT_QUEUE=Q2_accounts_0
       - OUTPUT_QUEUES=Q2_join_accounts_q_0,Q2_join_accounts_q_1
-      - FILTER_AMOUNT=2
-      - FILTER_TYPE=BANK_DISTINCT
       - QUERY_ID=2
 
   q2_filter_bank_distinct_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/bankdistinct/Dockerfile
     container_name: q2_filter_bank_distinct_1
     depends_on:
       rabbitmq:
@@ -254,14 +252,12 @@ services:
       - ID=1
       - INPUT_QUEUE=Q2_accounts_1
       - OUTPUT_QUEUES=Q2_join_accounts_q_0,Q2_join_accounts_q_1
-      - FILTER_AMOUNT=2
-      - FILTER_TYPE=BANK_DISTINCT
       - QUERY_ID=2
 
   q2_join_0:
     build:
       context: ./src/
-      dockerfile: cmd/join/Dockerfile
+      dockerfile: cmd/bankjoin/Dockerfile
     container_name: q2_join_0
     depends_on:
       rabbitmq:
@@ -284,7 +280,7 @@ services:
   q2_join_1:
     build:
       context: ./src/
-      dockerfile: cmd/join/Dockerfile
+      dockerfile: cmd/bankjoin/Dockerfile
     container_name: q2_join_1
     depends_on:
       rabbitmq:

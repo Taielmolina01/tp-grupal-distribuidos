@@ -1,4 +1,4 @@
-package join
+package bankjoin
 
 import (
 	"fmt"
@@ -41,7 +41,7 @@ type BankJoin struct {
 	clientsState map[int]*clientState
 }
 
-func New(config JoinConfig) (_ *BankJoin, err error) {
+func New(config Config) (_ *BankJoin, err error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
