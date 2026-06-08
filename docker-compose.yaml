@@ -269,15 +269,11 @@ services:
     environment:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_QUEUE=Q2_reduced_transfers_0
       - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_0
-      - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
-      - OUTPUT_ROUTING_KEYS=results_queue
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2
-      - JOIN_AMOUNT=2
       - ID=0
     logging:
       driver: json-file
@@ -296,15 +292,11 @@ services:
     environment:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_QUEUE=Q2_reduced_transfers_1
       - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_1
-      - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
-      - OUTPUT_ROUTING_KEYS=results_queue
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2
-      - JOIN_AMOUNT=2
       - ID=1
     logging:
       driver: json-file
