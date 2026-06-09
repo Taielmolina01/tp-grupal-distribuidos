@@ -1,7 +1,10 @@
 package msgmonitor
 
 import (
+	"os"
 	"sync"
+
+	"tp-grupal-distribuidos/internal/common/binaryio"
 )
 
 type MessageMonitor interface {
@@ -13,6 +16,8 @@ type MessageMonitor interface {
 	IsDuplicate(clientID, senderID int, seq uint64) bool
 	RemoveClient(int)
 	Close()
+	SaveToDisk(path string) error
+	LoadFromDisk(path string) error
 }
 
 type clientState struct {
@@ -24,6 +29,7 @@ type clientState struct {
 
 type messageMonitorImpl struct {
 	clients map[int]clientState
+	// Ver la idea del snapshot
 	mu      sync.Mutex
 }
 
@@ -98,4 +104,77 @@ func (m *messageMonitorImpl) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	clear(m.clients)
+}
+
+func (m *messageMonitorImpl) SaveToDisk(path string) error {
+	if path == "" {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var w binaryio.Writer
+	for clientID, state := range m.clients {
+		w.Int32(int32(clientID))
+		w.Uint32(state.processed)
+		w.Uint32(state.forwarded)
+		w.Uint64(state.seqSent)
+		w.Uint32(uint32(len(state.seqReceived)))
+		for senderID, val := range state.seqReceived {
+			w.Int32(int32(senderID))
+			w.Uint64(val)
+		}
+	}
+
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, w.Bytes(), 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func (m *messageMonitorImpl) LoadFromDisk(path string) error {
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	r := binaryio.NewReader(data)
+	for r.Remaining() > 0 {
+		clientID := int(r.Int32())
+		processed := r.Uint32()
+		forwarded := r.Uint32()
+		seqSent := r.Uint64()
+		seqRecvLen := r.Uint32()
+		if r.Err() != nil {
+			return r.Err()
+		}
+
+		seqReceived := make(map[int]uint64, seqRecvLen)
+		for range seqRecvLen {
+			senderID := int(r.Int32())
+			val := r.Uint64()
+			seqReceived[senderID] = val
+		}
+		if r.Err() != nil {
+			return r.Err()
+		}
+
+		m.clients[clientID] = clientState{
+			processed:   processed,
+			forwarded:   forwarded,
+			seqSent:     seqSent,
+			seqReceived: seqReceived,
+		}
+	}
+	return nil
 }

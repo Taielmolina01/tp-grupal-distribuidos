@@ -327,6 +327,9 @@ func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - INPUT_ROUTING_KEYS=Q1234_filtered_key\n")
 		b.WriteString("      - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00\n")
 		b.WriteString("      - QUERY_ID=4\n")
+		b.WriteString("      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin\n")
+		b.WriteString("    volumes:\n")
+		fmt.Fprintf(b, "      - ./bkp/q4_filter_and_splitter_%d:/var/bkp\n", i)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}

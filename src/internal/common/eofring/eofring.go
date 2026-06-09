@@ -192,7 +192,7 @@ func (eofring *eofRingAlgorithmImpl) sendEofMessageToQueue(eofRingMessage *eofme
 func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *eofmessagetypes.EofMessageCommit) error {
 
 	if err := eofring.finishCallback(msg.ClientID, msg.FilteredAmount, msg.CoordinatorId == eofring.id); err != nil {
-		slog.Error("Error finishing callback", "err", err)
+		return fmt.Errorf("finish callback: %w", err)
 	}
 
 	msg.Hops++

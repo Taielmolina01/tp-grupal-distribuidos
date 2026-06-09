@@ -38,6 +38,8 @@ type FilterAndSplitterConfig struct {
 	InputRoutingKeys     []string
 
 	QueryID uint8
+
+	MonitorPersistPath string
 }
 
 type FilterAndSplitter struct {
@@ -53,7 +55,8 @@ type FilterAndSplitter struct {
 	eofOutput        middleware.Middleware
 	eofHandler       eofring.EofRingAlgorithm
 
-	handlerMessages msgmonitor.MessageMonitor
+	handlerMessages    msgmonitor.MessageMonitor
+	monitorPersistPath string
 
 	queryID uint8
 }
@@ -72,6 +75,9 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	handlerMessages := msgmonitor.NewMessageMonitor()
+	if err = handlerMessages.LoadFromDisk(config.MonitorPersistPath); err != nil {
+		return nil, fmt.Errorf("loading monitor state from disk: %w", err)
+	}
 
 	var (
 		inputMiddleware  middleware.Middleware
@@ -132,29 +138,36 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 			if isCoordinator {
 				seq := handlerMessages.NextSeqByClientId(clientID)
 				handlerMessages.RemoveClient(clientID)
+				if err := handlerMessages.SaveToDisk(config.MonitorPersistPath); err != nil {
+					slog.Error("While persisting monitor state after EOF", "err", err)
+				}
 				return outputMiddleware.Send(newmiddleware.Message{
 					Body:       string(batch.WriteEOF(clientID, config.QueryID, uint8(config.Id), seq, total)),
 					RoutingKey: newmiddleware.BroadcastRoutingKey,
 				})
 			}
 			handlerMessages.RemoveClient(clientID)
+			if err := handlerMessages.SaveToDisk(config.MonitorPersistPath); err != nil {
+				slog.Error("While persisting monitor state after EOF", "err", err)
+			}
 			return nil
 		},
 		uint8(config.QueryID),
 	)
 
 	return &FilterAndSplitter{
-		id:               config.Id,
-		startDate:        config.StartDate,
-		endDate:          config.EndDate,
-		hasher:           shard.New(config.OutputMiddlewareAmount),
-		queryID:          config.QueryID,
-		handlerMessages:  handlerMessages,
-		inputMiddleware:  inputMiddleware,
-		outputMiddleware: outputMiddleware,
-		eofInput:         eofInput,
-		eofOutput:        eofOutput,
-		eofHandler:       eofHandler,
+		id:                 config.Id,
+		startDate:          config.StartDate,
+		endDate:            config.EndDate,
+		hasher:             shard.New(config.OutputMiddlewareAmount),
+		queryID:            config.QueryID,
+		handlerMessages:    handlerMessages,
+		monitorPersistPath: config.MonitorPersistPath,
+		inputMiddleware:    inputMiddleware,
+		outputMiddleware:   outputMiddleware,
+		eofInput:           eofInput,
+		eofOutput:          eofOutput,
+		eofHandler:         eofHandler,
 	}, nil
 }
 
@@ -205,6 +218,9 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
 	// }
 
 	f.handleBatch(input.ClientID, input.Records)
+	if err := f.handlerMessages.SaveToDisk(f.monitorPersistPath); err != nil {
+		slog.Error("While persisting monitor state", "err", err)
+	}
 }
 
 func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.TransferAfterCurrency) {
