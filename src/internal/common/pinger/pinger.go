@@ -2,9 +2,11 @@ package pinger
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"os"
+	"time"
 )
 
 const (
@@ -54,6 +56,32 @@ func (p *Pinger) Run() {
 			slog.Error("While replying pong", "peer", peer.String(), "err", err)
 		}
 	}
+}
+
+func Check(addr string, timeout time.Duration) error {
+	conn, err := net.Dial("udp", addr)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.Write([]byte{Ping}); err != nil {
+		return err
+	}
+
+	if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		return err
+	}
+
+	buf := make([]byte, 1)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return err
+	}
+	if n != 1 || buf[0] != Pong {
+		return fmt.Errorf("unexpected reply from %s: %v", addr, buf[:n])
+	}
+	return nil
 }
 
 func (p *Pinger) Close() {
