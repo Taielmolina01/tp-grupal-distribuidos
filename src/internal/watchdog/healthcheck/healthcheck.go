@@ -66,7 +66,7 @@ func (h *HealthChecker) monitor(node string) {
 	defer ticker.Stop()
 
 	retries := 0
-	lastRestart := time.Time{}
+	lastRestart := time.Now()
 
 	for {
 		select {
