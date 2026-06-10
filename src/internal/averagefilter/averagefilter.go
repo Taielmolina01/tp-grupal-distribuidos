@@ -368,13 +368,7 @@ func (af *AverageFilter) handleAvgEOFLocked(clientID int, state *clientState, to
 }
 
 func (af *AverageFilter) checkAvgsReady(clientID int, state *clientState) {
-	if state.avgsReady {
-		return
-	}
-	if state.avgsEofsReceived == 0 {
-		return
-	}
-	if len(state.avgs) < state.expectedAvgRecords {
+	if state.avgsReady || state.avgsEofsReceived == 0 || len(state.avgs) < state.expectedAvgRecords {
 		return
 	}
 	state.avgsReady = true
