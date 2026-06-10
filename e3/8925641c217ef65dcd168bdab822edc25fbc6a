@@ -1,0 +1,52 @@
+src/internal/common/messageprotocol/rabbit/channels/daterange/daterange.go
+  s_8490da5dac0c0c::t_feddc3deb1249d 14
+src/internal/common/messageprotocol/rabbit/channels/avgmethod/avgmethod.go
+  s_8490da5dac0c0c::t_bab10c76de6a43 14
+src/internal/common/csvutil/csvutil.go
+  s_8490da5dac0c0c::t_a0693aa2ce1a47 1-48
+src/internal/common/messageprotocol/rabbit/channels/summethod/summethod.go
+  s_8490da5dac0c0c::t_ae538e02eb32cb 14
+src/internal/common/messageprotocol/tcpproto/batch.go
+  s_8490da5dac0c0c::t_22925596a9dcf3 39-40,42,141-142
+  s_8490da5dac0c0c::t_3522498a5cdce4 8
+src/internal/common/messageprotocol/rabbit/channels/splittransfer/splittransfer.go
+  s_8490da5dac0c0c::t_417d60136ee167 15
+src/internal/common/messageprotocol/rabbit/channels/q3filter/q3filter.go
+  s_8490da5dac0c0c::t_8497eb016e7dba 14
+src/internal/common/messageprotocol/tcpproto/protocol.go
+  s_8490da5dac0c0c::t_c187e7e4967ecb 4,7,11,16,20,24,32,36,40,90,94-95,99,116,120,162,166,171,175,179,183,187,291-295,300-303,308-311,316-317,322
+src/internal/common/messageprotocol/rabbit/records/records.go
+  s_8490da5dac0c0c::t_000b7df6cf5270 31
+  s_8490da5dac0c0c::t_bfdfeba5b388d7 13,172,228,252
+  s_8490da5dac0c0c::t_4f7d9b3d23bc87 63,87,103,123,192,210,270
+  s_8490da5dac0c0c::t_818bf4fe4c29d8 242
+  s_8490da5dac0c0c::t_2261d100605dec 11
+src/internal/common/messageprotocol/rabbit/channels/qualifiedaccount/qualifiedaccount.go
+  s_8490da5dac0c0c::t_704664caab4932 20
+src/internal/common/msgmonitor/msgmonitor.go
+  s_8490da5dac0c0c::t_a5da755abe80d7 116,151
+  s_8490da5dac0c0c::t_12830f951d55fd 7
+src/internal/common/messageprotocol/wire/wire.go
+  s_8490da5dac0c0c::t_f1998c3563c0cc 4,9,11-17,37-58,65-83,95,118-119,125,133,141,177
+src/internal/common/messageprotocol/tcpproto/marshal.go
+  s_8490da5dac0c0c::t_4963c0e79ab865 5,10-20,25-29
+src/internal/client/client.go
+  s_8490da5dac0c0c::t_68280f11b3552f 137,189,192
+  s_8490da5dac0c0c::t_dbfbcd1d8845b0 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "e38925641c217ef65dcd168bdab822edc25fbc6a",
+  "prompts": {},
+  "sessions": {
+    "s_8490da5dac0c0c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2d94e708-53f9-45ea-9e2e-192dd1f56ecf",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
