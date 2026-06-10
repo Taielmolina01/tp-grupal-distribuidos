@@ -3,15 +3,14 @@ package records
 import (
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
-const minSizeTime = serializer.INT64_SIZE
+const minSizeTime = wire.Int64Size
 
-const MinSizeTransferForQ4 = 4 * serializer.UINT16_SIZE
+const MinSizeTransferForQ4 = 4 * wire.Uint16Size
 
 func MarshalTransferForQ4(w *wire.Writer, t *transfer.TransferForQ4) {
 	w.String(t.FromBank)
@@ -29,7 +28,7 @@ func UnmarshalTransferForQ4(r *wire.Reader) transfer.TransferForQ4 {
 	}
 }
 
-const MinSizeTransfer = minSizeTime + 7*serializer.UINT16_SIZE + 2*serializer.UINT64_SIZE + serializer.BOOL_SIZE
+const MinSizeTransfer = minSizeTime + 7*wire.Uint16Size + 2*wire.Uint64Size + wire.BoolSize
 
 func MarshalTransfer(w *wire.Writer, t *transfer.Transfer) {
 	w.Time(t.Timestamp)
@@ -61,7 +60,7 @@ func UnmarshalTransfer(r *wire.Reader) transfer.Transfer {
 	}
 }
 
-const MinSizeTransferAfterCurrency = minSizeTime + 5*serializer.UINT16_SIZE + serializer.UINT64_SIZE
+const MinSizeTransferAfterCurrency = minSizeTime + 5*wire.Uint16Size + wire.Uint64Size
 
 func MarshalTransferAfterCurrency(w *wire.Writer, t *transfer.TransferAfterCurrency) {
 	w.Time(t.Timestamp)
@@ -85,7 +84,7 @@ func UnmarshalTransferAfterCurrency(r *wire.Reader) transfer.TransferAfterCurren
 	}
 }
 
-const MinSizeTransferForQ5Filter = minSizeTime + serializer.UINT16_SIZE + serializer.UINT64_SIZE
+const MinSizeTransferForQ5Filter = minSizeTime + wire.Uint16Size + wire.Uint64Size
 
 func MarshalTransferForQ5Filter(w *wire.Writer, t *transfer.TransferForQ5Filter) {
 	w.Time(t.Timestamp)
@@ -101,7 +100,7 @@ func UnmarshalTransferForQ5Filter(r *wire.Reader) transfer.TransferForQ5Filter {
 	}
 }
 
-const MinSizeQuery1Result = 4*serializer.UINT16_SIZE + serializer.UINT64_SIZE
+const MinSizeQuery1Result = 4*wire.Uint16Size + wire.Uint64Size
 
 func MarshalQuery1Result(w *wire.Writer, q *queryresult.Query1Result) {
 	w.String(q.FromBank)
@@ -121,7 +120,7 @@ func UnmarshalQuery1Result(r *wire.Reader) queryresult.Query1Result {
 	}
 }
 
-const MinSizeTransferForQ2 = 2*serializer.UINT16_SIZE + serializer.UINT64_SIZE
+const MinSizeTransferForQ2 = 2*wire.Uint16Size + wire.Uint64Size
 
 func MarshalTransferForQ2(w *wire.Writer, t *transfer.TransferForQ2) {
 	w.String(t.FromBank)
@@ -170,7 +169,7 @@ var (
 	}
 )
 
-const MinSizeAccount = 5 * serializer.UINT16_SIZE
+const MinSizeAccount = 5 * wire.Uint16Size
 
 func MarshalAccount(w *wire.Writer, a *account.Account) {
 	w.String(a.BankName)
@@ -190,7 +189,7 @@ func UnmarshalAccount(r *wire.Reader) account.Account {
 	}
 }
 
-const MinSizeQuery2Result = 3*serializer.UINT16_SIZE + serializer.UINT64_SIZE
+const MinSizeQuery2Result = 3*wire.Uint16Size + wire.Uint64Size
 
 func MarshalQuery2Result(w *wire.Writer, q *queryresult.Query2Result) {
 	w.String(q.BankName)
@@ -208,7 +207,7 @@ func UnmarshalQuery2Result(r *wire.Reader) queryresult.Query2Result {
 	}
 }
 
-const MinSizeQuery3Result = 3*serializer.UINT16_SIZE + serializer.UINT64_SIZE
+const MinSizeQuery3Result = 3*wire.Uint16Size + wire.Uint64Size
 
 func MarshalQuery3Result(w *wire.Writer, q *queryresult.Query3Result) {
 	w.String(q.FromBank)
@@ -226,7 +225,7 @@ func UnmarshalQuery3Result(r *wire.Reader) queryresult.Query3Result {
 	}
 }
 
-const MinSizeQuery4Result = 2 * serializer.UINT16_SIZE
+const MinSizeQuery4Result = 2 * wire.Uint16Size
 
 func MarshalQuery4Result(w *wire.Writer, q *queryresult.Query4Result) {
 	w.String(q.BankId)
@@ -240,7 +239,7 @@ func UnmarshalQuery4Result(r *wire.Reader) queryresult.Query4Result {
 	}
 }
 
-const MinSizeQuery5Result = serializer.UINT32_SIZE
+const MinSizeQuery5Result = wire.Uint32Size
 
 func MarshalQuery5Result(w *wire.Writer, q *queryresult.Query5Result) {
 	w.Uint32(q.Qty)
@@ -250,7 +249,7 @@ func UnmarshalQuery5Result(r *wire.Reader) queryresult.Query5Result {
 	return queryresult.Query5Result{Qty: r.Uint32()}
 }
 
-const MinSizeAccountIdentifier = 2 * serializer.UINT16_SIZE
+const MinSizeAccountIdentifier = 2 * wire.Uint16Size
 
 func MarshalAccountIdentifier(w *wire.Writer, a *account.AccountIdentifier) {
 	w.String(a.BankID)
@@ -268,7 +267,7 @@ var AccountIdentifierCodec = wire.Codec[account.AccountIdentifier]{
 	Marshal: MarshalAccountIdentifier, Unmarshal: UnmarshalAccountIdentifier, MinSize: MinSizeAccountIdentifier,
 }
 
-const MinSizeFetcherResponse = serializer.UINT64_SIZE
+const MinSizeFetcherResponse = wire.Uint64Size
 
 func MarshalFetcherResponse(w *wire.Writer, f *fetcherresponse.FetcherResponse) {
 	w.Float64(f.ConvertedAmount)

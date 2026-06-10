@@ -4,7 +4,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 )
 
@@ -18,7 +17,7 @@ type Msg = batch.Msg[QualifiedAccount]
 var codec = wire.Codec[QualifiedAccount]{
 	Marshal:   marshalRecord,
 	Unmarshal: unmarshalRecord,
-	MinSize:   records.MinSizeAccountIdentifier + serializer.BOOL_SIZE,
+	MinSize:   records.MinSizeAccountIdentifier + wire.BoolSize,
 }
 
 func NewBatchBuilder(maxCount, maxBytes int) *batch.Builder[QualifiedAccount] {

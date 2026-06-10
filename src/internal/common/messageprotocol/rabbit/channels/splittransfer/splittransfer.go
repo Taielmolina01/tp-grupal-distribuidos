@@ -3,7 +3,6 @@ package splittransfer
 import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
@@ -13,7 +12,7 @@ type Msg = batch.Msg[transfer.SplittedTransfer]
 var codec = wire.Codec[transfer.SplittedTransfer]{
 	Marshal:   marshalRecord,
 	Unmarshal: unmarshalRecord,
-	MinSize:   records.MinSizeTransferForQ4 + serializer.BOOL_SIZE,
+	MinSize:   records.MinSizeTransferForQ4 + wire.BoolSize,
 }
 
 func WriteBatch(clientID int, queryID uint8, senderID uint8, seq uint64, recs []transfer.SplittedTransfer) []byte {

@@ -4,7 +4,7 @@ import (
 	"os"
 	"sync"
 
-	"tp-grupal-distribuidos/internal/common/binaryio"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 )
 
 type MessageMonitor interface {
@@ -113,7 +113,7 @@ func (m *messageMonitorImpl) SaveToDisk(path string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var w binaryio.Writer
+	var w wire.Writer
 	for clientID, state := range m.clients {
 		w.Int32(int32(clientID))
 		w.Uint32(state.processed)
@@ -148,7 +148,7 @@ func (m *messageMonitorImpl) LoadFromDisk(path string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	r := binaryio.NewReader(data)
+	r := wire.NewReader(data)
 	for r.Remaining() > 0 {
 		clientID := int(r.Int32())
 		processed := r.Uint32()

@@ -1,7 +1,6 @@
 package summethod
 
 import (
-	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -12,7 +11,7 @@ type Msg = batch.Msg[transfer.SumByMethod]
 var codec = wire.Codec[transfer.SumByMethod]{
 	Marshal:   marshalRecord,
 	Unmarshal: unmarshalRecord,
-	MinSize:   serializer.UINT64_SIZE + serializer.UINT32_SIZE + serializer.UINT16_SIZE,
+	MinSize:   wire.Uint64Size + wire.Uint32Size + wire.Uint16Size,
 }
 
 func WriteBatch(clientID int, queryID uint8, senderID uint8, seq uint64, records []transfer.SumByMethod) []byte {

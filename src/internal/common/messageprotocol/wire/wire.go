@@ -1,12 +1,20 @@
 package wire
 
 import (
+	"encoding/binary"
 	"errors"
 	"io"
 	"math"
 	"time"
+)
 
-	"tp-grupal-distribuidos/internal/common/byteconv"
+const (
+	Uint8Size  uint32 = 1
+	Uint16Size uint32 = 2
+	Uint32Size uint32 = 4
+	Uint64Size uint32 = 8
+	Int64Size  uint32 = 8
+	BoolSize   uint32 = 1
 )
 
 var (
@@ -26,19 +34,52 @@ type Writer struct {
 
 func NewWriter() *Writer { return &Writer{} }
 
-func (w *Writer) Uint8(v uint8)     { w.buf = byteconv.AppendUint8(w.buf, v) }
-func (w *Writer) Uint16(v uint16)   { w.buf = byteconv.AppendUint16(w.buf, v) }
-func (w *Writer) Uint32(v uint32)   { w.buf = byteconv.AppendUint32(w.buf, v) }
-func (w *Writer) Uint64(v uint64)   { w.buf = byteconv.AppendUint64(w.buf, v) }
-func (w *Writer) Float64(v float64) { w.buf = byteconv.AppendFloat64(w.buf, v) }
-func (w *Writer) String(v string)   { w.buf = byteconv.AppendString(w.buf, v) }
-func (w *Writer) Bool(v bool)       { w.buf = byteconv.AppendBool(w.buf, v) }
-func (w *Writer) Time(t time.Time)  { w.buf = byteconv.AppendInt64(w.buf, t.Unix()) }
+func (w *Writer) Uint8(v uint8)   { w.buf = append(w.buf, v) }
+func (w *Writer) Int32(v int32)   { w.buf = binary.BigEndian.AppendUint32(w.buf, uint32(v)) }
+func (w *Writer) Uint16(v uint16) { w.buf = binary.BigEndian.AppendUint16(w.buf, v) }
+func (w *Writer) Uint32(v uint32) { w.buf = binary.BigEndian.AppendUint32(w.buf, v) }
+func (w *Writer) Uint64(v uint64) { w.buf = binary.BigEndian.AppendUint64(w.buf, v) }
+func (w *Writer) Float64(v float64) {
+	w.buf = binary.BigEndian.AppendUint64(w.buf, math.Float64bits(v))
+}
+func (w *Writer) Bool(v bool) {
+	if v {
+		w.buf = append(w.buf, 1)
+	} else {
+		w.buf = append(w.buf, 0)
+	}
+}
+func (w *Writer) String(v string) {
+	w.buf = binary.BigEndian.AppendUint16(w.buf, uint16(len(v)))
+	w.buf = append(w.buf, v...)
+}
+func (w *Writer) Time(t time.Time) {
+	w.buf = binary.BigEndian.AppendUint64(w.buf, uint64(t.Unix()))
+}
 
 func (w *Writer) Bytes() []byte  { return w.buf }
 func (w *Writer) Len() int       { return len(w.buf) }
 func (w *Writer) Truncate(n int) { w.buf = w.buf[:n] }
 func (w *Writer) Reset()         { w.buf = w.buf[:0] }
+
+func AppendUint8(dst []byte, v uint8) []byte   { return append(dst, v) }
+func AppendUint16(dst []byte, v uint16) []byte { return binary.BigEndian.AppendUint16(dst, v) }
+func AppendUint32(dst []byte, v uint32) []byte { return binary.BigEndian.AppendUint32(dst, v) }
+func AppendUint64(dst []byte, v uint64) []byte { return binary.BigEndian.AppendUint64(dst, v) }
+func AppendInt64(dst []byte, v int64) []byte   { return binary.BigEndian.AppendUint64(dst, uint64(v)) }
+func AppendFloat64(dst []byte, v float64) []byte {
+	return binary.BigEndian.AppendUint64(dst, math.Float64bits(v))
+}
+func AppendBool(dst []byte, v bool) []byte {
+	if v {
+		return append(dst, 1)
+	}
+	return append(dst, 0)
+}
+func AppendString(dst []byte, s string) []byte {
+	dst = binary.BigEndian.AppendUint16(dst, uint16(len(s)))
+	return append(dst, s...)
+}
 
 type Reader struct {
 	data []byte
@@ -51,8 +92,7 @@ func NewReader(data []byte) *Reader {
 }
 
 func (r *Reader) Remaining() int { return len(r.data) - r.pos }
-
-func (r *Reader) Err() error { return r.err }
+func (r *Reader) Err() error     { return r.err }
 
 func (r *Reader) read(n int) []byte {
 	if r.err != nil {
@@ -75,12 +115,14 @@ func (r *Reader) Uint8() uint8 {
 	return b[0]
 }
 
+func (r *Reader) Int32() int32 { return int32(r.Uint32()) }
+
 func (r *Reader) Uint16() uint16 {
 	b := r.read(2)
 	if r.err != nil {
 		return 0
 	}
-	return uint16(b[0])<<8 | uint16(b[1])
+	return binary.BigEndian.Uint16(b)
 }
 
 func (r *Reader) Uint32() uint32 {
@@ -88,7 +130,7 @@ func (r *Reader) Uint32() uint32 {
 	if r.err != nil {
 		return 0
 	}
-	return uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
+	return binary.BigEndian.Uint32(b)
 }
 
 func (r *Reader) Uint64() uint64 {
@@ -96,8 +138,7 @@ func (r *Reader) Uint64() uint64 {
 	if r.err != nil {
 		return 0
 	}
-	return uint64(b[0])<<56 | uint64(b[1])<<48 | uint64(b[2])<<40 | uint64(b[3])<<32 |
-		uint64(b[4])<<24 | uint64(b[5])<<16 | uint64(b[6])<<8 | uint64(b[7])
+	return binary.BigEndian.Uint64(b)
 }
 
 func (r *Reader) Float64() float64 {
@@ -133,9 +174,7 @@ func (r *Reader) Time() time.Time {
 	if r.err != nil {
 		return time.Time{}
 	}
-	v := int64(b[0])<<56 | int64(b[1])<<48 | int64(b[2])<<40 | int64(b[3])<<32 |
-		int64(b[4])<<24 | int64(b[5])<<16 | int64(b[6])<<8 | int64(b[7])
-	return time.Unix(v, 0).UTC()
+	return time.Unix(int64(binary.BigEndian.Uint64(b)), 0).UTC()
 }
 
 func (r *Reader) Count(minRecordSize uint32) uint32 {

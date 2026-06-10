@@ -1,7 +1,6 @@
 package q3filter
 
 import (
-	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -12,7 +11,7 @@ type Msg = batch.Msg[transfer.TransferForQ3Filter]
 var codec = wire.Codec[transfer.TransferForQ3Filter]{
 	Marshal:   marshalRecord,
 	Unmarshal: unmarshalRecord,
-	MinSize:   3*serializer.UINT16_SIZE + serializer.UINT64_SIZE,
+	MinSize:   3*wire.Uint16Size + wire.Uint64Size,
 }
 
 func WriteBatch(clientID int, queryID uint8, senderID uint8, seq uint64, records []transfer.TransferForQ3Filter) []byte {
