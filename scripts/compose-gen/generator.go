@@ -143,7 +143,7 @@ func writeCountReducerQ5(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - MOM_PORT=5672\n")
 	b.WriteString("      - ID=0\n")
 	b.WriteString("      - REDUCER_AMOUNT=1\n")
-	fmt.Fprintf(b, "      - INPUT_EOFS_EXPECTED=%d\n", cfg.FilterAmtQ5)
+	b.WriteString("      - INPUT_EOFS_EXPECTED=1\n")
 	b.WriteString("      - INPUT_QUEUE=Q5_filtered_to_count_q\n")
 	b.WriteString("      - OUTPUT_QUEUES=results_queue\n")
 	b.WriteString("      - REDUCER_TYPE=COUNT\n")
