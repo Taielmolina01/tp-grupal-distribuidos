@@ -82,16 +82,24 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (_ *DateRangeSplitter,
 			return
 		}
 		for _, q := range eofOutputs {
-			q.Close()
+			if err := q.Close(); err != nil {
+				slog.Error("While closing EOF output", "err", err)
+			}
 		}
 		for _, q := range eofInputs {
-			q.Close()
+			if err := q.Close(); err != nil {
+				slog.Error("While closing EOF input", "err", err)
+			}
 		}
 		for _, q := range outputQueues {
-			q.Close()
+			if err := q.Close(); err != nil {
+				slog.Error("While closing output queue", "err", err)
+			}
 		}
 		if inputExchange != nil {
-			inputExchange.Close()
+			if err := inputExchange.Close(); err != nil {
+				slog.Error("While closing input exchange", "err", err)
+			}
 		}
 	}()
 
@@ -134,7 +142,9 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (_ *DateRangeSplitter,
 			connSettings,
 		)
 		if e != nil {
-			eofIn.Close()
+			if err := eofIn.Close(); err != nil {
+				slog.Error("While closing EOF input after EOF output failure", "err", err)
+			}
 			err = fmt.Errorf("creating EOF output queue: %w", e)
 			return nil, err
 		}
@@ -202,22 +212,34 @@ func (s *DateRangeSplitter) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	s.inputExchange.StopConsuming()
+	if err := s.inputExchange.StopConsuming(); err != nil {
+		slog.Error("While stopping input consumer", "splitter_id", s.id, "err", err)
+	}
 	for _, q := range s.eofInputs {
-		q.StopConsuming()
+		if err := q.StopConsuming(); err != nil {
+			slog.Error("While stopping EOF input consumer", "splitter_id", s.id, "err", err)
+		}
 	}
 }
 
 func (s *DateRangeSplitter) close() {
-	s.inputExchange.Close()
+	if err := s.inputExchange.Close(); err != nil {
+		slog.Error("While closing input exchange", "splitter_id", s.id, "err", err)
+	}
 	for _, q := range s.eofInputs {
-		q.Close()
+		if err := q.Close(); err != nil {
+			slog.Error("While closing EOF input", "splitter_id", s.id, "err", err)
+		}
 	}
 	for _, q := range s.eofOutputs {
-		q.Close()
+		if err := q.Close(); err != nil {
+			slog.Error("While closing EOF output", "splitter_id", s.id, "err", err)
+		}
 	}
 	for _, q := range s.outputQueues {
-		q.Close()
+		if err := q.Close(); err != nil {
+			slog.Error("While closing output queue", "splitter_id", s.id, "err", err)
+		}
 	}
 }
 

@@ -30,7 +30,7 @@ type clientState struct {
 type messageMonitorImpl struct {
 	clients map[int]clientState
 	// Ver la idea del snapshot
-	mu      sync.Mutex
+	mu sync.Mutex
 }
 
 func NewMessageMonitor() MessageMonitor {

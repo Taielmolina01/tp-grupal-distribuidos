@@ -5,9 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
-	"time"
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
@@ -18,6 +16,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 type FilterAndSplitterConfig struct {
@@ -71,6 +70,7 @@ func getRingNextIndex(config FilterAndSplitterConfig) int {
 func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter, err error) {
 	const ring_prefix = "FILTER_AND_SPLIITER_EOF_"
 
+func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error) {
 	oldConnSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
@@ -84,21 +84,30 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		outputMiddleware newmiddleware.Middleware
 		eofInput         middleware.Middleware
 		eofOutput        middleware.Middleware
+		err              error
 	)
 
 	defer func() {
 		if err != nil {
 			if eofOutput != nil {
-				eofOutput.Close()
+				if err := eofOutput.Close(); err != nil {
+					slog.Error("While closing EOF output", "err", err)
+				}
 			}
 			if eofInput != nil {
-				eofInput.Close()
+				if err := eofInput.Close(); err != nil {
+					slog.Error("While closing EOF input", "err", err)
+				}
 			}
 			if outputMiddleware != nil {
-				outputMiddleware.Close()
+				if err := outputMiddleware.Close(); err != nil {
+					slog.Error("While closing output middleware", "err", err)
+				}
 			}
 			if inputMiddleware != nil {
-				inputMiddleware.Close()
+				if err := inputMiddleware.Close(); err != nil {
+					slog.Error("While closing input middleware", "err", err)
+				}
 			}
 		}
 	}()
@@ -118,12 +127,19 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter,
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
-	eofInput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(config.Id), oldConnSettings)
+	eofInputQueueName, eofOutputQueueName := eofring.GetInputAndOutputQueueNames(
+		config.Id,
+		config.FilterAndSpliterAmount,
+		_EOF_RING_QUEUE_PREFIX,
+		_EOF_RING_QUEUE_PREFIX,
+	)
+
+	eofInput, err = middleware.CreateQueueMiddleware(eofInputQueueName, oldConnSettings)
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF input queue: %w", err)
 	}
 
-	eofOutput, err = middleware.CreateQueueMiddleware(ring_prefix+strconv.Itoa(getRingNextIndex(config)), oldConnSettings)
+	eofOutput, err = middleware.CreateQueueMiddleware(eofOutputQueueName, oldConnSettings)
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF output queue: %w", err)
 	}
@@ -188,15 +204,27 @@ func (f *FilterAndSplitter) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	f.inputMiddleware.StopConsuming()
-	f.eofInput.StopConsuming()
+	if err := f.inputMiddleware.StopConsuming(); err != nil {
+		slog.Error("While stopping input middleware consumer", "filter_id", f.id, "err", err)
+	}
+	if err := f.eofInput.StopConsuming(); err != nil {
+		slog.Error("While stopping EOF input consumer", "filter_id", f.id, "err", err)
+	}
 }
 
 func (f *FilterAndSplitter) close() {
-	f.inputMiddleware.Close()
-	f.eofInput.Close()
-	f.eofOutput.Close()
-	f.outputMiddleware.Close()
+	if err := f.inputMiddleware.Close(); err != nil {
+		slog.Error("While closing input middleware", "filter_id", f.id, "err", err)
+	}
+	if err := f.eofInput.Close(); err != nil {
+		slog.Error("While closing EOF input", "filter_id", f.id, "err", err)
+	}
+	if err := f.eofOutput.Close(); err != nil {
+		slog.Error("While closing EOF output", "filter_id", f.id, "err", err)
+	}
+	if err := f.outputMiddleware.Close(); err != nil {
+		slog.Error("While closing output middleware", "filter_id", f.id, "err", err)
+	}
 }
 
 func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {

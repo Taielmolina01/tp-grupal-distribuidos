@@ -6,12 +6,12 @@ WORKDIR /build/
 COPY go.mod .
 COPY go.sum .
 COPY internal/common ./internal/common
-COPY internal/filter ./internal/filter
-COPY cmd/filter ./cmd/filter
+COPY internal/filter/convertedamountfilter ./internal/filter/convertedamountfilter
+COPY cmd/convertedamountfilter ./cmd/convertedamountfilter
 RUN go mod download
 # CGO_ENABLED must be disabled to run go binary in Alpine
-RUN CGO_ENABLED=0 GOOS=linux go build -o bin/filter ./cmd/filter/
+RUN CGO_ENABLED=0 GOOS=linux go build -o bin/convertedamountfilter ./cmd/convertedamountfilter/
 
 FROM busybox:latest
-COPY --from=builder /build/bin/filter /filter
-ENTRYPOINT ["./filter"]
+COPY --from=builder /build/bin/convertedamountfilter /convertedamountfilter
+ENTRYPOINT ["./convertedamountfilter"]

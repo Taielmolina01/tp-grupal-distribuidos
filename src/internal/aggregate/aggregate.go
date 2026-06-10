@@ -72,16 +72,24 @@ func NewAvgAggregator(config AggregateConfig) (_ *AvgAggregator, err error) {
 			return
 		}
 		if eofOutput != nil {
-			eofOutput.Close()
+			if err := eofOutput.Close(); err != nil {
+				slog.Error("While closing EOF output", "id", config.Id, "err", err)
+			}
 		}
 		if eofInput != nil {
-			eofInput.Close()
+			if err := eofInput.Close(); err != nil {
+				slog.Error("While closing EOF input", "id", config.Id, "err", err)
+			}
 		}
 		for _, q := range outputQueues {
-			q.Close()
+			if err := q.Close(); err != nil {
+				slog.Error("While closing output queue", "id", config.Id, "err", err)
+			}
 		}
 		if inputQueue != nil {
-			inputQueue.Close()
+			if err := inputQueue.Close(); err != nil {
+				slog.Error("While closing input queue", "id", config.Id, "err", err)
+			}
 		}
 	}()
 
@@ -159,16 +167,28 @@ func (a *AvgAggregator) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	a.inputQueue.StopConsuming()
-	a.eofInput.StopConsuming()
+	if err := a.inputQueue.StopConsuming(); err != nil {
+		slog.Error("While stopping input queue consumer", "aggregate_id", a.id, "err", err)
+	}
+	if err := a.eofInput.StopConsuming(); err != nil {
+		slog.Error("While stopping EOF input consumer", "aggregate_id", a.id, "err", err)
+	}
 }
 
 func (a *AvgAggregator) close() {
-	a.inputQueue.Close()
-	a.eofInput.Close()
-	a.eofOutput.Close()
+	if err := a.inputQueue.Close(); err != nil {
+		slog.Error("While closing input queue", "aggregate_id", a.id, "err", err)
+	}
+	if err := a.eofInput.Close(); err != nil {
+		slog.Error("While closing EOF input", "aggregate_id", a.id, "err", err)
+	}
+	if err := a.eofOutput.Close(); err != nil {
+		slog.Error("While closing EOF output", "aggregate_id", a.id, "err", err)
+	}
 	for _, q := range a.outputQueues {
-		q.Close()
+		if err := q.Close(); err != nil {
+			slog.Error("While closing output queue", "aggregate_id", a.id, "err", err)
+		}
 	}
 }
 

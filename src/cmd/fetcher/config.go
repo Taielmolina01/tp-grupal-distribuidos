@@ -37,12 +37,10 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 		inputRoutingKeys = splitter.Split(inputRoutingKeysStr, QUEUES_SEPARATOR)
 	}
 
-	outputQueues := os.Getenv("OUTPUT_QUEUES")
-	if outputQueues == "" {
+	outputQueue := os.Getenv("OUTPUT_QUEUE")
+	if outputQueue == "" {
 		return fetcher.FetcherConfig{}, errors.New("OUTPUT_QUEUES environment variable is required")
 	}
-
-	outputQueuesList := splitter.Split(outputQueues, QUEUES_SEPARATOR)
 
 	queryIdStr := os.Getenv("QUERY_ID")
 	if queryIdStr == "" {
@@ -65,7 +63,7 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 		InputExchange:    inputExchange,
 		InputRoutingKeys: inputRoutingKeys,
 		Quote:            quote,
-		OutputQueues:     outputQueuesList,
+		OutputQueue:      outputQueue,
 		QueryId:          uint8(queryId),
 	}, nil
 }

@@ -148,7 +148,11 @@ func newReducer[T, O comparable](
 }
 
 func (reducer *Reducer[T, O]) Run() {
-	defer reducer.close()
+	defer func() {
+		if err := reducer.close(); err != nil {
+			slog.Error("While closing reducer", "err", err)
+		}
+	}()
 	go reducer.eofHandler.Run()
 	if err := reducer.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		reducer.handleMessage(msg, ack, nack)

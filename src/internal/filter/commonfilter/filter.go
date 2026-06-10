@@ -1,4 +1,4 @@
-package filter
+package commonfilter
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
+	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
@@ -16,10 +17,10 @@ import (
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-const eofRingQueueNamePrefix = "FILTER_%s_"
+const _EOF_RING_QUEUE_PREFIX = "FILTER_%s_"
 
-func newFilter[T any, O any](
-	config FilterConfig,
+func NewFilter[T any, O any](
+	config filter.FilterConfig,
 	filterFunction func(T) bool,
 	inputToOutput func(T) O,
 	inputCodec wire.Codec[T],
@@ -53,8 +54,8 @@ func newFilter[T any, O any](
 	eofInputQueueName, eofOutputQueueName := eofring.GetInputAndOutputQueueNames(
 		config.Id,
 		config.FilterAmount,
-		fmt.Sprintf(eofRingQueueNamePrefix, config.Type),
-		fmt.Sprintf(eofRingQueueNamePrefix, config.Type),
+		fmt.Sprintf(_EOF_RING_QUEUE_PREFIX, config.Type),
+		fmt.Sprintf(_EOF_RING_QUEUE_PREFIX, config.Type),
 	)
 
 	eofInput, err := middleware.CreateQueueMiddleware(
@@ -122,7 +123,11 @@ func newFilter[T any, O any](
 }
 
 func (filter *Filter[T, O]) Run() {
-	defer filter.close()
+	defer func() {
+		if err := filter.close(); err != nil {
+			slog.Error("While closing filter", "err", err)
+		}
+	}()
 
 	go filter.eofHandler.Run()
 	if err := filter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
@@ -147,8 +152,8 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, _ func())
 	}
 
 	outputs := make([]O, 0, len(input.Records))
+	filter.handlerMessages.AddProcessedMessagesAmountByClientId(input.ClientID, uint32(len(input.Records)))
 	for i := range input.Records {
-		filter.handlerMessages.AddProcessedMessagesAmountByClientId(input.ClientID, 1)
 		if filter.filterFunction(input.Records[i]) {
 			filter.handlerMessages.AddForwardedMessagesAmountByClientId(input.ClientID, 1)
 			outputs = append(outputs, filter.outputTransform(input.Records[i]))

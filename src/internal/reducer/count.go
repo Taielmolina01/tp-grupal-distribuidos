@@ -106,7 +106,6 @@ func (count *CountReducer) HandleSignals() {
 }
 
 func (count *CountReducer) close() {
-
 	if err := count.inputQueue.Close(); err != nil {
 		slog.Error("while closing input queue", "err", err)
 	}

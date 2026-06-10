@@ -13,6 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 const (
@@ -42,7 +43,7 @@ var datasetToFrank = map[string]string{
 	"Yuan":              "CNY",
 }
 
-func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
+func createFetcherImpl(config FetcherConfig) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{
 		Hostname: config.MomHost,
 		Port:     config.MomPort,
@@ -59,27 +60,21 @@ func createFetcherImpl(config FetcherConfig) (*Fetcher, error) {
 		return nil, err
 	}
 
-	outputQueues := make([]middleware.Middleware, len(config.OutputQueues))
-	for i, queueName := range config.OutputQueues {
-		outputQueue, err := middleware.CreateQueueMiddleware(
-			queueName,
-			connSettings,
-		)
+	outputQueue, err := middleware.CreateQueueMiddleware(
+		config.OutputQueue,
+		connSettings,
+	)
 
-		if err != nil {
-			return nil, err
-		}
-
-		outputQueues[i] = outputQueue
+	if err != nil {
+		return nil, err
 	}
 
 	return &Fetcher{
-		inputQueue:   inputQueue,
-		outputQueues: outputQueues,
-		queryId:      config.QueryId,
-		quote:        config.Quote,
-		actualIndex:  0,
-		ratesCache:   make(map[string]float64),
+		inputQueue:  inputQueue,
+		outputQueue: outputQueue,
+		queryId:     config.QueryId,
+		quote:       config.Quote,
+		ratesCache:  make(map[string]float64),
 	}, nil
 }
 
@@ -102,12 +97,12 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 	}
 
 	if input.EOF {
-		eofBody := batch.WriteEOF(input.ClientID, fetcher.queryId, 0, 0, input.Total)
-		for _, outputQueue := range fetcher.outputQueues {
-			if err := outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
-				slog.Error("while sending EOF to filter amount", "err", err)
-			}
+		eofBody := batch.WriteEOF(input.ClientID, fetcher.queryId, fetcher.forwarded)
+
+		if err := fetcher.outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
+			slog.Error("while sending EOF to filter amount", "err", err)
 		}
+
 		return
 	}
 
@@ -117,6 +112,7 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 		if t.Currency == "Bitcoin" {
 			continue
 		}
+		fetcher.forwarded++
 		base := datasetToFrank[t.Currency]
 		if base == fetcher.quote {
 			responses = append(responses, fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid})
@@ -148,9 +144,8 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 	if len(responses) == 0 {
 		return
 	}
-	body := batch.Write(input.ClientID, fetcher.queryId, 0, 0, responses, records.FetcherResponseCodec)
-	fetcher.actualIndex = (fetcher.actualIndex + 1) % len(fetcher.outputQueues)
-	if err := fetcher.outputQueues[fetcher.actualIndex].Send(middleware.Message{Body: string(body)}); err != nil {
+	body := batch.Write(input.ClientID, fetcher.queryId, responses, records.FetcherResponseCodec)
+	if err := fetcher.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Error("while publishing batch to output queue", "err", err)
 	}
 }
@@ -195,9 +190,7 @@ func (fetcher *Fetcher) close() {
 		slog.Error("while closing input queue", "err", err)
 	}
 
-	for _, outputQueue := range fetcher.outputQueues {
-		if err := outputQueue.Close(); err != nil {
-			slog.Error("while closing output queue", "err", err)
-		}
+	if err := fetcher.outputQueue.Close(); err != nil {
+		slog.Error("while closing output queue", "err", err)
 	}
 }
