@@ -62,10 +62,14 @@ func NewAcumAccounts(config AcumAccountsConfig) (_ *AcumAccounts, err error) {
 	defer func() {
 		if err != nil {
 			if outputMiddleware != nil {
-				outputMiddleware.Close()
+				if err := outputMiddleware.Close(); err != nil {
+					slog.Error("While closing output middleware", "err", err)
+				}
 			}
 			if inputMiddleware != nil {
-				inputMiddleware.Close()
+				if err := inputMiddleware.Close(); err != nil {
+					slog.Error("While closing input middleware", "err", err)
+				}
 			}
 		}
 	}()
@@ -111,12 +115,18 @@ func (a *AcumAccounts) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	a.inputMiddleware.StopConsuming()
+	if err := a.inputMiddleware.StopConsuming(); err != nil {
+		slog.Error("While stopping input consumer", "acum_id", a.id, "err", err)
+	}
 }
 
 func (a *AcumAccounts) close() {
-	a.inputMiddleware.Close()
-	a.outputMiddleware.Close()
+	if err := a.inputMiddleware.Close(); err != nil {
+		slog.Error("While closing input middleware", "acum_id", a.id, "err", err)
+	}
+	if err := a.outputMiddleware.Close(); err != nil {
+		slog.Error("While closing output middleware", "acum_id", a.id, "err", err)
+	}
 }
 
 func (a *AcumAccounts) handleInput(msg newmiddleware.Message, ack func()) {

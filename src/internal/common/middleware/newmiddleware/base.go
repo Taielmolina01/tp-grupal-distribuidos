@@ -105,13 +105,19 @@ func setupConn(settings ConnSettings) (*amqp.Connection, *amqp.Channel, error) {
 
 	ch, err := conn.Channel()
 	if err != nil {
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			slog.Error("While closing connection on channel failure", "err", err)
+		}
 		return nil, nil, ErrDisconnected
 	}
 
 	if err := ch.Qos(1000, 0, false); err != nil {
-		ch.Close()
-		conn.Close()
+		if err := ch.Close(); err != nil {
+			slog.Error("While closing channel on Qos failure", "err", err)
+		}
+		if err := conn.Close(); err != nil {
+			slog.Error("While closing connection on Qos failure", "err", err)
+		}
 		return nil, nil, ErrDisconnected
 	}
 

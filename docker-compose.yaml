@@ -62,7 +62,7 @@ services:
   q1234_filter_currency_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/currencyfilter/Dockerfile
     container_name: q1234_filter_currency_0
     depends_on:
       rabbitmq:
@@ -90,7 +90,7 @@ services:
   q1234_filter_currency_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/currencyfilter/Dockerfile
     container_name: q1234_filter_currency_1
     depends_on:
       rabbitmq:
@@ -118,7 +118,7 @@ services:
   q1_filter_amount_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/amountfilter/Dockerfile
     container_name: q1_filter_amount_0
     depends_on:
       rabbitmq:
@@ -146,7 +146,7 @@ services:
   q1_filter_amount_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/amountfilter/Dockerfile
     container_name: q1_filter_amount_1
     depends_on:
       rabbitmq:
@@ -177,7 +177,7 @@ services:
   q2_reducer_0:
     build:
       context: ./src/
-      dockerfile: cmd/maxreducer/Dockerfile
+      dockerfile: cmd/reducer/Dockerfile
     container_name: q2_reducer_0
     depends_on:
       rabbitmq:
@@ -191,7 +191,9 @@ services:
       - INPUT_QUEUE=Q2_reducer_in_q
       - INPUT_ROUTING_KEYS=Q1234_filtered_key
       - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
+      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
       - QUERY_ID=2
+      - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
       driver: json-file
       options:
@@ -201,7 +203,7 @@ services:
   q2_reducer_1:
     build:
       context: ./src/
-      dockerfile: cmd/maxreducer/Dockerfile
+      dockerfile: cmd/reducer/Dockerfile
     container_name: q2_reducer_1
     depends_on:
       rabbitmq:
@@ -215,7 +217,9 @@ services:
       - INPUT_QUEUE=Q2_reducer_in_q
       - INPUT_ROUTING_KEYS=Q1234_filtered_key
       - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
+      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
       - QUERY_ID=2
+      - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
       driver: json-file
       options:
@@ -225,7 +229,7 @@ services:
   q2_filter_bank_distinct_0:
     build:
       context: ./src/
-      dockerfile: cmd/bankdistinct/Dockerfile
+      dockerfile: cmd/bankdistinctfilter/Dockerfile
     container_name: q2_filter_bank_distinct_0
     depends_on:
       rabbitmq:
@@ -236,12 +240,14 @@ services:
       - ID=0
       - INPUT_QUEUE=Q2_accounts_0
       - OUTPUT_QUEUES=Q2_join_accounts_q_0,Q2_join_accounts_q_1
+      - FILTER_AMOUNT=2
+      - FILTER_TYPE=BANK_DISTINCT
       - QUERY_ID=2
 
   q2_filter_bank_distinct_1:
     build:
       context: ./src/
-      dockerfile: cmd/bankdistinct/Dockerfile
+      dockerfile: cmd/bankdistinctfilter/Dockerfile
     container_name: q2_filter_bank_distinct_1
     depends_on:
       rabbitmq:
@@ -252,12 +258,14 @@ services:
       - ID=1
       - INPUT_QUEUE=Q2_accounts_1
       - OUTPUT_QUEUES=Q2_join_accounts_q_0,Q2_join_accounts_q_1
+      - FILTER_AMOUNT=2
+      - FILTER_TYPE=BANK_DISTINCT
       - QUERY_ID=2
 
   q2_join_0:
     build:
       context: ./src/
-      dockerfile: cmd/bankjoin/Dockerfile
+      dockerfile: cmd/join/Dockerfile
     container_name: q2_join_0
     depends_on:
       rabbitmq:
@@ -265,11 +273,15 @@ services:
     environment:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
+      - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_QUEUE=Q2_reduced_transfers_0
       - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_0
+      - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
+      - OUTPUT_ROUTING_KEYS=results_queue
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2
+      - JOIN_AMOUNT=2
       - ID=0
     logging:
       driver: json-file
@@ -280,7 +292,7 @@ services:
   q2_join_1:
     build:
       context: ./src/
-      dockerfile: cmd/bankjoin/Dockerfile
+      dockerfile: cmd/join/Dockerfile
     container_name: q2_join_1
     depends_on:
       rabbitmq:
@@ -288,11 +300,15 @@ services:
     environment:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
+      - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_QUEUE=Q2_reduced_transfers_1
       - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_1
+      - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
+      - OUTPUT_ROUTING_KEYS=results_queue
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2
+      - JOIN_AMOUNT=2
       - ID=1
     logging:
       driver: json-file
@@ -658,7 +674,7 @@ services:
   q5_filter_date_and_payment_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/daterangeandpaymentfilter/Dockerfile
     container_name: q5_filter_date_and_payment_0
     depends_on:
       rabbitmq:
@@ -681,7 +697,7 @@ services:
   q5_filter_date_and_payment_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/daterangeandpaymentfilter/Dockerfile
     container_name: q5_filter_date_and_payment_1
     depends_on:
       rabbitmq:
@@ -715,14 +731,14 @@ services:
       - INPUT_QUEUE=Q5_filtered_fetcher_q
       - INPUT_EXCHANGE=Q5_filtered_exchange
       - INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
-      - OUTPUT_QUEUES=Q5_fetcher_output_0,Q5_fetcher_output_1
+      - OUTPUT_QUEUE=Q5_fetcher_output
       - QUERY_ID=5
       - QUOTE=USD
 
   q5_filter_amount_0:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/convertedamountfilter/Dockerfile
     container_name: q5_filter_amount_0
     depends_on:
       rabbitmq:
@@ -732,7 +748,7 @@ services:
       - MOM_PORT=5672
       - ID=0
       - AMOUNT=1
-      - INPUT_QUEUE=Q5_fetcher_output_0
+      - INPUT_QUEUE=Q5_fetcher_output
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
@@ -742,7 +758,7 @@ services:
   q5_filter_amount_1:
     build:
       context: ./src/
-      dockerfile: cmd/filter/Dockerfile
+      dockerfile: cmd/convertedamountfilter/Dockerfile
     container_name: q5_filter_amount_1
     depends_on:
       rabbitmq:
@@ -752,7 +768,7 @@ services:
       - MOM_PORT=5672
       - ID=1
       - AMOUNT=1
-      - INPUT_QUEUE=Q5_fetcher_output_1
+      - INPUT_QUEUE=Q5_fetcher_output
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
       - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
@@ -772,8 +788,9 @@ services:
       - MOM_PORT=5672
       - ID=0
       - REDUCER_AMOUNT=1
-      - INPUT_EOFS_EXPECTED=2
+      - INPUT_EOFS_EXPECTED=1
       - INPUT_QUEUE=Q5_filtered_to_count_q
       - OUTPUT_QUEUES=results_queue
+      - REDUCER_TYPE=COUNT
       - QUERY_ID=5
 

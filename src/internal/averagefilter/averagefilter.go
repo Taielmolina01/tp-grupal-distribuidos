@@ -99,19 +99,29 @@ func NewAverageFilter(config AverageFilterConfig) (_ *AverageFilter, err error) 
 			return
 		}
 		if transfersEofOut != nil {
-			transfersEofOut.Close()
+			if err := transfersEofOut.Close(); err != nil {
+				slog.Error("While closing transfers EOF out", "err", err)
+			}
 		}
 		if transfersEofIn != nil {
-			transfersEofIn.Close()
+			if err := transfersEofIn.Close(); err != nil {
+				slog.Error("While closing transfers EOF in", "err", err)
+			}
 		}
 		if outputQueue != nil {
-			outputQueue.Close()
+			if err := outputQueue.Close(); err != nil {
+				slog.Error("While closing output queue", "err", err)
+			}
 		}
 		if inputAvgsQueue != nil {
-			inputAvgsQueue.Close()
+			if err := inputAvgsQueue.Close(); err != nil {
+				slog.Error("While closing input avgs queue", "err", err)
+			}
 		}
 		if inputTransfersQueue != nil {
-			inputTransfersQueue.Close()
+			if err := inputTransfersQueue.Close(); err != nil {
+				slog.Error("While closing input transfers queue", "err", err)
+			}
 		}
 	}()
 
@@ -205,9 +215,15 @@ func (af *AverageFilter) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	af.inputAvgsQueue.StopConsuming()
-	af.inputTransfersQueue.StopConsuming()
-	af.transfersEofIn.StopConsuming()
+	if err := af.inputAvgsQueue.StopConsuming(); err != nil {
+		slog.Error("While stopping input avgs consumer", "filter_id", af.id, "err", err)
+	}
+	if err := af.inputTransfersQueue.StopConsuming(); err != nil {
+		slog.Error("While stopping input transfers consumer", "filter_id", af.id, "err", err)
+	}
+	if err := af.transfersEofIn.StopConsuming(); err != nil {
+		slog.Error("While stopping transfers EOF in consumer", "filter_id", af.id, "err", err)
+	}
 }
 
 func (af *AverageFilter) close() {
@@ -217,12 +233,24 @@ func (af *AverageFilter) close() {
 	}
 	af.lock.Unlock()
 
-	af.inputTransfersQueue.Close()
-	af.inputAvgsQueue.Close()
-	af.outputQueue.Close()
-	af.transfersRing.Close()
-	af.transfersEofIn.Close()
-	af.transfersEofOut.Close()
+	if err := af.inputTransfersQueue.Close(); err != nil {
+		slog.Error("While closing input transfers queue", "filter_id", af.id, "err", err)
+	}
+	if err := af.inputAvgsQueue.Close(); err != nil {
+		slog.Error("While closing input avgs queue", "filter_id", af.id, "err", err)
+	}
+	if err := af.outputQueue.Close(); err != nil {
+		slog.Error("While closing output queue", "filter_id", af.id, "err", err)
+	}
+	if err := af.transfersRing.Close(); err != nil {
+		slog.Error("While closing transfers ring", "filter_id", af.id, "err", err)
+	}
+	if err := af.transfersEofIn.Close(); err != nil {
+		slog.Error("While closing transfers EOF in", "filter_id", af.id, "err", err)
+	}
+	if err := af.transfersEofOut.Close(); err != nil {
+		slog.Error("While closing transfers EOF out", "filter_id", af.id, "err", err)
+	}
 }
 
 func (af *AverageFilter) getOrInitState(clientID int) *clientState {
@@ -490,7 +518,9 @@ func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *
 		return
 	}
 	defer func() {
-		file.Close()
+		if err := file.Close(); err != nil {
+			slog.Error("While closing drained file", "filter_id", af.id, "err", err)
+		}
 		if err := os.Remove(filename); err != nil {
 			slog.Error("While removing buffer file", "err", err)
 		}

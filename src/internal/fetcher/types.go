@@ -10,19 +10,18 @@ type FetcherConfig struct {
 	InputQueue       string
 	InputExchange    string
 	InputRoutingKeys []string
-	OutputQueues     []string
+	OutputQueue      string
 	Quote            string
 	QueryId          uint8
 }
 
 type Fetcher struct {
-	inputQueue     middleware.Middleware
-	outputQueues   []middleware.Middleware
-	queryId        uint8
-	quote          string
-	actualIndex    int
-	ratesCache     map[string]float64
-	ratesCacheKeys []string
+	inputQueue  middleware.Middleware
+	outputQueue middleware.Middleware
+	queryId     uint8
+	quote       string
+	ratesCache  map[string]float64
+	forwarded   uint32
 }
 
 type apiResponseRate struct {

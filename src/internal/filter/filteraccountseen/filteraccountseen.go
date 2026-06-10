@@ -66,10 +66,14 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (_ *FilterAccountSeen,
 	defer func() {
 		if err != nil {
 			if outputMiddleware != nil {
-				outputMiddleware.Close()
+				if err := outputMiddleware.Close(); err != nil {
+					slog.Error("While closing output middleware", "err", err)
+				}
 			}
 			if inputMiddleware != nil {
-				inputMiddleware.Close()
+				if err := inputMiddleware.Close(); err != nil {
+					slog.Error("While closing input middleware", "err", err)
+				}
 			}
 		}
 	}()
@@ -115,12 +119,18 @@ func (f *FilterAccountSeen) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	f.inputMiddleware.StopConsuming()
+	if err := f.inputMiddleware.StopConsuming(); err != nil {
+		slog.Error("While stopping input consumer", "filter_id", f.id, "err", err)
+	}
 }
 
 func (f *FilterAccountSeen) close() {
-	f.inputMiddleware.Close()
-	f.outputMiddleware.Close()
+	if err := f.inputMiddleware.Close(); err != nil {
+		slog.Error("While closing input middleware", "filter_id", f.id, "err", err)
+	}
+	if err := f.outputMiddleware.Close(); err != nil {
+		slog.Error("While closing output middleware", "filter_id", f.id, "err", err)
+	}
 }
 
 func (f *FilterAccountSeen) handleInput(msg newmiddleware.Message, ack func()) {
