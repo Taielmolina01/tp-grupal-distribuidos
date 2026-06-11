@@ -1,0 +1,89 @@
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_8cc9d849280e01::t_a975502f181134 241,255
+  s_8cc9d849280e01::t_f855d013d2e662 114
+  s_8cc9d849280e01::t_4eddec72ad2868 185
+src/internal/common/middleware/newmiddleware/queue_middleware.go
+  s_8cc9d849280e01::t_82409a768ef6e8 48
+src/internal/filter/commondistinctfilter/distinctfilter.go
+  s_8cc9d849280e01::t_4eddec72ad2868 65
+  s_8cc9d849280e01::t_a975502f181134 74,105
+src/internal/common/middleware/middleware.go
+  s_8cc9d849280e01::t_5f095958c3c0fd 12
+src/internal/joinaccounts/joinaccounts.go
+  s_8cc9d849280e01::t_a975502f181134 346,365,428,457
+  s_8cc9d849280e01::t_4eddec72ad2868 231,252
+src/internal/aggregate/aggregate.go
+  s_8cc9d849280e01::t_a975502f181134 246,271,282
+  s_8cc9d849280e01::t_4eddec72ad2868 198
+src/internal/filter/commonfilter/filter.go
+  s_8cc9d849280e01::t_4eddec72ad2868 143
+  s_8cc9d849280e01::t_a975502f181134 109,168,182
+src/internal/reducer/count.go
+  s_8cc9d849280e01::t_4eddec72ad2868 63
+  s_8cc9d849280e01::t_a975502f181134 86,91
+src/internal/common/middleware/newmiddleware/base.go
+  s_8cc9d849280e01::t_365365bdb10263 48
+src/internal/acumaccounts/acumaccounts.go
+  s_8cc9d849280e01::t_a975502f181134 187,230
+  s_8cc9d849280e01::t_4eddec72ad2868 152
+src/internal/fetcher/fetcher.go
+  s_8cc9d849280e01::t_4eddec72ad2868 93
+  s_8cc9d849280e01::t_a975502f181134 102,148
+src/internal/sum/sum.go
+  s_8cc9d849280e01::t_4eddec72ad2868 194
+  s_8cc9d849280e01::t_a975502f181134 244,263,273
+src/internal/common/middleware/newmiddleware/fanout_middleware.go
+  s_8cc9d849280e01::t_3710c258fe0956 75
+src/internal/common/eofring/eofring.go
+  s_8cc9d849280e01::t_a975502f181134 175,186,204
+  s_8cc9d849280e01::t_4eddec72ad2868 117
+src/internal/averagefilter/averagefilter.go
+  s_8cc9d849280e01::t_a975502f181134 356,405,439,459
+  s_8cc9d849280e01::t_4eddec72ad2868 268,325
+src/internal/daterangesplitter/daterangesplitter.go
+  s_8cc9d849280e01::t_4eddec72ad2868 249
+  s_8cc9d849280e01::t_a975502f181134 183,288,293,308
+src/internal/filter/convertedamountfilter/convertedamountfilter.go
+  s_8cc9d849280e01::t_4eddec72ad2868 149
+  s_8cc9d849280e01::t_a975502f181134 122,193,211
+src/internal/join/join.go
+  s_8cc9d849280e01::t_a975502f181134 115
+src/internal/gateway/gateway.go
+  s_8cc9d849280e01::t_a975502f181134 474,500,516
+  s_8cc9d849280e01::t_4eddec72ad2868 293
+src/internal/common/middleware/newmiddleware/middleware.go
+  s_8cc9d849280e01::t_a171ce35d73b1b 14
+src/internal/common/middleware/newmiddleware/sharded_middleware.go
+  s_8cc9d849280e01::t_d5ba1617828e42 80
+src/internal/join/adapter.go
+  s_8cc9d849280e01::t_a975502f181134 173
+  s_8cc9d849280e01::t_4eddec72ad2868 110,133
+src/internal/common/middleware/exchange_middleware.go
+  s_8cc9d849280e01::t_cb223f0cda66fa 244
+  s_8cc9d849280e01::t_68b131c820bca0 195
+src/internal/reducer/reducer.go
+  s_8cc9d849280e01::t_a975502f181134 126,133,199
+  s_8cc9d849280e01::t_4eddec72ad2868 167
+src/internal/common/middleware/queue_middleware.go
+  s_8cc9d849280e01::t_4d62a4dfb13397 118
+  s_8cc9d849280e01::t_150b6ac57a5d1f 167
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_8cc9d849280e01::t_4eddec72ad2868 150
+  s_8cc9d849280e01::t_a975502f181134 209,218
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "cf570208aa61c29deced5809cdfbde7f6f238740",
+  "prompts": {},
+  "sessions": {
+    "s_8cc9d849280e01": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c3884439-bd84-4073-a556-972192db76ce",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
