@@ -290,7 +290,7 @@ func (gateway *Gateway) getOrCreateBuilder(clientID int) *tcpproto.ResultBatchBu
 }
 
 func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
-	reader, info, err := batch.ReadHeader([]byte(msg.Body))
+	reader, info, err := batch.ReadHeader(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing result header", "err", err)
 		nack()
@@ -471,7 +471,7 @@ func (gateway *Gateway) sendEOF(clientID int, total uint32, targets ...middlewar
 	body := batch.WriteEOF(clientID, 0, 0, 0, total)
 	var errs []error
 	for _, t := range targets {
-		if err := t.Send(middleware.Message{Body: string(body)}); err != nil {
+		if err := t.Send(middleware.Message{Body: body}); err != nil {
 			slog.Error("While sending EOF", "err", err)
 			errs = append(errs, err)
 		}
@@ -497,7 +497,7 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState, r 
 	}
 	for idx, group := range byShard {
 		body := batch.Write(client.ID, 0, 0, 0, group, records.AccountCodec)
-		if err := gateway.accountQueues[idx].Send(middleware.Message{Body: string(body)}); err != nil {
+		if err := gateway.accountQueues[idx].Send(middleware.Message{Body: body}); err != nil {
 			slog.Debug("While sending accounts batch", "err", err)
 			return err
 		}
@@ -513,7 +513,7 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 		return err
 	}
 	body := batch.WriteRaw(client.ID, 0, 0, 0, count, payload)
-	if err := gateway.transfersExchange.Send(middleware.Message{Body: string(body)}); err != nil {
+	if err := gateway.transfersExchange.Send(middleware.Message{Body: body}); err != nil {
 		slog.Debug("While sending transfers batch", "err", err)
 		return err
 	}

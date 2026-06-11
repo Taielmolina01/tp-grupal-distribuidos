@@ -62,7 +62,7 @@ func (distinctfilter *DistinctFilter[T, S]) Run() {
 func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message, ack, nack func()) {
 	defer ack()
 
-	input, err := batch.Read([]byte(msg.Body), distinctfilter.codec)
+	input, err := batch.Read(msg.Body, distinctfilter.codec)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		return
@@ -71,7 +71,7 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 	if input.EOF {
 		eofBody := batch.WriteEOF(input.ClientID, distinctfilter.queryId, 0, 0, input.Total)
 		for _, outputQueue := range distinctfilter.outputQueues {
-			if err := outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
+			if err := outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
 				slog.Error("While broadcasting EOF to output queue", "err", err)
 			}
 		}
@@ -102,7 +102,7 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 
 	for idx, group := range byShard {
 		body := batch.Write(input.ClientID, distinctfilter.queryId, 0, 0, group, distinctfilter.codec)
-		if err := distinctfilter.outputQueues[idx].Send(middleware.Message{Body: string(body)}); err != nil {
+		if err := distinctfilter.outputQueues[idx].Send(middleware.Message{Body: body}); err != nil {
 			slog.Error("While sending output batch", "err", err)
 		}
 	}

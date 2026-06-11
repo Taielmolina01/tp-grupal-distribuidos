@@ -149,7 +149,7 @@ func (a *AcumAccounts) close() {
 
 func (a *AcumAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	input, err := accountchain.Read([]byte(msg.Body))
+	input, err := accountchain.Read(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		return
@@ -184,7 +184,7 @@ func (a *AcumAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 	seq := a.stateFor(input.ClientID).nextSeq()
 	for routingKey, ids := range outgoing {
 		body := accountid.WriteBatch(input.ClientID, uint8(a.queryID), uint8(a.id), seq, ids)
-		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: string(body), RoutingKey: routingKey}); err != nil {
+		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output batch", "err", err)
 		}
 	}
@@ -227,7 +227,7 @@ func (a *AcumAccounts) handleEOF(clientID int, total uint32) {
 	}
 
 	eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), uint8(a.id), state.nextSeq(), total)
-	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: string(eofBody), RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
+	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 

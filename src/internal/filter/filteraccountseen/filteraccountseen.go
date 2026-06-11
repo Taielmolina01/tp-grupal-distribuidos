@@ -147,7 +147,7 @@ func (f *FilterAccountSeen) close() {
 
 func (f *FilterAccountSeen) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	input, err := accountid.Read([]byte(msg.Body))
+	input, err := accountid.Read(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		return
@@ -206,7 +206,7 @@ func (f *FilterAccountSeen) handleEOF(clientID int, senderID uint8, seq uint64, 
 	}
 
 	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), 0, 0, total)
-	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(eofBody)}); err != nil {
+	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 
@@ -215,7 +215,7 @@ func (f *FilterAccountSeen) handleEOF(clientID int, senderID uint8, seq uint64, 
 
 func (f *FilterAccountSeen) flushResults(clientID int, state *clientState) {
 	body := state.builder.Flush(clientID, uint8(f.queryID), 0, 0)
-	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(body)}); err != nil {
+	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
 		slog.Error("While sending Q4 results batch", "err", err)
 	}
 }

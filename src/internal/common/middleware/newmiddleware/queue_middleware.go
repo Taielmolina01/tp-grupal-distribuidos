@@ -45,7 +45,7 @@ func (q *queueMiddleware) Send(msg Message) error {
 
 	err := q.channel.Publish("", q.queue.Name, true, false, amqp.Publishing{
 		ContentType: "text/plain",
-		Body:        []byte(msg.Body),
+		Body:        msg.Body,
 	})
 	if err != nil {
 		return ErrSend

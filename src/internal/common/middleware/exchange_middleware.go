@@ -192,7 +192,7 @@ func (e *exchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack f
 				return ErrMessageMiddlewareDisconnected
 			}
 			callbackFunc(
-				Message{Body: string(d.Body)},
+				Message{Body: d.Body},
 				func() {
 					if err := d.Ack(false); err != nil {
 						slog.Error("While sending ack", "err", err)
@@ -241,7 +241,7 @@ func (e *exchangeMiddleware) Send(msg Message) (err error) {
 			false,
 			amqp.Publishing{
 				ContentType: "text/plain",
-				Body:        []byte(msg.Body),
+				Body:        msg.Body,
 			})
 
 		if err != nil {

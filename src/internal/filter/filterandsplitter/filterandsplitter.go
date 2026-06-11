@@ -111,7 +111,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 				// 	slog.Error("While persisting monitor state after EOF", "err", err)
 				// }
 				return outputMiddleware.Send(newmiddleware.Message{
-					Body:       string(batch.WriteEOF(clientID, config.QueryID, uint8(config.Id), 0, total)),
+					Body:       batch.WriteEOF(clientID, config.QueryID, uint8(config.Id), 0, total),
 					RoutingKey: newmiddleware.BroadcastRoutingKey,
 				})
 			}
@@ -182,7 +182,7 @@ func (f *FilterAndSplitter) close() {
 
 func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
-	input, err := batch.Read([]byte(msg.Body), records.TransferAfterCurrencyCodec)
+	input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		return
@@ -238,7 +238,7 @@ func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.Transfe
 
 	for routingKey, group := range byShard {
 		body := splittransfer.WriteBatch(clientID, f.queryID, uint8(f.id), seq, group)
-		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(body), RoutingKey: routingKey}); err != nil {
+		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output batch", "err", err)
 		}
 	}
@@ -252,7 +252,7 @@ func (f *FilterAndSplitter) handleEOF(clientID int, total uint32) {
 		CoordinatorId:  uint32(f.id),
 		FilteredAmount: f.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
 	}
-	if err := f.eofOutput.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(eofRingMessage))}); err != nil {
+	if err := f.eofOutput.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)}); err != nil {
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 	}
 }
