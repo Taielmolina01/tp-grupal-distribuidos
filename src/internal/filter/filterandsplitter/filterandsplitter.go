@@ -19,63 +19,16 @@ import (
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-type FilterAndSplitterConfig struct {
-	Id        int
-	StartDate time.Time
-	EndDate   time.Time
-
-	OutputMiddlewareAmount int
-	OutputMiddlewarePrefix string
-
-	FilterAndSpliterAmount int
-
-	MomHost string
-	MomPort int
-
-	InputMiddlewareName  string
-	InputMiddlewareQueue string
-	InputRoutingKeys     []string
-
-	QueryID uint8
-
-	MonitorPersistPath string
-}
-
-type FilterAndSplitter struct {
-	id        int
-	startDate time.Time
-	endDate   time.Time
-
-	hasher shard.Hasher
-
-	inputMiddleware  middleware.Middleware
-	outputMiddleware newmiddleware.Middleware
-	eofInput         middleware.Middleware
-	eofOutput        middleware.Middleware
-	eofHandler       eofring.EofRingAlgorithm
-
-	handlerMessages    msgmonitor.MessageMonitor
-	monitorPersistPath string
-
-	queryID uint8
-}
-
-func getRingNextIndex(config FilterAndSplitterConfig) int {
-	if config.Id == config.FilterAndSpliterAmount-1 {
-		return 0
-	}
-	return config.Id + 1
-}
-
-func NewFilterAndSplitter(config FilterAndSplitterConfig) (_ *FilterAndSplitter, err error) {
-	const ring_prefix = "FILTER_AND_SPLIITER_EOF_"
+const (
+	_EOF_RING_QUEUE_PREFIX = "FILTER_AND_SPLIITER_EOF"
+)
 
 func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error) {
 	oldConnSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	handlerMessages := msgmonitor.NewMessageMonitor()
-	if err = handlerMessages.LoadFromDisk(config.MonitorPersistPath); err != nil {
+	if err := handlerMessages.LoadFromDisk(config.MonitorPersistPath); err != nil {
 		return nil, fmt.Errorf("loading monitor state from disk: %w", err)
 	}
 

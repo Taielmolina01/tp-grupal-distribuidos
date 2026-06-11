@@ -119,7 +119,7 @@ func newConvertedAmountFilter(
 		messagesMonitor,
 		func(clientID int, total uint32, isCoordinator bool) error {
 			if isCoordinator {
-				if err := outputQueue.Send(middleware.Message{Body: string(batch.WriteEOF(clientID, config.QueryId, total))}); err != nil {
+				if err := outputQueue.Send(middleware.Message{Body: string(batch.WriteEOF(clientID, config.QueryId, 0, 0, total))}); err != nil {
 					slog.Error("while sending EOF from coordinator", "client_id", clientID, "err", err)
 					return err
 				}
@@ -207,7 +207,7 @@ func (filter *ConvertedAmountFilter) flush(clientID int) {
 		return
 	}
 
-	body := batch.Write(clientID, filter.QueryId, results, records.FinalTransferForQ5Codec)
+	body := batch.Write(clientID, filter.QueryId, 0, 0, results, records.FinalTransferForQ5Codec)
 	if err := filter.OutputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
 		slog.Error("while sending results batch", "err", err)
 	}
