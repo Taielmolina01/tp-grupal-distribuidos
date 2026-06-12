@@ -180,7 +180,7 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (_ *DateRangeSplitter,
 				if !isCoordinator {
 					return nil
 				}
-				if err := s.outputQueues[idx].Send(middleware.Message{Body: string(batch.WriteEOF(clientID, s.queryID, total))}); err != nil {
+				if err := s.outputQueues[idx].Send(middleware.Message{Body: batch.WriteEOF(clientID, s.queryID, 0, 0, total)}); err != nil {
 					return err
 				}
 				return nil
@@ -246,7 +246,7 @@ func (s *DateRangeSplitter) close() {
 func (s *DateRangeSplitter) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	input, err := batch.Read([]byte(msg.Body), records.TransferAfterCurrencyCodec)
+	input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		return
@@ -285,12 +285,12 @@ func (s *DateRangeSplitter) handleBatch(clientID int, recs []transfer.TransferAf
 	}
 
 	if len(avg) > 0 {
-		if err := s.outputQueues[0].Send(middleware.Message{Body: string(daterange.WriteBatch(clientID, s.queryID, avg))}); err != nil {
+		if err := s.outputQueues[0].Send(middleware.Message{Body: daterange.WriteBatch(clientID, s.queryID, 0, 0, avg)}); err != nil {
 			slog.Error("While sending Q3 avg batch", "err", err)
 		}
 	}
 	if len(filter) > 0 {
-		if err := s.outputQueues[1].Send(middleware.Message{Body: string(q3filter.WriteBatch(clientID, s.queryID, filter))}); err != nil {
+		if err := s.outputQueues[1].Send(middleware.Message{Body: q3filter.WriteBatch(clientID, s.queryID, 0, 0, filter)}); err != nil {
 			slog.Error("While sending Q3 filter batch", "err", err)
 		}
 	}
@@ -305,7 +305,7 @@ func (s *DateRangeSplitter) handleEOF(clientID int, total uint32) {
 			CoordinatorId:  uint32(s.id),
 			FilteredAmount: s.monitors[idx].GetForwardedMessagesAmountByClientId(clientID),
 		}
-		if err := eofOut.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(ringMsg))}); err != nil {
+		if err := eofOut.Send(middleware.Message{Body: eofring.SerializeRingMessage(ringMsg)}); err != nil {
 			slog.Error("While sending EOF message to EOF ring", "err", err)
 			continue
 		}

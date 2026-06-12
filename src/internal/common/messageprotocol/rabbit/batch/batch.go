@@ -42,8 +42,8 @@ func (b *Builder[T]) TryAdd(record *T) bool {
 
 func (b *Builder[T]) IsEmpty() bool { return b.count == 0 }
 
-func (b *Builder[T]) Flush(clientID int, queryID uint8) []byte {
-	msg := WriteRaw(clientID, queryID, uint16(b.count), b.w.Bytes())
+func (b *Builder[T]) Flush(clientID int, queryID uint8, senderID uint8, seq uint64) []byte {
+	msg := WriteRaw(clientID, queryID, senderID, seq, uint16(b.count), b.w.Bytes())
 	b.w.Reset()
 	b.count = 0
 	return msg
@@ -54,6 +54,8 @@ type Msg[T any] struct {
 	QueryID  uint8
 	EOF      bool
 	Total    uint32
+	SenderID uint8
+	Seq      uint64
 	Records  []T
 }
 
@@ -62,18 +64,20 @@ type Info struct {
 	QueryID  uint8
 	EOF      bool
 	Total    uint32
+	SenderID uint8
+	Seq      uint64
 }
 
-func WriteRaw(clientID int, queryID uint8, count uint16, payload []byte) []byte {
+func WriteRaw(clientID int, queryID uint8, senderID uint8, seq uint64, count uint16, payload []byte) []byte {
 	w := wire.NewWriter()
-	envelope.Header{ClientID: clientID, QueryID: queryID, Type: typeBatch}.WriteTo(w)
+	envelope.Header{ClientID: clientID, QueryID: queryID, Type: typeBatch, SenderID: senderID, Seq: seq}.WriteTo(w)
 	w.Uint16(count)
 	return append(w.Bytes(), payload...)
 }
 
-func Write[T any](clientID int, queryID uint8, records []T, codec wire.Codec[T]) []byte {
+func Write[T any](clientID int, queryID uint8, senderID uint8, seq uint64, records []T, codec wire.Codec[T]) []byte {
 	w := wire.NewWriter()
-	envelope.Header{ClientID: clientID, QueryID: queryID, Type: typeBatch}.WriteTo(w)
+	envelope.Header{ClientID: clientID, QueryID: queryID, Type: typeBatch, SenderID: senderID, Seq: seq}.WriteTo(w)
 	w.Uint16(uint16(len(records)))
 	for i := range records {
 		codec.Marshal(w, &records[i])
@@ -81,9 +85,9 @@ func Write[T any](clientID int, queryID uint8, records []T, codec wire.Codec[T])
 	return w.Bytes()
 }
 
-func WriteEOF(clientID int, queryID uint8, total uint32) []byte {
+func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uint32) []byte {
 	w := wire.NewWriter()
-	envelope.Header{ClientID: clientID, QueryID: queryID, Type: typeEOF}.WriteTo(w)
+	envelope.Header{ClientID: clientID, QueryID: queryID, Type: typeEOF, SenderID: senderID, Seq: seq}.WriteTo(w)
 	w.Uint32(total)
 	return w.Bytes()
 }
@@ -94,13 +98,13 @@ func ReadHeader(body []byte) (*wire.Reader, Info, error) {
 
 	switch h.Type {
 	case typeBatch:
-		return r, Info{ClientID: h.ClientID, QueryID: h.QueryID}, r.Err()
+		return r, Info{ClientID: h.ClientID, QueryID: h.QueryID, SenderID: h.SenderID, Seq: h.Seq}, r.Err()
 	case typeEOF:
 		total := r.Uint32()
 		if err := r.Err(); err != nil {
 			return r, Info{}, err
 		}
-		return r, Info{ClientID: h.ClientID, QueryID: h.QueryID, EOF: true, Total: total}, nil
+		return r, Info{ClientID: h.ClientID, QueryID: h.QueryID, EOF: true, Total: total, SenderID: h.SenderID, Seq: h.Seq}, nil
 	default:
 		return r, Info{}, fmt.Errorf("batch: unknown message type %d", h.Type)
 	}
@@ -124,11 +128,11 @@ func Read[T any](body []byte, codec wire.Codec[T]) (Msg[T], error) {
 		return Msg[T]{}, err
 	}
 	if info.EOF {
-		return Msg[T]{ClientID: info.ClientID, QueryID: info.QueryID, EOF: true, Total: info.Total}, nil
+		return Msg[T]{ClientID: info.ClientID, QueryID: info.QueryID, EOF: true, Total: info.Total, SenderID: info.SenderID, Seq: info.Seq}, nil
 	}
 	records, err := ReadRecords(r, codec)
 	if err != nil {
 		return Msg[T]{}, err
 	}
-	return Msg[T]{ClientID: info.ClientID, QueryID: info.QueryID, Records: records}, nil
+	return Msg[T]{ClientID: info.ClientID, QueryID: info.QueryID, SenderID: info.SenderID, Seq: info.Seq, Records: records}, nil
 }

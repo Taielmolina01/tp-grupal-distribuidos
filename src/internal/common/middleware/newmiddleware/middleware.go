@@ -11,7 +11,7 @@ var (
 )
 
 type Message struct {
-	Body       string
+	Body       []byte
 	RoutingKey string
 }
 

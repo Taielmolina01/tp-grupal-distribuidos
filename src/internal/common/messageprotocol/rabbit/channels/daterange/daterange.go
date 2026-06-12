@@ -1,14 +1,6 @@
-// Package daterange is the protocol of the daterangesplitter -> sum channel.
-// It carries batches of transfer.TransferForQ3Avg records, plus an EOF that
-// closes the stream for a client.
-//
-// The batch/EOF framing lives in the batch package; this file only declares the
-// record type and how to (de)serialize a single TransferForQ3Avg, which is the
-// only part specific to this channel.
 package daterange
 
 import (
-	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -19,15 +11,15 @@ type Msg = batch.Msg[transfer.TransferForQ3Avg]
 var codec = wire.Codec[transfer.TransferForQ3Avg]{
 	Marshal:   marshalRecord,
 	Unmarshal: unmarshalRecord,
-	MinSize:   serializer.UINT16_SIZE + serializer.UINT64_SIZE,
+	MinSize:   wire.Uint16Size + wire.Uint64Size,
 }
 
-func WriteBatch(clientID int, queryID uint8, records []transfer.TransferForQ3Avg) []byte {
-	return batch.Write(clientID, queryID, records, codec)
+func WriteBatch(clientID int, queryID uint8, senderID uint8, seq uint64, records []transfer.TransferForQ3Avg) []byte {
+	return batch.Write(clientID, queryID, senderID, seq, records, codec)
 }
 
-func WriteEOF(clientID int, queryID uint8, total uint32) []byte {
-	return batch.WriteEOF(clientID, queryID, total)
+func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uint32) []byte {
+	return batch.WriteEOF(clientID, queryID, senderID, seq, total)
 }
 
 func Read(body []byte) (Msg, error) {

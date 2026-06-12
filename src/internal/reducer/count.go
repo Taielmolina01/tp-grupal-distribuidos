@@ -60,7 +60,7 @@ func (count *CountReducer) Run() {
 
 func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func()) {
 	defer ack()
-	input, err := batch.Read([]byte(msg.Body), records.FinalTransferForQ5Codec)
+	input, err := batch.Read(msg.Body, records.FinalTransferForQ5Codec)
 	if err != nil {
 		slog.Error("while deserializing input batch", "err", err)
 		return
@@ -78,15 +78,17 @@ func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func(
 	resultBody := batch.Write(
 		input.ClientID,
 		count.queryId,
+		0,
+		0,
 		[]queryresult.Query5Result{{Qty: count.countByClient[input.ClientID]}},
 		records.Query5ResultCodec,
 	)
-	if err := count.outputQueue.Send(middleware.Message{Body: string(resultBody)}); err != nil {
+	if err := count.outputQueue.Send(middleware.Message{Body: resultBody}); err != nil {
 		slog.Error("while sending result message", "err", err)
 	}
 
-	eofBody := batch.WriteEOF(input.ClientID, count.queryId, 1)
-	if err := count.outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
+	eofBody := batch.WriteEOF(input.ClientID, count.queryId, 0, 0, 1)
+	if err := count.outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
 		slog.Error("while sending EOF message", "err", err)
 	}
 

@@ -122,15 +122,15 @@ func newReducer[T, O comparable](
 				byShard[idx] = append(byShard[idx], projectFunc(v))
 			}
 			for idx, group := range byShard {
-				body := batch.Write(clientID, reducer.queryId, group, reducer.outputCodec)
-				if err := reducer.outputQueues[idx].Send(middleware.Message{Body: string(body)}); err != nil {
+				body := batch.Write(clientID, reducer.queryId, 0, 0, group, reducer.outputCodec)
+				if err := reducer.outputQueues[idx].Send(middleware.Message{Body: body}); err != nil {
 					return err
 				}
 			}
 
-			eofBody := batch.WriteEOF(clientID, reducer.queryId, total)
+			eofBody := batch.WriteEOF(clientID, reducer.queryId, 0, 0, total)
 			for _, outputQueue := range reducer.outputQueues {
-				if err := outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
+				if err := outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
 					return err
 				}
 			}
@@ -164,7 +164,7 @@ func (reducer *Reducer[T, O]) Run() {
 func (reducer *Reducer[T, O]) handleMessage(msg middleware.Message, ack func(), nack func()) {
 	defer ack()
 
-	input, err := batch.Read([]byte(msg.Body), reducer.inputCodec)
+	input, err := batch.Read(msg.Body, reducer.inputCodec)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		nack()
@@ -196,7 +196,7 @@ func (reducer *Reducer[T, O]) handleEOF(clientID int, total uint32) {
 		FilteredAmount: reducer.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
 	}
 
-	if err := reducer.outputQueueEof.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(eofRingMessage))}); err != nil {
+	if err := reducer.outputQueueEof.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)}); err != nil {
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 	}
 }

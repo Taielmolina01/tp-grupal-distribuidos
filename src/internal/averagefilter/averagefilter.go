@@ -265,7 +265,7 @@ func (af *AverageFilter) getOrInitState(clientID int) *clientState {
 func (af *AverageFilter) handleTransferInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	input, err := q3filter.Read([]byte(msg.Body))
+	input, err := q3filter.Read(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing transfer batch", "err", err)
 		return
@@ -322,7 +322,7 @@ func (af *AverageFilter) handleTransferEOF(clientID int, total uint32) {
 func (af *AverageFilter) handleAvgInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	input, err := avgmethod.Read([]byte(msg.Body))
+	input, err := avgmethod.Read(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing avg batch", "err", err)
 		return
@@ -352,8 +352,8 @@ func (af *AverageFilter) flushPendingLocked(clientID int, state *clientState) {
 	if len(state.pending) == 0 {
 		return
 	}
-	body := batch.Write(clientID, af.queryID, state.pending, records.Query3ResultCodec)
-	if err := af.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
+	body := batch.Write(clientID, af.queryID, 0, 0, state.pending, records.Query3ResultCodec)
+	if err := af.outputQueue.Send(middleware.Message{Body: body}); err != nil {
 		slog.Error("While sending Q3 results batch", "err", err)
 	}
 	state.pending = state.pending[:0]
@@ -401,8 +401,8 @@ func (af *AverageFilter) onTransfersRingConverged(clientID int, total uint32, is
 	}
 
 	af.finalizeClientLocked(clientID, state)
-	eofBody := batch.WriteEOF(clientID, af.queryID, total)
-	if err := af.outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
+	eofBody := batch.WriteEOF(clientID, af.queryID, 0, 0, total)
+	if err := af.outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
 		return err
 	}
 	return nil
@@ -436,7 +436,7 @@ func (af *AverageFilter) fireTransfersRingLocked(clientID int, realAmount uint32
 		CoordinatorId:  uint32(af.id),
 		FilteredAmount: af.transfersMonitor.GetForwardedMessagesAmountByClientId(clientID),
 	}
-	if err := af.transfersEofOut.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(ringMsg))}); err != nil {
+	if err := af.transfersEofOut.Send(middleware.Message{Body: eofring.SerializeRingMessage(ringMsg)}); err != nil {
 		slog.Error("While sending EOF to transfers ring", "err", err)
 		return
 	}
@@ -455,8 +455,8 @@ func (af *AverageFilter) finalizeClientLocked(clientID int, state *clientState) 
 func (af *AverageFilter) finalizeAndEmitEOFLocked(clientID int, state *clientState) {
 	af.finalizeClientLocked(clientID, state)
 
-	eofBody := batch.WriteEOF(clientID, af.queryID, 0)
-	if err := af.outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
+	eofBody := batch.WriteEOF(clientID, af.queryID, 0, 0, 0)
+	if err := af.outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 }

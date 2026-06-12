@@ -339,6 +339,9 @@ services:
       - INPUT_ROUTING_KEYS=Q1234_filtered_key
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - QUERY_ID=4
+      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin
+    volumes:
+      - ./bkp/q4_filter_and_splitter_0:/var/bkp
     logging:
       driver: json-file
       options:
@@ -365,6 +368,9 @@ services:
       - INPUT_ROUTING_KEYS=Q1234_filtered_key
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - QUERY_ID=4
+      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin
+    volumes:
+      - ./bkp/q4_filter_and_splitter_1:/var/bkp
     logging:
       driver: json-file
       options:

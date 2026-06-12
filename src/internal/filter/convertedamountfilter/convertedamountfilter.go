@@ -119,7 +119,7 @@ func newConvertedAmountFilter(
 		messagesMonitor,
 		func(clientID int, total uint32, isCoordinator bool) error {
 			if isCoordinator {
-				if err := outputQueue.Send(middleware.Message{Body: string(batch.WriteEOF(clientID, config.QueryId, total))}); err != nil {
+				if err := outputQueue.Send(middleware.Message{Body: batch.WriteEOF(clientID, config.QueryId, 0, 0, total)}); err != nil {
 					slog.Error("while sending EOF from coordinator", "client_id", clientID, "err", err)
 					return err
 				}
@@ -146,7 +146,7 @@ func (filter *ConvertedAmountFilter) Run() {
 func (filter *ConvertedAmountFilter) consume(msg middleware.Message, ack, _ func()) {
 	defer ack()
 
-	input, err := batch.Read([]byte(msg.Body), records.FetcherResponseCodec)
+	input, err := batch.Read(msg.Body, records.FetcherResponseCodec)
 	if err != nil {
 		slog.Error("while deserializing batch", "err", err)
 		return
@@ -190,7 +190,7 @@ func (filter *ConvertedAmountFilter) handleEOF(clientID int, total uint32) {
 		FilteredAmount: filtered,
 	}
 
-	if err := filter.EofOutputQueue.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(eofRingMessage))}); err != nil {
+	if err := filter.EofOutputQueue.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)}); err != nil {
 		slog.Error("While sending EOF message to EOF ring", "filter_id", filter.Id, "client_id", clientID, "err", err)
 	}
 }
@@ -207,8 +207,8 @@ func (filter *ConvertedAmountFilter) flush(clientID int) {
 		return
 	}
 
-	body := batch.Write(clientID, filter.QueryId, results, records.FinalTransferForQ5Codec)
-	if err := filter.OutputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
+	body := batch.Write(clientID, filter.QueryId, 0, 0, results, records.FinalTransferForQ5Codec)
+	if err := filter.OutputQueue.Send(middleware.Message{Body: body}); err != nil {
 		slog.Error("while sending results batch", "err", err)
 	}
 }

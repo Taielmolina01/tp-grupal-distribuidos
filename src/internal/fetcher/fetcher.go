@@ -90,16 +90,16 @@ func (fetcher *Fetcher) Run() {
 func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 	defer ack()
 
-	input, err := batch.Read([]byte(msg.Body), records.TransferForQ5FilterCodec)
+	input, err := batch.Read(msg.Body, records.TransferForQ5FilterCodec)
 	if err != nil {
 		slog.Error("while deserializing input batch", "err", err)
 		return
 	}
 
 	if input.EOF {
-		eofBody := batch.WriteEOF(input.ClientID, fetcher.queryId, fetcher.forwarded)
+		eofBody := batch.WriteEOF(input.ClientID, fetcher.queryId, 0, 0, fetcher.forwarded)
 
-		if err := fetcher.outputQueue.Send(middleware.Message{Body: string(eofBody)}); err != nil {
+		if err := fetcher.outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
 			slog.Error("while sending EOF to filter amount", "err", err)
 		}
 
@@ -144,8 +144,8 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 	if len(responses) == 0 {
 		return
 	}
-	body := batch.Write(input.ClientID, fetcher.queryId, responses, records.FetcherResponseCodec)
-	if err := fetcher.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
+	body := batch.Write(input.ClientID, fetcher.queryId, 0, 0, responses, records.FetcherResponseCodec)
+	if err := fetcher.outputQueue.Send(middleware.Message{Body: body}); err != nil {
 		slog.Error("while publishing batch to output queue", "err", err)
 	}
 }

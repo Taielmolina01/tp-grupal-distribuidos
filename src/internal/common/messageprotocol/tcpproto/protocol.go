@@ -1,26 +1,27 @@
 package tcpproto
 
 import (
+	"encoding/binary"
 	"io"
 	"log/slog"
+	"math"
 
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/byteconv"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/safeio"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 )
 
 func writeMsgType(writer io.Writer, msgType MsgType) error {
-	return safeio.WriteAll(writer, serializer.SerializeUint8(uint8(msgType)))
+	return safeio.WriteAll(writer, []byte{uint8(msgType)})
 }
 
 func ReadMsgType(reader io.Reader) (MsgType, error) {
-	b, err := safeio.ReadAll(reader, serializer.UINT8_SIZE)
+	b, err := safeio.ReadAll(reader, 1)
 	if err != nil {
 		return 0, err
 	}
-	return MsgType(serializer.DeserializeUint8(b)), nil
+	return MsgType(b[0]), nil
 }
 
 func WriteEndOfRecords(writer io.Writer) error {
@@ -28,17 +29,15 @@ func WriteEndOfRecords(writer io.Writer) error {
 }
 
 func WriteQueryEOF(writer io.Writer, queryId uint8) error {
-	msg := serializer.SerializeUint8(uint8(QueryEOF))
-	msg = append(msg, serializer.SerializeUint8(queryId)...)
-	return safeio.WriteAll(writer, msg)
+	return safeio.WriteAll(writer, []byte{uint8(QueryEOF), queryId})
 }
 
 func ReadQueryEOF(reader io.Reader) (uint8, error) {
-	b, err := safeio.ReadAll(reader, serializer.UINT8_SIZE)
+	b, err := safeio.ReadAll(reader, 1)
 	if err != nil {
 		return 0, err
 	}
-	return serializer.DeserializeUint8(b), nil
+	return b[0], nil
 }
 
 func deserializeAccountRecord(reader io.Reader) (account.Account, error) {
@@ -88,16 +87,16 @@ func ReadAccountBatch(reader io.Reader) ([]account.Account, error) {
 }
 
 func ReadRawTransBatch(r io.Reader) (count uint16, payload []byte, err error) {
-	countBytes, err := safeio.ReadAll(r, serializer.UINT16_SIZE)
+	countBytes, err := safeio.ReadAll(r, 2)
 	if err != nil {
 		return 0, nil, err
 	}
-	count = serializer.DeserializeUint16(countBytes)
-	sizeBytes, err := safeio.ReadAll(r, serializer.UINT32_SIZE)
+	count = binary.BigEndian.Uint16(countBytes)
+	sizeBytes, err := safeio.ReadAll(r, 4)
 	if err != nil {
 		return 0, nil, err
 	}
-	payloadSize := serializer.DeserializeUint32(sizeBytes)
+	payloadSize := binary.BigEndian.Uint32(sizeBytes)
 	payload, err = safeio.ReadAll(r, payloadSize)
 	if err != nil {
 		return 0, nil, err
@@ -114,11 +113,11 @@ func ReadResultBatch(reader io.Reader) (*queryresult.BatchResults, error) {
 	results := &queryresult.BatchResults{}
 
 	for range count {
-		queryIdBytes, err := safeio.ReadAll(reader, serializer.UINT8_SIZE)
+		queryIdBytes, err := safeio.ReadAll(reader, 1)
 		if err != nil {
 			return nil, err
 		}
-		queryId := serializer.DeserializeUint8(queryIdBytes)
+		queryId := queryIdBytes[0]
 
 		switch queryId {
 		case 1:
@@ -160,32 +159,32 @@ func ReadResultBatch(reader io.Reader) (*queryresult.BatchResults, error) {
 }
 
 func readString(r io.Reader) (string, error) {
-	lenBytes, err := safeio.ReadAll(r, serializer.UINT16_SIZE)
+	lenBytes, err := safeio.ReadAll(r, 2)
 	if err != nil {
 		return "", err
 	}
-	strLen := uint32(serializer.DeserializeUint16(lenBytes))
+	strLen := uint32(binary.BigEndian.Uint16(lenBytes))
 	strBytes, err := safeio.ReadAll(r, strLen)
 	if err != nil {
 		return "", err
 	}
-	return serializer.DeserializeString(strBytes), nil
+	return string(strBytes), nil
 }
 
 func readCount(r io.Reader) (uint32, error) {
-	b, err := safeio.ReadAll(r, serializer.UINT16_SIZE)
+	b, err := safeio.ReadAll(r, 2)
 	if err != nil {
 		return 0, err
 	}
-	return uint32(serializer.DeserializeUint16(b)), nil
+	return uint32(binary.BigEndian.Uint16(b)), nil
 }
 
 func readFloat64(r io.Reader) (float64, error) {
-	b, err := safeio.ReadAll(r, serializer.UINT64_SIZE)
+	b, err := safeio.ReadAll(r, 8)
 	if err != nil {
 		return 0, err
 	}
-	return serializer.DeserializeFloat64(b), nil
+	return math.Float64frombits(binary.BigEndian.Uint64(b)), nil
 }
 
 func deserializeQuery1Result(r io.Reader) (queryresult.Query1Result, error) {
@@ -289,36 +288,36 @@ func deserializeQuery5Result(r io.Reader) (queryresult.Query5Result, error) {
 }
 
 func serializeQuery1Result(dst []byte, r *queryresult.Query1Result) []byte {
-	dst = byteconv.AppendString(dst, r.FromBank)
-	dst = byteconv.AppendString(dst, r.FromAccount)
-	dst = byteconv.AppendString(dst, r.ToBank)
-	dst = byteconv.AppendString(dst, r.ToAccount)
-	dst = byteconv.AppendFloat64(dst, r.Amount)
+	dst = wire.AppendString(dst, r.FromBank)
+	dst = wire.AppendString(dst, r.FromAccount)
+	dst = wire.AppendString(dst, r.ToBank)
+	dst = wire.AppendString(dst, r.ToAccount)
+	dst = wire.AppendFloat64(dst, r.Amount)
 	return dst
 }
 
 func serializeQuery2Result(dst []byte, r *queryresult.Query2Result) []byte {
-	dst = byteconv.AppendString(dst, r.BankName)
-	dst = byteconv.AppendString(dst, r.FromBank)
-	dst = byteconv.AppendString(dst, r.FromAccount)
-	dst = byteconv.AppendFloat64(dst, r.Amount)
+	dst = wire.AppendString(dst, r.BankName)
+	dst = wire.AppendString(dst, r.FromBank)
+	dst = wire.AppendString(dst, r.FromAccount)
+	dst = wire.AppendFloat64(dst, r.Amount)
 	return dst
 }
 
 func serializeQuery3Result(dst []byte, r *queryresult.Query3Result) []byte {
-	dst = byteconv.AppendString(dst, r.FromBank)
-	dst = byteconv.AppendString(dst, r.FromAccount)
-	dst = byteconv.AppendString(dst, r.PaymentFormat)
-	dst = byteconv.AppendFloat64(dst, r.Amount)
+	dst = wire.AppendString(dst, r.FromBank)
+	dst = wire.AppendString(dst, r.FromAccount)
+	dst = wire.AppendString(dst, r.PaymentFormat)
+	dst = wire.AppendFloat64(dst, r.Amount)
 	return dst
 }
 
 func serializeQuery4Result(dst []byte, r *queryresult.Query4Result) []byte {
-	dst = byteconv.AppendString(dst, r.BankId)
-	dst = byteconv.AppendString(dst, r.AccountNumber)
+	dst = wire.AppendString(dst, r.BankId)
+	dst = wire.AppendString(dst, r.AccountNumber)
 	return dst
 }
 
 func serializeQuery5Result(dst []byte, r *queryresult.Query5Result) []byte {
-	return byteconv.AppendUint16(dst, uint16(r.Qty))
+	return wire.AppendUint16(dst, uint16(r.Qty))
 }
