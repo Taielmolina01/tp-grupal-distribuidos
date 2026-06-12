@@ -24,8 +24,60 @@ func ReadMsgType(reader io.Reader) (MsgType, error) {
 	return MsgType(b[0]), nil
 }
 
-func WriteEndOfRecords(writer io.Writer) error {
-	return writeMsgType(writer, EndOfRecords)
+func WriteHello(writer io.Writer, sessionID uint32) error {
+	var buf [5]byte
+	b := wire.AppendUint8(buf[:0], uint8(Hello))
+	b = wire.AppendUint32(b, sessionID)
+	return safeio.WriteAll(writer, b)
+}
+
+func ReadHello(reader io.Reader) (uint32, error) {
+	return readUint32(reader)
+}
+
+func WriteWelcome(writer io.Writer, sessionID uint32, phase Phase, nextSeq uint64) error {
+	var buf [14]byte
+	b := wire.AppendUint8(buf[:0], uint8(Welcome))
+	b = wire.AppendUint32(b, sessionID)
+	b = wire.AppendUint8(b, uint8(phase))
+	b = wire.AppendUint64(b, nextSeq)
+	return safeio.WriteAll(writer, b)
+}
+
+func ReadWelcome(reader io.Reader) (sessionID uint32, phase Phase, nextSeq uint64, err error) {
+	sessionID, err = readUint32(reader)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	phaseByte, err := safeio.ReadAll(reader, 1)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	nextSeq, err = readUint64(reader)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	return sessionID, Phase(phaseByte[0]), nextSeq, nil
+}
+
+func WriteEndOfRecords(writer io.Writer, seq uint64, total uint32) error {
+	var buf [13]byte
+	b := wire.AppendUint8(buf[:0], uint8(EndOfRecords))
+	b = wire.AppendUint64(b, seq)
+	b = wire.AppendUint32(b, total)
+	return safeio.WriteAll(writer, b)
+}
+
+func ReadEndOfRecords(reader io.Reader) (seq uint64, total uint32, err error) {
+	seq, err = readUint64(reader)
+	if err != nil {
+		return 0, 0, err
+	}
+	total, err = readUint32(reader)
+	if err != nil {
+		return 0, 0, err
+	}
+	return seq, total, nil
 }
 
 func WriteQueryEOF(writer io.Writer, queryId uint8) error {
@@ -70,38 +122,45 @@ func deserializeAccountRecord(reader io.Reader) (account.Account, error) {
 	}, nil
 }
 
-func ReadAccountBatch(reader io.Reader) ([]account.Account, error) {
+func ReadAccountBatch(reader io.Reader) (uint64, []account.Account, error) {
+	seq, err := readUint64(reader)
+	if err != nil {
+		return 0, nil, err
+	}
 	count, err := readCount(reader)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	accounts := make([]account.Account, 0, count)
 	for range count {
 		acc, err := deserializeAccountRecord(reader)
 		if err != nil {
-			return nil, err
+			return 0, nil, err
 		}
 		accounts = append(accounts, acc)
 	}
-	return accounts, nil
+	return seq, accounts, nil
 }
 
-func ReadRawTransBatch(r io.Reader) (count uint16, payload []byte, err error) {
+func ReadRawTransBatch(r io.Reader) (seq uint64, count uint16, payload []byte, err error) {
+	seq, err = readUint64(r)
+	if err != nil {
+		return 0, 0, nil, err
+	}
 	countBytes, err := safeio.ReadAll(r, 2)
 	if err != nil {
-		return 0, nil, err
+		return 0, 0, nil, err
 	}
 	count = binary.BigEndian.Uint16(countBytes)
-	sizeBytes, err := safeio.ReadAll(r, 4)
+	payloadSize, err := readUint32(r)
 	if err != nil {
-		return 0, nil, err
+		return 0, 0, nil, err
 	}
-	payloadSize := binary.BigEndian.Uint32(sizeBytes)
 	payload, err = safeio.ReadAll(r, payloadSize)
 	if err != nil {
-		return 0, nil, err
+		return 0, 0, nil, err
 	}
-	return count, payload, nil
+	return seq, count, payload, nil
 }
 
 func ReadResultBatch(reader io.Reader) (*queryresult.BatchResults, error) {
@@ -177,6 +236,22 @@ func readCount(r io.Reader) (uint32, error) {
 		return 0, err
 	}
 	return uint32(binary.BigEndian.Uint16(b)), nil
+}
+
+func readUint32(r io.Reader) (uint32, error) {
+	b, err := safeio.ReadAll(r, 4)
+	if err != nil {
+		return 0, err
+	}
+	return binary.BigEndian.Uint32(b), nil
+}
+
+func readUint64(r io.Reader) (uint64, error) {
+	b, err := safeio.ReadAll(r, 8)
+	if err != nil {
+		return 0, err
+	}
+	return binary.BigEndian.Uint64(b), nil
 }
 
 func readFloat64(r io.Reader) (float64, error) {

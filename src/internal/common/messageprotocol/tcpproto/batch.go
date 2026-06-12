@@ -34,9 +34,10 @@ func (b *BatchBuilder[T]) TryAdd(record T) bool {
 
 func (b *BatchBuilder[T]) IsEmpty() bool { return b.count == 0 }
 
-func (b *BatchBuilder[T]) Flush(w io.Writer) error {
-	var hdr [7]byte
+func (b *BatchBuilder[T]) Flush(w io.Writer, seq uint64) error {
+	var hdr [15]byte
 	h := wire.AppendUint8(hdr[:0], b.msgType)
+	h = wire.AppendUint64(h, seq)
 	h = wire.AppendUint16(h, uint16(b.count))
 	if b.withPayloadSize {
 		h = wire.AppendUint32(h, uint32(len(b.buf)))

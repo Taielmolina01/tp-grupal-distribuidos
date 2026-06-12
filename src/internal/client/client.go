@@ -35,9 +35,11 @@ type ClientConfig struct {
 }
 
 type Client struct {
-	conn    net.Conn
-	running atomic.Bool
-	config  ClientConfig
+	conn      net.Conn
+	running   atomic.Bool
+	config    ClientConfig
+	sessionID uint32
+	seq       uint64
 }
 
 func NewClient(config ClientConfig) (*Client, error) {
@@ -47,8 +49,40 @@ func NewClient(config ClientConfig) (*Client, error) {
 	}
 
 	client := &Client{conn: conn, config: config}
+	if err := client.handshake(); err != nil {
+		if closeErr := conn.Close(); closeErr != nil {
+			slog.Error("While closing client's socket after handshake error", "err", closeErr)
+		}
+		return nil, err
+	}
 	client.running.Store(true)
 	return client, nil
+}
+
+func (client *Client) handshake() error {
+	if err := tcpproto.WriteHello(client.conn, client.sessionID); err != nil {
+		return err
+	}
+	msgType, err := tcpproto.ReadMsgType(client.conn)
+	if err != nil {
+		return err
+	}
+	if msgType != tcpproto.Welcome {
+		return fmt.Errorf("expected WELCOME message, got %d", msgType)
+	}
+	sessionID, phase, nextSeq, err := tcpproto.ReadWelcome(client.conn)
+	if err != nil {
+		return err
+	}
+	client.sessionID = sessionID
+	client.seq = nextSeq - 1
+	slog.Info("Session established", "session_id", sessionID, "phase", phase, "next_seq", nextSeq)
+	return nil
+}
+
+func (client *Client) nextSeq() uint64 {
+	client.seq++
+	return client.seq
 }
 
 func connectToServer(config ClientConfig) (net.Conn, error) {
@@ -131,6 +165,7 @@ func (client *Client) sendAccountRecords() error {
 	builder := tcpproto.NewAccountBatchBuilder(client.config.MaxBatchSize)
 	scanner := bufio.NewScanner(file)
 
+	var total uint32
 	var cols [5][]byte
 	scanner.Scan()
 	for scanner.Scan() {
@@ -145,24 +180,25 @@ func (client *Client) sendAccountRecords() error {
 			EntityName:    string(cols[4]),
 		}
 		if !builder.TryAdd(acc) {
-			if err := builder.Flush(client.conn); err != nil {
+			if err := builder.Flush(client.conn, client.nextSeq()); err != nil {
 				return err
 			}
 			if !builder.TryAdd(acc) {
 				return fmt.Errorf("account record too large to fit in empty batch")
 			}
 		}
+		total++
 	}
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("while reading accounts file: %w", err)
 	}
 	if !builder.IsEmpty() {
-		if err := builder.Flush(client.conn); err != nil {
+		if err := builder.Flush(client.conn, client.nextSeq()); err != nil {
 			return err
 		}
 	}
 
-	if err := tcpproto.WriteEndOfRecords(client.conn); err != nil {
+	if err := tcpproto.WriteEndOfRecords(client.conn, client.nextSeq(), total); err != nil {
 		return err
 	}
 	return nil
@@ -183,6 +219,7 @@ func (client *Client) sendTransRecords() error {
 	builder := tcpproto.NewTransBatchBuilder(client.config.MaxBatchSize)
 	scanner := bufio.NewScanner(file)
 
+	var total uint32
 	var cols [11][]byte
 	scanner.Scan()
 	for scanner.Scan() {
@@ -218,24 +255,25 @@ func (client *Client) sendTransRecords() error {
 			IsLaundering:      len(cols[10]) > 0 && cols[10][0] == '1',
 		}
 		if !builder.TryAdd(t) {
-			if err := builder.Flush(client.conn); err != nil {
+			if err := builder.Flush(client.conn, client.nextSeq()); err != nil {
 				return err
 			}
 			if !builder.TryAdd(t) {
 				return fmt.Errorf("transfer record too large to fit in empty batch")
 			}
 		}
+		total++
 	}
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("while reading transfers file: %w", err)
 	}
 	if !builder.IsEmpty() {
-		if err := builder.Flush(client.conn); err != nil {
+		if err := builder.Flush(client.conn, client.nextSeq()); err != nil {
 			return err
 		}
 	}
 
-	if err := tcpproto.WriteEndOfRecords(client.conn); err != nil {
+	if err := tcpproto.WriteEndOfRecords(client.conn, client.nextSeq(), total); err != nil {
 		return err
 	}
 	return nil
