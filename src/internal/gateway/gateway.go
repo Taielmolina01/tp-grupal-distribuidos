@@ -36,6 +36,8 @@ type GatewayConfig struct {
 	MomPort              int
 	MaxBatchSize         int
 	QueryEOFsExpected    map[uint8]int
+	WALPath              string
+	WALPersistEvery      int
 }
 
 const gatewaySenderID uint8 = 0
@@ -47,9 +49,7 @@ type Gateway struct {
 	resultsQueue      middleware.Middleware
 	listener          net.Listener
 	running           atomic.Bool
-	nextClientID      atomic.Int32
-	countsMu          sync.Mutex
-	queryEOFsByClient map[int]map[uint8]int
+	wal               *wal
 	buildersMu        sync.Mutex
 	resultBuilders    map[int]*tcpproto.ResultBatchBuilder
 	maxBatchSize      int
@@ -116,12 +116,31 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		return nil, err
 	}
 
+	gatewayWAL, err := newWAL(config.WALPath, config.WALPersistEvery)
+	if err != nil {
+		for _, q := range accountQueues {
+			if err := q.Close(); err != nil {
+				slog.Error("While closing accounts queue", "err", err)
+			}
+		}
+		if err := transfersExchange.Close(); err != nil {
+			slog.Error("While closing transfers exchange", "err", err)
+		}
+		if err := resultsQueue.Close(); err != nil {
+			slog.Error("While closing results queue", "err", err)
+		}
+		if err := listener.Close(); err != nil {
+			slog.Error("While closing acceptor socket", "err", err)
+		}
+		return nil, err
+	}
+
 	gateway := &Gateway{
 		accountQueues:     accountQueues,
 		transfersExchange: transfersExchange,
 		resultsQueue:      resultsQueue,
 		listener:          listener,
-		queryEOFsByClient: map[int]map[uint8]int{},
+		wal:               gatewayWAL,
 		resultBuilders:    map[int]*tcpproto.ResultBatchBuilder{},
 		maxBatchSize:      config.MaxBatchSize,
 		queryEOFsExpected: config.QueryEOFsExpected,
@@ -199,37 +218,52 @@ func (gateway *Gateway) handleSignals() {
 	}
 }
 
-func (gateway *Gateway) handshake(conn net.Conn, r io.Reader) (clientregistry.ClientState, error) {
+func (gateway *Gateway) handshake(conn net.Conn, r io.Reader) (clientregistry.ClientState, tcpproto.Phase, error) {
 	msgType, err := tcpproto.ReadMsgType(r)
 	if err != nil {
-		return clientregistry.ClientState{}, err
+		return clientregistry.ClientState{}, 0, err
 	}
 	if msgType != tcpproto.Hello {
-		return clientregistry.ClientState{}, fmt.Errorf("expected HELLO message, got %d", msgType)
+		return clientregistry.ClientState{}, 0, fmt.Errorf("expected HELLO message, got %d", msgType)
 	}
 	sessionID, err := tcpproto.ReadHello(r)
 	if err != nil {
-		return clientregistry.ClientState{}, err
-	}
-	if sessionID != 0 {
-		slog.Warn("Session resume not supported yet, assigning new session", "requested_session_id", sessionID)
+		return clientregistry.ClientState{}, 0, err
 	}
 
-	clientID := int(gateway.nextClientID.Add(1))
-	if err := tcpproto.WriteWelcome(conn, uint32(clientID), tcpproto.PhaseAccounts, 1); err != nil {
-		return clientregistry.ClientState{}, err
+	clientID := int(sessionID)
+	phase := tcpproto.PhaseAccounts
+	nextSeq := uint64(1)
+
+	if session, ok := gateway.wal.session(clientID); sessionID != 0 && ok {
+		phase = session.phase
+		nextSeq = session.lastSeq + 1
+		gateway.registry.RemoveByID(clientID)
+		slog.Info("Client resuming session", "client_id", clientID, "phase", phase, "next_seq", nextSeq)
+	} else {
+		if sessionID != 0 {
+			slog.Warn("Unknown session, assigning new one", "requested_session_id", sessionID)
+		}
+		clientID, err = gateway.wal.allocateClient()
+		if err != nil {
+			return clientregistry.ClientState{}, 0, err
+		}
+		slog.Info("Client connected", "client_id", clientID)
+	}
+
+	if err := tcpproto.WriteWelcome(conn, uint32(clientID), phase, nextSeq); err != nil {
+		return clientregistry.ClientState{}, 0, err
 	}
 
 	client := clientregistry.ClientState{ID: clientID, Conn: conn}
 	gateway.registry.Add(client)
-	slog.Info("Client connected", "client_id", clientID)
-	return client, nil
+	return client, phase, nil
 }
 
 func (gateway *Gateway) handleClientRequest(conn net.Conn) {
 	r := bufio.NewReaderSize(conn, 64*1024)
 
-	client, err := gateway.handshake(conn, r)
+	client, phase, err := gateway.handshake(conn, r)
 	if err != nil {
 		slog.Debug("While handshaking with client", "err", err)
 		if closeErr := conn.Close(); closeErr != nil {
@@ -246,63 +280,80 @@ func (gateway *Gateway) handleClientRequest(conn net.Conn) {
 		}
 	}()
 
-accountsLoop:
+	if phase == tcpproto.PhaseResults {
+		completed = true
+		return
+	}
+
+	if phase == tcpproto.PhaseAccounts {
+		if !gateway.runAccountsPhase(client, r) {
+			return
+		}
+	}
+
+	if !gateway.runTransfersPhase(client, r) {
+		return
+	}
+
+	completed = true
+}
+
+func (gateway *Gateway) runAccountsPhase(client clientregistry.ClientState, r io.Reader) bool {
 	for {
 		msgType, err := tcpproto.ReadMsgType(r)
 		if err != nil {
 			slog.Debug("While reading message type (accounts phase)", "err", err)
-			return
+			return false
 		}
 
 		switch msgType {
 		case tcpproto.AccountBatch:
 			if err := gateway.handleAccountBatch(client, r); err != nil {
 				slog.Debug("While handling account batch", "err", err)
-				return
+				return false
 			}
 
 		case tcpproto.EndOfRecords:
 			if err := gateway.handleEndOfAccounts(client, r); err != nil {
 				slog.Debug("While handling EOF accounts", "err", err)
-				return
+				return false
 			}
-			break accountsLoop
+			return true
 
 		default:
 			slog.Debug("Unexpected message type in accounts phase", "got", msgType)
-			return
+			return false
 		}
 	}
+}
 
-transfersLoop:
+func (gateway *Gateway) runTransfersPhase(client clientregistry.ClientState, r io.Reader) bool {
 	for {
 		msgType, err := tcpproto.ReadMsgType(r)
 		if err != nil {
 			slog.Debug("While reading message type (transfers phase)", "err", err)
-			return
+			return false
 		}
 
 		switch msgType {
 		case tcpproto.TransBatch:
 			if err := gateway.handleTransBatch(client, r); err != nil {
 				slog.Debug("While handling trans batch", "err", err)
-				return
+				return false
 			}
 
 		case tcpproto.EndOfRecords:
 			if err := gateway.handleEndOfTransfers(client, r); err != nil {
 				slog.Debug("While handling EOF transfers", "err", err)
-				return
+				return false
 			}
-			break transfersLoop
+			return true
 
 		default:
 			slog.Debug("Unexpected message type in transfers phase", "got", msgType)
-			return
+			return false
 		}
 	}
-
-	completed = true
 }
 
 func (gateway *Gateway) getOrCreateBuilder(clientID int) *tcpproto.ResultBatchBuilder {
@@ -334,7 +385,12 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 	builder := gateway.getOrCreateBuilder(info.ClientID)
 
 	if info.EOF {
-		shouldWrite, shouldClose := gateway.markQueryEOF(info.ClientID, info.QueryID)
+		shouldWrite, shouldClose, err := gateway.markQueryEOF(info.ClientID, info.QueryID)
+		if err != nil {
+			slog.Error("While marking QueryEOF", "client_id", info.ClientID, "query_id", info.QueryID, "err", err)
+			nack()
+			return
+		}
 
 		if !builder.IsEmpty() {
 			if err := builder.Flush(client.Conn); err != nil {
@@ -411,26 +467,24 @@ func addRecords[T any](
 	return nil
 }
 
-func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite bool, shouldClose bool) {
-	gateway.countsMu.Lock()
-	defer gateway.countsMu.Unlock()
-
-	if gateway.queryEOFsByClient[clientID] == nil {
-		gateway.queryEOFsByClient[clientID] = map[uint8]int{}
+func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite bool, shouldClose bool, err error) {
+	counts, err := gateway.wal.incEOF(clientID, queryID)
+	if err != nil {
+		return false, false, err
 	}
-	gateway.queryEOFsByClient[clientID][queryID]++
-	count := gateway.queryEOFsByClient[clientID][queryID]
+
 	expected := gateway.queryEOFsExpected[queryID]
 	if expected == 0 {
 		expected = 1
 	}
+	count := counts[queryID]
 	slog.Info("Received QueryEOF", "client_id", clientID, "query_id", queryID,
 		"count", count, "expected", expected)
 
 	shouldWrite = count == expected
 
 	completed := 0
-	for q, c := range gateway.queryEOFsByClient[clientID] {
+	for q, c := range counts {
 		exp := gateway.queryEOFsExpected[q]
 		if exp == 0 {
 			exp = 1
@@ -440,7 +494,7 @@ func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite b
 		}
 	}
 	shouldClose = completed >= len(gateway.queryEOFsExpected)
-	return shouldWrite, shouldClose
+	return shouldWrite, shouldClose, nil
 }
 
 func (gateway *Gateway) closeClient(clientID int) {
@@ -451,9 +505,9 @@ func (gateway *Gateway) closeClient(clientID int) {
 	}
 	gateway.registry.RemoveByID(clientID)
 
-	gateway.countsMu.Lock()
-	delete(gateway.queryEOFsByClient, clientID)
-	gateway.countsMu.Unlock()
+	if err := gateway.wal.removeClient(clientID); err != nil {
+		slog.Error("While removing client from WAL", "client_id", clientID, "err", err)
+	}
 
 	gateway.buildersMu.Lock()
 	delete(gateway.resultBuilders, clientID)
@@ -512,7 +566,7 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState, r 
 			return err
 		}
 	}
-	return nil
+	return gateway.wal.advanceSeq(client.ID, seq)
 }
 
 func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io.Reader) error {
@@ -526,7 +580,7 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 		slog.Debug("While sending transfers batch", "err", err)
 		return err
 	}
-	return nil
+	return gateway.wal.advanceSeq(client.ID, seq)
 }
 
 func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState, r io.Reader) error {
@@ -536,7 +590,10 @@ func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState, r
 		return err
 	}
 	slog.Info("Received EOF message", "kind", "accounts", "client_id", client.ID, "total", total)
-	return gateway.sendEOF(client.ID, seq, total, gateway.accountQueues...)
+	if err := gateway.sendEOF(client.ID, seq, total, gateway.accountQueues...); err != nil {
+		return err
+	}
+	return gateway.wal.completePhase(client.ID, seq, tcpproto.PhaseTransfers)
 }
 
 func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState, r io.Reader) error {
@@ -546,5 +603,8 @@ func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState, 
 		return err
 	}
 	slog.Info("Received EOF message", "kind", "transfers", "client_id", client.ID, "total", total)
-	return gateway.sendEOF(client.ID, seq, total, gateway.transfersExchange)
+	if err := gateway.sendEOF(client.ID, seq, total, gateway.transfersExchange); err != nil {
+		return err
+	}
+	return gateway.wal.completePhase(client.ID, seq, tcpproto.PhaseResults)
 }
