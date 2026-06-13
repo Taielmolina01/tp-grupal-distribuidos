@@ -1,0 +1,38 @@
+src/internal/filter/filterandsplitter/types.go
+  s_62a801a7eee931::t_0db517b9491c5e 32-33,52
+scripts/compose-gen/generator.go
+  s_62a801a7eee931::t_d257e6710ab983 27
+  s_62a801a7eee931::t_9967b16f7691a9 345
+  s_62a801a7eee931::t_d2baf8a4f9ca88 309-323
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_62a801a7eee931::t_4898b31212f377 322-335
+  s_62a801a7eee931::t_8b840771a4072f 294
+  s_62a801a7eee931::t_1f6aaf4928f636 338-344
+  s_62a801a7eee931::t_66d871fe6d023f 105-109
+  s_62a801a7eee931::t_5324c871bd91c2 145
+  s_62a801a7eee931::t_f8be3f829a5dfe 208,239
+  s_62a801a7eee931::t_8f6163df57d738 305,308,311
+  s_62a801a7eee931::t_9146f618334372 263-264
+  s_62a801a7eee931::t_75b9a06cfe3c74 4,10
+  s_62a801a7eee931::t_702e58a3bf265d 187-189
+  s_62a801a7eee931::t_07a917da066402 276
+  s_62a801a7eee931::t_53245c733ed317 39,65-67
+src/cmd/filterandsplitter/config.go
+  s_62a801a7eee931::t_fd662378c06751 57-61,81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "c4bb9a0d0e8c2bc24da5d7c0322a1e11ba52ef4c",
+  "prompts": {},
+  "sessions": {
+    "s_62a801a7eee931": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "851aefb9-10c7-48d7-ad08-263a8a1e1647",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
