@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
+	"tp-grupal-distribuidos/internal/common/diskstore"
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
@@ -137,6 +139,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		queryID:            config.QueryID,
 		handlerMessages:    handlerMessages,
 		monitorPersistPath: config.MonitorPersistPath,
+		outputPersistPath:  filepath.Join(filepath.Dir(config.MonitorPersistPath), "output.bin"),
 		inputMiddleware:    inputMiddleware,
 		outputMiddleware:   outputMiddleware,
 		eofInput:           eofInput,
@@ -189,7 +192,7 @@ func (f *FilterAndSplitter) close() {
 	}
 }
 
-func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.TransferAfterCurrency) map[string][]transfer.SplittedTransfer {
+func (f *FilterAndSplitter) handleBatch(clientID int, seq uint64, records []transfer.TransferAfterCurrency) map[string][]byte {
 	byShard := make(map[string][]transfer.SplittedTransfer)
 
 	for i := range records {
@@ -220,7 +223,11 @@ func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.Transfe
 		}
 	}
 
-	return byShard
+	output := make(map[string][]byte, len(byShard))
+	for routingKey, group := range byShard {
+		output[routingKey] = splittransfer.WriteBatch(clientID, f.queryID, uint8(f.id), seq, group)
+	}
+	return output
 }
 
 func (f *FilterAndSplitter) sendEOF(clientID int, total uint32, seq uint64) error {
@@ -252,7 +259,7 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 		nack()
 	}
 
-	if err = f.writeOutput(); err != nil {
+	if err = f.writeOutput(byShard); err != nil {
 		nack()
 	}
 
@@ -279,7 +286,7 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 		return
 	}
 
-	if err = f.sendOutputs(input.ClientID, input.Seq, byShard); err != nil {
+	if err = f.sendOutputs(byShard); err != nil {
 		//Entro en recuperación
 	}
 
@@ -290,20 +297,20 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 	//En reucperación miro primero si hay un .output. Si lo hay me lo traigo. Si hay un .temp tambien me lo traigo. Si no lo hay parto del backup directo (xq el .temp ya lo habría pisado)
 }
 
-func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterCurrency]) (map[string][]transfer.SplittedTransfer, error) {
+func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterCurrency]) (map[string][]byte, error) {
 	if input.EOF {
 		return nil, nil
 	}
 
-	return f.handleBatch(input.ClientID, input.Records), nil
+	return f.handleBatch(input.ClientID, input.Seq, input.Records), nil
 }
 
 func (f *FilterAndSplitter) writeTemp() error {
 	return nil
 }
 
-func (f *FilterAndSplitter) writeOutput() error {
-	return nil
+func (f *FilterAndSplitter) writeOutput(byShard map[string][]byte) error {
+	return diskstore.WriteAtomic(f.outputPersistPath, byShard)
 }
 
 const seqStoreTimeout = 5 * time.Second
@@ -322,9 +329,8 @@ func (f *FilterAndSplitter) tryCommit(seq uint64) (bool, error) {
 	return resp[0] != 0, nil
 }
 
-func (f *FilterAndSplitter) sendOutputs(clientID int, seq uint64, byShard map[string][]transfer.SplittedTransfer) error {
-	for routingKey, group := range byShard {
-		body := splittransfer.WriteBatch(clientID, f.queryID, uint8(f.id), seq, group)
+func (f *FilterAndSplitter) sendOutputs(byShard map[string][]byte) error {
+	for routingKey, body := range byShard {
 		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
 			return fmt.Errorf("sending shard %s: %w", routingKey, err)
 		}
