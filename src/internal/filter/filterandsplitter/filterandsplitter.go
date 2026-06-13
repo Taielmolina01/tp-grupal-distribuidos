@@ -113,12 +113,12 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		config.FilterAndSpliterAmount,
 		uint32(config.Id),
 		handlerMessages,
-		func(clientID int, total uint32, isCoordinator bool) error {
+		func(clientID int, seq uint64, total uint32, isCoordinator bool) error {
 			if isCoordinator {
 				handlerMessages.RemoveClient(clientID)
 
 				return outputMiddleware.Send(newmiddleware.Message{
-					Body:       batch.WriteEOF(clientID, config.QueryID, uint8(config.Id), 0, total),
+					Body:       batch.WriteEOF(clientID, config.QueryID, uint8(config.Id), seq, total),
 					RoutingKey: newmiddleware.BroadcastRoutingKey,
 				})
 			}
@@ -223,13 +223,15 @@ func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.Transfe
 	return byShard
 }
 
-func (f *FilterAndSplitter) sendEOF(clientID int, total uint32) error {
+func (f *FilterAndSplitter) sendEOF(clientID int, total uint32, seq uint64) error {
+	slog.Info("Seq", "seq", seq)
 	eofRingMessage := eofmessagetypes.EofRingMessage{
 		RealAmount:     total,
 		ActualAmount:   f.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
 		ClientId:       clientID,
 		CoordinatorId:  uint32(f.id),
 		FilteredAmount: f.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
+		Seq:            seq,
 	}
 	return f.eofOutput.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)})
 }
@@ -254,8 +256,7 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 	if err = f.writeOutput(); err != nil {
 		nack()
 	}
-
-	slog.Info("Input seq", "seq", input.Seq)
+	slog.Info("Input seq", "ISEOF", input.EOF, "seq", input.Seq)
 
 	accept, err := f.tryCommit(input.Seq)
 	if err != nil {
@@ -274,7 +275,7 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 	}
 
 	if input.EOF {
-		if err = f.sendEOF(input.ClientID, input.Total); err != nil {
+		if err = f.sendEOF(input.ClientID, input.Total, input.Seq); err != nil {
 			//Entro en recuperación
 		}
 		return

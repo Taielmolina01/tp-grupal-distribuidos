@@ -386,7 +386,7 @@ func (af *AverageFilter) checkAvgsReady(clientID int, state *clientState) {
 	af.finalizeAndEmitEOFLocked(clientID, state)
 }
 
-func (af *AverageFilter) onTransfersRingConverged(clientID int, total uint32, isCoordinator bool) error {
+func (af *AverageFilter) onTransfersRingConverged(clientID int, _ uint64, total uint32, isCoordinator bool) error {
 	af.lock.Lock()
 	defer af.lock.Unlock()
 

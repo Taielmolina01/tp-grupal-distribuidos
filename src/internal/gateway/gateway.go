@@ -15,9 +15,9 @@ import (
 
 	"tp-grupal-distribuidos/internal/clientregistry"
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/normalizer"
@@ -46,10 +46,10 @@ type Gateway struct {
 	listener          net.Listener
 	running           atomic.Bool
 	nextClientID      atomic.Int32
-	countsMu      sync.Mutex
-	accountsCount map[int]uint32
-	transfersCount map[int]uint32
-	seqByClient   map[int]uint64
+	countsMu          sync.Mutex
+	accountsCount     map[int]uint32
+	transfersCount    map[int]uint32
+	seqByClient       map[int]uint64
 	queryEOFsByClient map[int]map[uint8]int
 	buildersMu        sync.Mutex
 	resultBuilders    map[int]*tcpproto.ResultBatchBuilder
@@ -122,9 +122,9 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		transfersExchange: transfersExchange,
 		resultsQueue:      resultsQueue,
 		listener:          listener,
-		accountsCount:  map[int]uint32{},
-		transfersCount: map[int]uint32{},
-		seqByClient:    map[int]uint64{},
+		accountsCount:     map[int]uint32{},
+		transfersCount:    map[int]uint32{},
+		seqByClient:       map[int]uint64{},
 		queryEOFsByClient: map[int]map[uint8]int{},
 		resultBuilders:    map[int]*tcpproto.ResultBatchBuilder{},
 		maxBatchSize:      config.MaxBatchSize,
