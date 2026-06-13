@@ -193,15 +193,7 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
 		return
 	}
 
-	// if f.handlerMessages.IsDuplicate(input.ClientID, int(input.SenderID), input.Seq) {
-	// 	slog.Warn("Discarding duplicate batch", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
-	// 	return
-	// }
-
 	f.handleBatch(input.ClientID, input.Records)
-	// if err := f.handlerMessages.SaveToDisk(f.monitorPersistPath); err != nil {
-	// 	slog.Error("While persisting monitor state", "err", err)
-	// }
 }
 
 func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.TransferAfterCurrency) {
@@ -255,4 +247,80 @@ func (f *FilterAndSplitter) handleEOF(clientID int, total uint32) {
 	if err := f.eofOutput.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)}); err != nil {
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 	}
+}
+
+func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), nack func()) {
+	input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
+	if err != nil {
+		slog.Error("While deserializing input batch", "err", err)
+		ack()
+		return
+	}
+
+	//Esto debe retornar ademas un tipo de dato que es el que me debe aceptar la funcion writeOutput, así como también la función sendOutputs
+	if err = f.processBatch(input); err != nil {
+		ack()
+	}
+
+	if err = f.writeTemp(); err != nil {
+		nack()
+	}
+
+	if err = f.writeOutput(); err != nil {
+		nack()
+	}
+
+	//Al trycommit le paso la cantidad de nums de secuencia para output que quiero claimear
+	//Me response con el numero de secuencia base de lo pedido
+	//Si voy a dar 3 outputs y me responde 1000, mis outputs son seq 1000, 1001, 1002
+	accept, outputSeqBase, err := f.tryCommit()
+	if err != nil {
+		nack()
+	}
+
+	// A partir de acá damos el ack y trabajamos con lo que tenemos en disco ante caidas
+	ack()
+
+	if !accept {
+		//Reject. El seqNum ya fue reclamado y procesado por otro nodo
+
+		// Debo deshacer los cambios de mi estado interno volviendo a lo que tengo en backup.
+		// Lo que tengo en .temp puede/debe descartarse
+	}
+
+	//Ok. El seqNum no fue reclamado por ningun nodo.
+
+	// A partir de acá este flujo es reutilizable desde la reuperación
+	if err = f.sendOutputs(outputSeqBase); err != nil {
+		//Entro en recuperación
+	}
+
+	// rename del .temp para escritura atómica
+	// Borro .output
+}
+
+func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterCurrency]) error {
+	if input.EOF {
+		f.handleEOF(input.ClientID, input.Total)
+		return nil
+	}
+
+	f.handleBatch(input.ClientID, input.Records)
+	return nil
+}
+
+func (f *FilterAndSplitter) writeTemp() error {
+	return nil
+}
+
+func (f *FilterAndSplitter) writeOutput() error {
+	return nil
+}
+
+func (f *FilterAndSplitter) tryCommit() (bool, uint8, error) {
+	return true, 0, nil
+}
+
+func (f *FilterAndSplitter) sendOutputs(uint8) error {
+	return nil
 }
