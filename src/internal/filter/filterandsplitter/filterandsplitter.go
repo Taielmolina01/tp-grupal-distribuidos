@@ -1,11 +1,13 @@
 package filterandsplitter
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
@@ -34,6 +36,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		outputMiddleware newmiddleware.Middleware
 		eofInput         middleware.Middleware
 		eofOutput        middleware.Middleware
+		seqStore         newmiddleware.RPCClient
 		err              error
 	)
 
@@ -57,6 +60,11 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 			if inputMiddleware != nil {
 				if err := inputMiddleware.Close(); err != nil {
 					slog.Error("While closing input middleware", "err", err)
+				}
+			}
+			if seqStore != nil {
+				if err := seqStore.Close(); err != nil {
+					slog.Error("While closing seqstore client", "err", err)
 				}
 			}
 		}
@@ -94,6 +102,11 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		return nil, fmt.Errorf("creating EOF output queue: %w", err)
 	}
 
+	seqStore, err = newmiddleware.NewRPCClientMiddleware(newConnSettings, config.SeqStoreQueue)
+	if err != nil {
+		return nil, fmt.Errorf("creating seqstore client: %w", err)
+	}
+
 	eofHandler := eofring.CreateEofRingAlgorithm(
 		eofInput,
 		eofOutput,
@@ -129,6 +142,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		eofInput:           eofInput,
 		eofOutput:          eofOutput,
 		eofHandler:         eofHandler,
+		seqStore:           seqStore,
 	}, nil
 }
 
@@ -170,6 +184,9 @@ func (f *FilterAndSplitter) close() {
 	if err := f.outputMiddleware.Close(); err != nil {
 		slog.Error("While closing output middleware", "filter_id", f.id, "err", err)
 	}
+	if err := f.seqStore.Close(); err != nil {
+		slog.Error("While closing seqstore client", "filter_id", f.id, "err", err)
+	}
 }
 
 func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
@@ -188,8 +205,7 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
 	f.handleBatch(input.ClientID, input.Records)
 }
 
-func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.TransferAfterCurrency) {
-	seq := f.handlerMessages.NextSeqByClientId(clientID)
+func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.TransferAfterCurrency) map[string][]transfer.SplittedTransfer {
 	byShard := make(map[string][]transfer.SplittedTransfer)
 
 	for i := range records {
@@ -220,12 +236,7 @@ func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.Transfe
 		}
 	}
 
-	for routingKey, group := range byShard {
-		body := splittransfer.WriteBatch(clientID, f.queryID, uint8(f.id), seq, group)
-		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
-			slog.Error("While sending output batch", "err", err)
-		}
-	}
+	return byShard
 }
 
 func (f *FilterAndSplitter) handleEOF(clientID int, total uint32) {
@@ -249,9 +260,8 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 		return
 	}
 
-	//Esto debe retornar ademas un tipo de dato que es el que me debe aceptar la funcion writeOutput, así como también la función sendOutputs
-	//en el estado interno guardo el numero de secuencia que estoy procesando
-	if err = f.processBatch(input); err != nil {
+	byShard, err := f.processBatch(input)
+	if err != nil {
 		ack()
 	}
 
@@ -263,12 +273,7 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 		nack()
 	}
 
-	//Al trycommit le paso la cantidad de nums de secuencia para output que quiero claimear
-	//Me response con el numero de secuencia base de lo pedido
-	//Si voy a dar 3 outputs y me responde 1000, mis outputs son seq 1000, 1001, 1002
-	//El nodo de storage guarda cual es el último seqBase que respondió a cada nodo.
-	//Al recuperarse un nodo empieza su flujo otra vez consultando el tryCommit para obtener el seqBase que le corresponde
-	accept, outputSeqBase, err := f.tryCommit()
+	accept, err := f.tryCommit(input.Seq)
 	if err != nil {
 		nack()
 	}
@@ -286,25 +291,24 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 	//Ok. El seqNum no fue reclamado por ningun nodo.
 
 	// A partir de acá este flujo es reutilizable desde la reuperación
-	if err = f.sendOutputs(outputSeqBase); err != nil {
+	if err = f.sendOutputs(input.ClientID, input.Seq, byShard); err != nil {
 		//Entro en recuperación
 	}
 
 	// rename del .temp para escritura atómica
 	// Borro .output
 
-	//En recuperacion tengo que repetir el tryCommit para ver el outputSeqBase aunque me rechace (solo se lo responde al nodo que lo procese), trust the process
+	//En recuperacion tengo que repetir el tryCommit
 	//En reucperación miro primero si hay un .output. Si lo hay me lo traigo. Si hay un .temp tambien me lo traigo. Si no lo hay parto del backup directo (xq el .temp ya lo habría pisado)
 }
 
-func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterCurrency]) error {
+func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterCurrency]) (map[string][]transfer.SplittedTransfer, error) {
 	if input.EOF {
 		f.handleEOF(input.ClientID, input.Total)
-		return nil
+		return nil, nil
 	}
 
-	f.handleBatch(input.ClientID, input.Records)
-	return nil
+	return f.handleBatch(input.ClientID, input.Records), nil
 }
 
 func (f *FilterAndSplitter) writeTemp() error {
@@ -315,10 +319,28 @@ func (f *FilterAndSplitter) writeOutput() error {
 	return nil
 }
 
-func (f *FilterAndSplitter) tryCommit() (bool, uint8, error) {
-	return true, 0, nil
+const seqStoreTimeout = 5 * time.Second
+
+func (f *FilterAndSplitter) tryCommit(seq uint64) (bool, error) {
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, seq)
+
+	resp, err := f.seqStore.Call(buf, seqStoreTimeout)
+	if err != nil {
+		return false, fmt.Errorf("tryCommit rpc call: %w", err)
+	}
+	if len(resp) < 1 {
+		return false, fmt.Errorf("tryCommit: empty response")
+	}
+	return resp[0] != 0, nil
 }
 
-func (f *FilterAndSplitter) sendOutputs(uint8) error {
+func (f *FilterAndSplitter) sendOutputs(clientID int, seq uint64, byShard map[string][]transfer.SplittedTransfer) error {
+	for routingKey, group := range byShard {
+		body := splittransfer.WriteBatch(clientID, f.queryID, uint8(f.id), seq, group)
+		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
+			return fmt.Errorf("sending shard %s: %w", routingKey, err)
+		}
+	}
 	return nil
 }
