@@ -224,7 +224,6 @@ func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.Transfe
 }
 
 func (f *FilterAndSplitter) sendEOF(clientID int, total uint32, seq uint64) error {
-	slog.Info("Seq", "seq", seq)
 	eofRingMessage := eofmessagetypes.EofRingMessage{
 		RealAmount:     total,
 		ActualAmount:   f.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
@@ -256,7 +255,6 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 	if err = f.writeOutput(); err != nil {
 		nack()
 	}
-	slog.Info("Input seq", "ISEOF", input.EOF, "seq", input.Seq)
 
 	accept, err := f.tryCommit(input.Seq)
 	if err != nil {
