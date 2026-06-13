@@ -258,6 +258,7 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 	}
 
 	//Esto debe retornar ademas un tipo de dato que es el que me debe aceptar la funcion writeOutput, así como también la función sendOutputs
+	//en el estado interno guardo el numero de secuencia que estoy procesando
 	if err = f.processBatch(input); err != nil {
 		ack()
 	}
@@ -273,6 +274,8 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 	//Al trycommit le paso la cantidad de nums de secuencia para output que quiero claimear
 	//Me response con el numero de secuencia base de lo pedido
 	//Si voy a dar 3 outputs y me responde 1000, mis outputs son seq 1000, 1001, 1002
+	//El nodo de storage guarda cual es el último seqBase que respondió a cada nodo.
+	//Al recuperarse un nodo empieza su flujo otra vez consultando el tryCommit para obtener el seqBase que le corresponde
 	accept, outputSeqBase, err := f.tryCommit()
 	if err != nil {
 		nack()
@@ -297,6 +300,9 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 
 	// rename del .temp para escritura atómica
 	// Borro .output
+
+	//En recuperacion tengo que repetir el tryCommit para ver el outputSeqBase aunque me rechace (solo se lo responde al nodo que lo procese), trust the process
+	//En reucperación miro primero si hay un .output. Si lo hay me lo traigo. Si hay un .temp tambien me lo traigo. Si no lo hay parto del backup directo (xq el .temp ya lo habría pisado)
 }
 
 func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterCurrency]) error {
