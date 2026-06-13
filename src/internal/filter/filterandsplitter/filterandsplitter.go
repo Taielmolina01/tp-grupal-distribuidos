@@ -28,9 +28,6 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	handlerMessages := msgmonitor.NewMessageMonitor()
-	// if err := handlerMessages.LoadFromDisk(config.MonitorPersistPath); err != nil {
-	// 	return nil, fmt.Errorf("loading monitor state from disk: %w", err)
-	// }
 
 	var (
 		inputMiddleware  middleware.Middleware
@@ -105,20 +102,15 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		handlerMessages,
 		func(clientID int, total uint32, isCoordinator bool) error {
 			if isCoordinator {
-				// seq := handlerMessages.NextSeqByClientId(clientID)
 				handlerMessages.RemoveClient(clientID)
-				// if err := handlerMessages.SaveToDisk(config.MonitorPersistPath); err != nil {
-				// 	slog.Error("While persisting monitor state after EOF", "err", err)
-				// }
+
 				return outputMiddleware.Send(newmiddleware.Message{
 					Body:       batch.WriteEOF(clientID, config.QueryID, uint8(config.Id), 0, total),
 					RoutingKey: newmiddleware.BroadcastRoutingKey,
 				})
 			}
 			handlerMessages.RemoveClient(clientID)
-			// if err := handlerMessages.SaveToDisk(config.MonitorPersistPath); err != nil {
-			// 	slog.Error("While persisting monitor state after EOF", "err", err)
-			// }
+
 			return nil
 		},
 		uint8(config.QueryID),
