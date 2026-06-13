@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"sync"
 	"sync/atomic"
 	"syscall"
 
@@ -50,9 +49,6 @@ type Gateway struct {
 	listener          net.Listener
 	running           atomic.Bool
 	wal               *wal
-	buildersMu        sync.Mutex
-	resultBuilders    map[int]*tcpproto.ResultBatchBuilder
-	maxBatchSize      int
 	queryEOFsExpected map[uint8]int
 }
 
@@ -141,8 +137,6 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		resultsQueue:      resultsQueue,
 		listener:          listener,
 		wal:               gatewayWAL,
-		resultBuilders:    map[int]*tcpproto.ResultBatchBuilder{},
-		maxBatchSize:      config.MaxBatchSize,
 		queryEOFsExpected: config.QueryEOFsExpected,
 	}
 	gateway.running.Store(true)
@@ -356,17 +350,6 @@ func (gateway *Gateway) runTransfersPhase(client clientregistry.ClientState, r i
 	}
 }
 
-func (gateway *Gateway) getOrCreateBuilder(clientID int) *tcpproto.ResultBatchBuilder {
-	gateway.buildersMu.Lock()
-	defer gateway.buildersMu.Unlock()
-	if b, ok := gateway.resultBuilders[clientID]; ok {
-		return b
-	}
-	b := tcpproto.NewResultBatchBuilder(gateway.maxBatchSize)
-	gateway.resultBuilders[clientID] = b
-	return b
-}
-
 func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
 	reader, info, err := batch.ReadHeader(msg.Body)
 	if err != nil {
@@ -382,22 +365,12 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 		return
 	}
 
-	builder := gateway.getOrCreateBuilder(info.ClientID)
-
 	if info.EOF {
 		shouldWrite, shouldClose, err := gateway.markQueryEOF(info.ClientID, info.QueryID)
 		if err != nil {
 			slog.Error("While marking QueryEOF", "client_id", info.ClientID, "query_id", info.QueryID, "err", err)
 			nack()
 			return
-		}
-
-		if !builder.IsEmpty() {
-			if err := builder.Flush(client.Conn); err != nil {
-				slog.Error("While flushing batch before QueryEOF", "client_id", info.ClientID, "err", err)
-				nack()
-				return
-			}
 		}
 
 		if !shouldWrite {
@@ -417,54 +390,54 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 		return
 	}
 
-	if err := gateway.addResultBatch(client, builder, info.QueryID, reader); err != nil {
-		slog.Error("While adding result batch", "client_id", info.ClientID, "query_id", info.QueryID, "err", err)
+	if err := gateway.forwardResult(client, info, reader); err != nil {
+		slog.Error("While forwarding result batch", "client_id", info.ClientID, "query_id", info.QueryID, "err", err)
 		nack()
 		return
 	}
 	ack()
 }
 
-func (gateway *Gateway) addResultBatch(client clientregistry.ClientState, builder *tcpproto.ResultBatchBuilder, queryID uint8, r *wire.Reader) error {
-	switch queryID {
-	case queryresult.Query1ID:
-		return addRecords(client, builder, r, records.Query1ResultCodec, (*tcpproto.ResultBatchBuilder).TryAddQuery1)
-	case queryresult.Query2ID:
-		return addRecords(client, builder, r, records.Query2ResultCodec, (*tcpproto.ResultBatchBuilder).TryAddQuery2)
-	case queryresult.Query3ID:
-		return addRecords(client, builder, r, records.Query3ResultCodec, (*tcpproto.ResultBatchBuilder).TryAddQuery3)
-	case queryresult.Query4ID:
-		return addRecords(client, builder, r, records.Query4ResultCodec, (*tcpproto.ResultBatchBuilder).TryAddQuery4)
-	case queryresult.Query5ID:
-		return addRecords(client, builder, r, records.Query5ResultCodec, (*tcpproto.ResultBatchBuilder).TryAddQuery5)
-	default:
-		return fmt.Errorf("unknown query id: %d", queryID)
-	}
-}
+func (gateway *Gateway) forwardResult(client clientregistry.ClientState, info batch.Info, r *wire.Reader) error {
+	var payload []byte
+	var count int
 
-func addRecords[T any](
-	client clientregistry.ClientState,
-	builder *tcpproto.ResultBatchBuilder,
-	r *wire.Reader,
-	codec wire.Codec[T],
-	tryAdd func(*tcpproto.ResultBatchBuilder, T) bool,
-) error {
-	recs, err := batch.ReadRecords(r, codec)
-	if err != nil {
-		return err
-	}
-	for _, rec := range recs {
-		if tryAdd(builder, rec) {
-			continue
-		}
-		if err := builder.Flush(client.Conn); err != nil {
+	switch info.QueryID {
+	case queryresult.Query1ID:
+		recs, err := batch.ReadRecords(r, records.Query1ResultCodec)
+		if err != nil {
 			return err
 		}
-		if !tryAdd(builder, rec) {
-			return fmt.Errorf("result too large to fit in empty batch")
+		payload, count = tcpproto.AppendQuery1Results(nil, recs), len(recs)
+	case queryresult.Query2ID:
+		recs, err := batch.ReadRecords(r, records.Query2ResultCodec)
+		if err != nil {
+			return err
 		}
+		payload, count = tcpproto.AppendQuery2Results(nil, recs), len(recs)
+	case queryresult.Query3ID:
+		recs, err := batch.ReadRecords(r, records.Query3ResultCodec)
+		if err != nil {
+			return err
+		}
+		payload, count = tcpproto.AppendQuery3Results(nil, recs), len(recs)
+	case queryresult.Query4ID:
+		recs, err := batch.ReadRecords(r, records.Query4ResultCodec)
+		if err != nil {
+			return err
+		}
+		payload, count = tcpproto.AppendQuery4Results(nil, recs), len(recs)
+	case queryresult.Query5ID:
+		recs, err := batch.ReadRecords(r, records.Query5ResultCodec)
+		if err != nil {
+			return err
+		}
+		payload, count = tcpproto.AppendQuery5Results(nil, recs), len(recs)
+	default:
+		return fmt.Errorf("unknown query id: %d", info.QueryID)
 	}
-	return nil
+
+	return tcpproto.WriteResultBatch(client.Conn, info.QueryID, info.SenderID, info.Seq, uint16(count), payload)
 }
 
 func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite bool, shouldClose bool, err error) {
@@ -508,10 +481,6 @@ func (gateway *Gateway) closeClient(clientID int) {
 	if err := gateway.wal.removeClient(clientID); err != nil {
 		slog.Error("While removing client from WAL", "client_id", clientID, "err", err)
 	}
-
-	gateway.buildersMu.Lock()
-	delete(gateway.resultBuilders, clientID)
-	gateway.buildersMu.Unlock()
 
 	slog.Info("Client closed", "client_id", clientID)
 }

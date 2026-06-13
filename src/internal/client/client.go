@@ -43,9 +43,16 @@ type Client struct {
 	connMu sync.Mutex
 	conn   net.Conn
 
-	files     []*os.File
-	writers   []*csv.Writer
-	doneCount int
+	files       []*os.File
+	writers     []*csv.Writer
+	doneCount   int
+	seenResults map[resultKey]struct{}
+}
+
+type resultKey struct {
+	queryID  uint8
+	senderID uint8
+	seq      uint64
 }
 
 func NewClient(config ClientConfig) (*Client, error) {
@@ -341,6 +348,7 @@ func (client *Client) sendEndOfRecords(conn net.Conn, seq *uint64, resumeFrom ui
 func (client *Client) setupOutputFiles() error {
 	client.files = make([]*os.File, numQueries)
 	client.writers = make([]*csv.Writer, numQueries)
+	client.seenResults = map[resultKey]struct{}{}
 
 	headers := [][]string{
 		queryresult.Query1Result{}.GetHeaders(),
@@ -389,10 +397,17 @@ func (client *Client) recvResults(conn net.Conn) error {
 
 		switch msgType {
 		case tcpproto.ResultBatch:
-			results, err := tcpproto.ReadResultBatch(conn)
+			queryID, senderID, seq, results, err := tcpproto.ReadResultBatch(conn)
 			if err != nil {
 				slog.Debug("Error while reading result batch", "err", err)
 				return err
+			}
+			if seq != 0 {
+				key := resultKey{queryID: queryID, senderID: senderID, seq: seq}
+				if _, seen := client.seenResults[key]; seen {
+					continue
+				}
+				client.seenResults[key] = struct{}{}
 			}
 			client.flushBatchToWriters(results)
 

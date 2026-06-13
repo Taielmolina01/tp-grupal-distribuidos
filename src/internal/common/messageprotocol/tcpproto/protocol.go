@@ -2,8 +2,8 @@ package tcpproto
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
-	"log/slog"
 	"math"
 
 	"tp-grupal-distribuidos/internal/common/account"
@@ -163,58 +163,60 @@ func ReadRawTransBatch(r io.Reader) (seq uint64, count uint16, payload []byte, e
 	return seq, count, payload, nil
 }
 
-func ReadResultBatch(reader io.Reader) (*queryresult.BatchResults, error) {
+func ReadResultBatch(reader io.Reader) (queryID uint8, senderID uint8, seq uint64, results *queryresult.BatchResults, err error) {
+	hdr, err := safeio.ReadAll(reader, 10)
+	if err != nil {
+		return 0, 0, 0, nil, err
+	}
+	queryID = hdr[0]
+	senderID = hdr[1]
+	seq = binary.BigEndian.Uint64(hdr[2:])
+
 	count, err := readCount(reader)
 	if err != nil {
-		return nil, err
+		return 0, 0, 0, nil, err
 	}
 
-	results := &queryresult.BatchResults{}
+	results = &queryresult.BatchResults{}
 
 	for range count {
-		queryIdBytes, err := safeio.ReadAll(reader, 1)
-		if err != nil {
-			return nil, err
-		}
-		queryId := queryIdBytes[0]
-
-		switch queryId {
+		switch queryID {
 		case 1:
 			item, err := deserializeQuery1Result(reader)
 			if err != nil {
-				return nil, err
+				return 0, 0, 0, nil, err
 			}
 			results.Query1 = append(results.Query1, item)
 		case 2:
 			item, err := deserializeQuery2Result(reader)
 			if err != nil {
-				return nil, err
+				return 0, 0, 0, nil, err
 			}
 			results.Query2 = append(results.Query2, item)
 		case 3:
 			item, err := deserializeQuery3Result(reader)
 			if err != nil {
-				return nil, err
+				return 0, 0, 0, nil, err
 			}
 			results.Query3 = append(results.Query3, item)
 		case 4:
 			item, err := deserializeQuery4Result(reader)
 			if err != nil {
-				return nil, err
+				return 0, 0, 0, nil, err
 			}
 			results.Query4 = append(results.Query4, item)
 		case 5:
 			item, err := deserializeQuery5Result(reader)
 			if err != nil {
-				return nil, err
+				return 0, 0, 0, nil, err
 			}
 			results.Query5 = append(results.Query5, item)
 		default:
-			slog.Warn("Received unexpected query ID in result batch", "queryId", queryId)
+			return 0, 0, 0, nil, fmt.Errorf("unexpected query id in result batch: %d", queryID)
 		}
 	}
 
-	return results, nil
+	return queryID, senderID, seq, results, nil
 }
 
 func readString(r io.Reader) (string, error) {
@@ -395,4 +397,39 @@ func serializeQuery4Result(dst []byte, r *queryresult.Query4Result) []byte {
 
 func serializeQuery5Result(dst []byte, r *queryresult.Query5Result) []byte {
 	return wire.AppendUint16(dst, uint16(r.Qty))
+}
+
+func AppendQuery1Results(dst []byte, recs []queryresult.Query1Result) []byte {
+	for i := range recs {
+		dst = serializeQuery1Result(dst, &recs[i])
+	}
+	return dst
+}
+
+func AppendQuery2Results(dst []byte, recs []queryresult.Query2Result) []byte {
+	for i := range recs {
+		dst = serializeQuery2Result(dst, &recs[i])
+	}
+	return dst
+}
+
+func AppendQuery3Results(dst []byte, recs []queryresult.Query3Result) []byte {
+	for i := range recs {
+		dst = serializeQuery3Result(dst, &recs[i])
+	}
+	return dst
+}
+
+func AppendQuery4Results(dst []byte, recs []queryresult.Query4Result) []byte {
+	for i := range recs {
+		dst = serializeQuery4Result(dst, &recs[i])
+	}
+	return dst
+}
+
+func AppendQuery5Results(dst []byte, recs []queryresult.Query5Result) []byte {
+	for i := range recs {
+		dst = serializeQuery5Result(dst, &recs[i])
+	}
+	return dst
 }
