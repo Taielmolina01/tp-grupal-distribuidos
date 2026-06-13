@@ -34,6 +34,11 @@ func (b *BatchBuilder[T]) TryAdd(record T) bool {
 
 func (b *BatchBuilder[T]) IsEmpty() bool { return b.count == 0 }
 
+func (b *BatchBuilder[T]) Reset() {
+	b.buf = b.buf[:0]
+	b.count = 0
+}
+
 func (b *BatchBuilder[T]) Flush(w io.Writer, seq uint64) error {
 	var hdr [15]byte
 	h := wire.AppendUint8(hdr[:0], b.msgType)

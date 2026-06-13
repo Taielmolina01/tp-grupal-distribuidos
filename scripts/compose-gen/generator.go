@@ -41,6 +41,9 @@ func generateCompose(cfg *Config) string {
 	writeFilterAmtQ5(&b, cfg)
 	writeCountReducerQ5(&b, cfg)
 
+	b.WriteString("\nvolumes:\n")
+	b.WriteString("  gateway_wal:\n")
+
 	return b.String()
 }
 
@@ -109,6 +112,8 @@ func writeGateway(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - SERVER_HOST=gateway\n")
 	b.WriteString("      - SERVER_PORT=5678\n")
 	fmt.Fprintf(b, "      - QUERY_EOFS_EXPECTED=%s\n", queryEofs)
+	b.WriteString("    volumes:\n")
+	b.WriteString("      - gateway_wal:/data\n")
 	b.WriteString("\n")
 }
 

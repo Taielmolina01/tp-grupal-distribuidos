@@ -37,6 +37,8 @@ services:
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
       - QUERY_EOFS_EXPECTED=1:1,2:2,3:2,4:2,5:1
+    volumes:
+      - gateway_wal:/data
 
   client_0:
     build:
@@ -800,3 +802,6 @@ services:
       - REDUCER_TYPE=COUNT
       - QUERY_ID=5
 
+
+volumes:
+  gateway_wal:
