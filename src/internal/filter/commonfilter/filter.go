@@ -164,7 +164,7 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, _ func())
 		return
 	}
 
-	body := batch.Write(input.ClientID, filter.queryId, 0, 0, outputs, filter.outputCodec)
+	body := batch.Write(input.ClientID, filter.queryId, uint8(filter.id), input.Seq, outputs, filter.outputCodec)
 	if err := filter.outputExchange.Send(middleware.Message{Body: body}); err != nil {
 		slog.Error("While sending batch to output exchange", "err", err)
 	}

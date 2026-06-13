@@ -150,8 +150,8 @@ func (f *FilterAndSplitter) Run() {
 	defer f.close()
 	go f.eofHandler.Run()
 
-	if err := f.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, _ func()) {
-		f.handleInput(msg, ack)
+	if err := f.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+		f.newHandleInput(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
 	}
@@ -189,22 +189,6 @@ func (f *FilterAndSplitter) close() {
 	}
 }
 
-func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
-	defer ack()
-	input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
-	if err != nil {
-		slog.Error("While deserializing input batch", "err", err)
-		return
-	}
-
-	if input.EOF {
-		f.handleEOF(input.ClientID, input.Total)
-		return
-	}
-
-	f.handleBatch(input.ClientID, input.Records)
-}
-
 func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.TransferAfterCurrency) map[string][]transfer.SplittedTransfer {
 	byShard := make(map[string][]transfer.SplittedTransfer)
 
@@ -239,7 +223,7 @@ func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.Transfe
 	return byShard
 }
 
-func (f *FilterAndSplitter) handleEOF(clientID int, total uint32) {
+func (f *FilterAndSplitter) sendEOF(clientID int, total uint32) error {
 	eofRingMessage := eofmessagetypes.EofRingMessage{
 		RealAmount:     total,
 		ActualAmount:   f.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
@@ -247,9 +231,7 @@ func (f *FilterAndSplitter) handleEOF(clientID int, total uint32) {
 		CoordinatorId:  uint32(f.id),
 		FilteredAmount: f.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
 	}
-	if err := f.eofOutput.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)}); err != nil {
-		slog.Error("While sending EOF message to EOF ring", "err", err)
-	}
+	return f.eofOutput.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)})
 }
 
 func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), nack func()) {
@@ -273,6 +255,8 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 		nack()
 	}
 
+	slog.Info("Input seq", "seq", input.Seq)
+
 	accept, err := f.tryCommit(input.Seq)
 	if err != nil {
 		nack()
@@ -286,11 +270,16 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 
 		// Debo deshacer los cambios de mi estado interno volviendo a lo que tengo en backup.
 		// Lo que tengo en .temp puede/debe descartarse
+		return
 	}
 
-	//Ok. El seqNum no fue reclamado por ningun nodo.
+	if input.EOF {
+		if err = f.sendEOF(input.ClientID, input.Total); err != nil {
+			//Entro en recuperación
+		}
+		return
+	}
 
-	// A partir de acá este flujo es reutilizable desde la reuperación
 	if err = f.sendOutputs(input.ClientID, input.Seq, byShard); err != nil {
 		//Entro en recuperación
 	}
@@ -304,7 +293,6 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 
 func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterCurrency]) (map[string][]transfer.SplittedTransfer, error) {
 	if input.EOF {
-		f.handleEOF(input.ClientID, input.Total)
 		return nil, nil
 	}
 
