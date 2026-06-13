@@ -17,9 +17,14 @@ func loadConfig() (healthcheck.Config, error) {
 		return healthcheck.Config{}, errors.New("NODES environment variable is required (space-separated container names)")
 	}
 
-	port := os.Getenv("PING_PORT")
+	port := os.Getenv("HEALTH_PORT")
 	if port == "" {
-		port = pinger.DefaultPort
+		port = pinger.DefaultHealthPort
+	}
+
+	bullyPort := os.Getenv("BULLY_PORT")
+	if bullyPort == "" {
+		bullyPort = pinger.DefaultBullyPort
 	}
 
 	interval := durationEnv("INTERVAL", 500*time.Millisecond)
@@ -35,13 +40,34 @@ func loadConfig() (healthcheck.Config, error) {
 		maxRetries = n
 	}
 
+	amount := os.Getenv("AMOUNT")
+	if amount == "" {
+		return healthcheck.Config{}, errors.New("AMOUNT environment variable is required (number of nodes to monitor)")
+	}
+	n, err := strconv.Atoi(amount)
+	if err != nil {
+		return healthcheck.Config{}, errors.New("AMOUNT must be a number")
+	}
+
+	idStr := os.Getenv("ID")
+	if idStr == "" {
+		return healthcheck.Config{}, errors.New("ID environment variable is required (unique identifier for this watchdog instance)")
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return healthcheck.Config{}, errors.New("ID must be a number")
+	}
+
 	return healthcheck.Config{
+		Id:         uint8(id),
 		Nodes:      nodes,
-		Port:       port,
+		HealthPort: port,
+		BullyPort:  bullyPort,
 		Interval:   interval,
 		Timeout:    timeout,
 		MaxRetries: maxRetries,
 		Startup:    startup,
+		Amount:     uint8(n),
 	}, nil
 }
 

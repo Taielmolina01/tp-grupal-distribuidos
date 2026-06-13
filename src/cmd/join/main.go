@@ -37,7 +37,7 @@ func run() int {
 		return 1
 	}
 
-	healthPinger := pinger.Serve(":" + pinger.DefaultPort)
+	healthPinger := pinger.Serve(":" + pinger.DefaultHealthPort)
 	defer healthPinger.Close()
 
 	go server.HandleSignals()
