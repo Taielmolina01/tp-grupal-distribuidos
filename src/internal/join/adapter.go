@@ -104,6 +104,7 @@ func newTwoInputJoin[L, R, O any](
 
 func (a *TwoInputAdapter[L, R, O]) Run() {
 	done := make(chan struct{})
+	defer a.Close()
 	go func() {
 		if err := a.leftInput.StartConsuming(a.HandleLeft); err != nil {
 			slog.Error("while consuming left input", "err", err)
@@ -127,15 +128,6 @@ func (a *TwoInputAdapter[L, R, O]) HandleSignals() {
 	}
 	if err := a.rightInput.StopConsuming(); err != nil {
 		slog.Error("while stopping right input", "err", err)
-	}
-	if err := a.leftInput.Close(); err != nil {
-		slog.Error("while closing left input", "err", err)
-	}
-	if err := a.rightInput.Close(); err != nil {
-		slog.Error("while closing right input", "err", err)
-	}
-	if err := a.join.output.Close(); err != nil {
-		slog.Error("while closing output", "err", err)
 	}
 }
 
@@ -217,4 +209,18 @@ func (a *TwoInputAdapter[L, R, O]) handleEofWithLock(clientId int) bool {
 	delete(a.rightEofCount, clientId)
 
 	return true
+}
+
+// Close helper
+
+func (a *TwoInputAdapter[L, R, O]) Close() {
+	if err := a.leftInput.Close(); err != nil {
+		slog.Error("while closing left input", "err", err)
+	}
+	if err := a.rightInput.Close(); err != nil {
+		slog.Error("while closing right input", "err", err)
+	}
+	if err := a.join.output.Close(); err != nil {
+		slog.Error("while closing output", "err", err)
+	}
 }
