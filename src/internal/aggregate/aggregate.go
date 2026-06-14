@@ -108,18 +108,6 @@ func (a *AvgAggregator) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, saving state and stopping consumer")
 
-	if err := a.stateSaver.SaveState(
-		a.accums,
-		a.eofCounts,
-		a.eofTotals,
-	); err != nil {
-		slog.Error("While saving state on signal", "aggregate_id", a.id, "err", err)
-	}
-
-	if err := a.msgMonitor.SaveToDisk(fmt.Sprintf(FILE_NAME, a.id)); err != nil {
-		slog.Error("While saving message monitor on signal", "aggregate_id", a.id, "err", err)
-	}
-
 	if err := a.inputQueue.StopConsuming(); err != nil {
 		slog.Error("While stopping input queue consumer", "aggregate_id", a.id, "err", err)
 	}
@@ -153,16 +141,7 @@ func (a *AvgAggregator) handleInput(msg middleware.Message, ack func()) {
 
 	if input.EOF {
 		a.handleEOF(input.ClientID, input.Total, int(input.SenderID))
-		if err := a.stateSaver.SaveState(
-			a.accums,
-			a.eofCounts,
-			a.eofTotals,
-		); err != nil {
-			slog.Error("While saving state after EOF", "client_id", input.ClientID, "err", err)
-		}
-		if err := a.msgMonitor.SaveToDisk(fmt.Sprintf(FILE_NAME, a.id)); err != nil {
-			slog.Error("While saving message monitor after EOF", "err", err)
-		}
+		a.SaveAllState(input)
 		ack()
 		return
 	}
@@ -171,9 +150,7 @@ func (a *AvgAggregator) handleInput(msg middleware.Message, ack func()) {
 		a.handleRecord(input.ClientID, input.Records[i])
 	}
 
-	if err := a.msgMonitor.SaveToDisk(fmt.Sprintf(FILE_NAME, a.id)); err != nil {
-		slog.Error("While saving message monitor to disk", "err", err)
-	}
+	a.SaveAllState(input)
 
 	ack()
 }
@@ -251,5 +228,21 @@ func (a *AvgAggregator) handleEOF(clientID int, total uint32, senderID int) {
 		if err := q.Send(middleware.Message{Body: eofBody}); err != nil {
 			slog.Error("While sending output EOF", "client_id", clientID, "err", err)
 		}
+	}
+}
+
+// Save helpers
+
+func (a *AvgAggregator) SaveAllState(input summethod.Msg) {
+	if err := a.stateSaver.SaveState(
+		a.accums,
+		a.eofCounts,
+		a.eofTotals,
+	); err != nil {
+		slog.Error("While saving state after EOF", "client_id", input.ClientID, "err", err)
+	}
+
+	if err := a.msgMonitor.SaveToDisk(fmt.Sprintf(FILE_NAME, a.id)); err != nil {
+		slog.Error("While saving message monitor to disk", "err", err)
 	}
 }

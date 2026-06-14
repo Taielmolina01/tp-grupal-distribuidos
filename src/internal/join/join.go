@@ -67,19 +67,19 @@ func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
 	key := j.rightKey(record)
 
 	j.mu.Lock()
+	defer j.mu.Unlock()
+
 	if j.leftCombine != nil {
 		if j.rightBuffer[clientID] == nil {
 			j.rightBuffer[clientID] = map[string]R{}
 		}
 		j.rightBuffer[clientID][key] = record
-		j.mu.Unlock()
 		return
 	}
 
 	if leftMap, ok := j.leftBuffer[clientID]; ok {
 		if leftRecord, ok := leftMap[key]; ok {
 			j.emit(clientID, j.combine(leftRecord, record))
-			j.mu.Unlock()
 			return
 		}
 	}
@@ -88,11 +88,24 @@ func (j *Join[L, R, O]) HandleRight(clientID int, record R) {
 		j.rightBuffer[clientID] = map[string]R{}
 	}
 	j.rightBuffer[clientID][key] = record
-	j.mu.Unlock()
 }
 
 func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
+	results := j.handleMapsEof(clientID)
+
+	if len(results) == 0 {
+		return
+	}
+	body := batch.Write(clientID, j.queryID, 0, 0, results, j.outputCodec)
+	if err := j.output.Send(middleware.Message{Body: body}); err != nil {
+		slog.Error("while sending join results", "err", err)
+	}
+}
+
+func (j *Join[L, R, O]) handleMapsEof(clientID int) []O {
 	j.mu.Lock()
+	defer j.mu.Unlock()
+
 	if j.leftCombine != nil {
 		leftMap := j.leftBuffer[clientID]
 		rightMap := j.rightBuffer[clientID]
@@ -106,15 +119,7 @@ func (j *Join[L, R, O]) HandleQueryEOF(clientID int) {
 	delete(j.pending, clientID)
 	delete(j.leftBuffer, clientID)
 	delete(j.rightBuffer, clientID)
-	j.mu.Unlock()
-
-	if len(results) == 0 {
-		return
-	}
-	body := batch.Write(clientID, j.queryID, 0, 0, results, j.outputCodec)
-	if err := j.output.Send(middleware.Message{Body: body}); err != nil {
-		slog.Error("while sending join results", "err", err)
-	}
+	return results
 }
 
 func (j *Join[L, R, O]) emit(clientID int, result O) {
