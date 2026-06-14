@@ -1,0 +1,26 @@
+src/internal/seqstorenode/seqstorenode.go
+  s_00e4cc2dc9765a::t_27bb98d1ef7291 66,73,80-86,88-90
+  s_00e4cc2dc9765a::t_616b9bac4c09e1 23-24,27
+  s_00e4cc2dc9765a::t_3f4e3c46fa9544 7,9
+src/internal/common/seqstoreprotocol/seqstoreprotocol.go
+  s_00e4cc2dc9765a::t_adbd1d213d1193 10,13-16,20,22,24
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_00e4cc2dc9765a::t_dec2628c737f7a 388-389
+  s_00e4cc2dc9765a::t_2659b6872809a7 276
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "a1c0f7ffccce1f6ef8a46292d4c4de36e8b46483",
+  "prompts": {},
+  "sessions": {
+    "s_00e4cc2dc9765a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ce8b383d-297e-4540-8050-16e13032fcf3",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
