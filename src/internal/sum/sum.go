@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strconv"
-	"sync"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
@@ -17,43 +15,12 @@ import (
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 const eofRingPrefix = "SUM_"
 
-type SumConfig struct {
-	Id           int
-	SumAmount    int
-	MomHost      string
-	MomPort      int
-	InputQueue   string
-	OutputQueues []string
-	QueryID      uint8
-}
-
-type SumByPaymentFormat struct {
-	id      int
-	queryID uint8
-
-	inputQueue   middleware.Middleware
-	outputQueues []middleware.Middleware
-	eofInput     middleware.Middleware
-	eofOutput    middleware.Middleware
-	eofHandler   eofring.EofRingAlgorithm
-	msgMonitor   msgmonitor.MessageMonitor
-
-	mu           sync.Mutex
-	acumuladores map[int]map[string]transfer.SumByMethod
-}
-
-func getRingNextIndex(config SumConfig) int {
-	if config.Id == config.SumAmount-1 {
-		return 0
-	}
-	return config.Id + 1
-}
-
-func NewSumByPaymentFormat(config SumConfig) (_ *SumByPaymentFormat, err error) {
+func NewSumByPaymentFormat(config SumConfig) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
@@ -61,6 +28,7 @@ func NewSumByPaymentFormat(config SumConfig) (_ *SumByPaymentFormat, err error) 
 		outputQueues []middleware.Middleware
 		eofInput     middleware.Middleware
 		eofOutput    middleware.Middleware
+		err          error
 	)
 
 	defer func() {
@@ -104,8 +72,15 @@ func NewSumByPaymentFormat(config SumConfig) (_ *SumByPaymentFormat, err error) 
 		outputQueues = append(outputQueues, m)
 	}
 
+	eofInputQueueName, eofOutputQueueName := eofring.GetInputAndOutputQueueNames(
+		config.Id,
+		config.SumAmount,
+		eofRingPrefix,
+		eofRingPrefix,
+	)
+
 	eofInput, err = middleware.CreateQueueMiddleware(
-		eofRingPrefix+strconv.Itoa(config.Id),
+		eofInputQueueName,
 		connSettings,
 	)
 	if err != nil {
@@ -113,7 +88,7 @@ func NewSumByPaymentFormat(config SumConfig) (_ *SumByPaymentFormat, err error) 
 	}
 
 	eofOutput, err = middleware.CreateQueueMiddleware(
-		eofRingPrefix+strconv.Itoa(getRingNextIndex(config)),
+		eofOutputQueueName,
 		connSettings,
 	)
 	if err != nil {

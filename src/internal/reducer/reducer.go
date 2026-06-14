@@ -29,7 +29,12 @@ func newReducer[T, O comparable](
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := middleware.CreateExchangeMiddleware(config.InputExchange, config.InputQueue, config.InputRoutingKeys, connSettings)
+	inputExchange, err := middleware.CreateExchangeMiddleware(
+		config.InputExchange,
+		config.InputQueue,
+		config.InputRoutingKeys,
+		connSettings,
+	)
 	if err != nil {
 		return nil, err
 	}

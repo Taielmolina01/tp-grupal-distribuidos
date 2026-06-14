@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strconv"
-	"sync"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
@@ -16,48 +14,12 @@ import (
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 const eofRingPrefix = "AGGREGATE_"
 
-type AggregateConfig struct {
-	Id              int
-	AggregateAmount int
-	MomHost         string
-	MomPort         int
-	InputQueue      string
-	OutputQueues    []string
-	QueryID         uint8
-}
-
-type partial struct {
-	totalSum   float64
-	totalCount int
-}
-
-type AvgAggregator struct {
-	id      int
-	queryID uint8
-
-	inputQueue   middleware.Middleware
-	outputQueues []middleware.Middleware
-	eofInput     middleware.Middleware
-	eofOutput    middleware.Middleware
-	eofHandler   eofring.EofRingAlgorithm
-	msgMonitor   msgmonitor.MessageMonitor
-
-	mu           sync.Mutex
-	acumuladores map[int]map[string]partial
-}
-
-func getRingNextIndex(config AggregateConfig) int {
-	if config.Id == config.AggregateAmount-1 {
-		return 0
-	}
-	return config.Id + 1
-}
-
-func NewAvgAggregator(config AggregateConfig) (_ *AvgAggregator, err error) {
+func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
@@ -65,6 +27,7 @@ func NewAvgAggregator(config AggregateConfig) (_ *AvgAggregator, err error) {
 		outputQueues []middleware.Middleware
 		eofInput     middleware.Middleware
 		eofOutput    middleware.Middleware
+		err          error
 	)
 
 	defer func() {
@@ -108,8 +71,15 @@ func NewAvgAggregator(config AggregateConfig) (_ *AvgAggregator, err error) {
 		outputQueues = append(outputQueues, m)
 	}
 
+	eofRingInputQueueName, eofRingOutputQueueName := eofring.GetInputAndOutputQueueNames(
+		config.Id,
+		config.AggregateAmount,
+		eofRingPrefix,
+		eofRingPrefix,
+	)
+
 	eofInput, err = middleware.CreateQueueMiddleware(
-		eofRingPrefix+strconv.Itoa(config.Id),
+		eofRingInputQueueName,
 		connSettings,
 	)
 	if err != nil {
@@ -117,14 +87,14 @@ func NewAvgAggregator(config AggregateConfig) (_ *AvgAggregator, err error) {
 	}
 
 	eofOutput, err = middleware.CreateQueueMiddleware(
-		eofRingPrefix+strconv.Itoa(getRingNextIndex(config)),
+		eofRingOutputQueueName,
 		connSettings,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating EOF output queue: %w", err)
 	}
 
-	msgMonitor := msgmonitor.NewMessageMonitor()
+	msgMonitor := msgmonitor.NewShardedMessageMonitor()
 
 	a := &AvgAggregator{
 		id:           config.Id,

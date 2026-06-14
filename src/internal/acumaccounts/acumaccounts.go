@@ -12,6 +12,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/shard"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 type AcumAccountsConfig struct {
@@ -54,27 +55,13 @@ func (s *clientState) isDuplicate(senderID int, seq uint64) bool {
 	return false
 }
 
-type AcumAccounts struct {
-	id int
-
-	hasher shard.Hasher
-
-	expectedEOFs     int
-	inputMiddleware  newmiddleware.Middleware
-	outputMiddleware newmiddleware.Middleware
-
-	requiredAmt int8
-
-	clientsState map[int]*clientState
-	queryID      int
-}
-
-func NewAcumAccounts(config AcumAccountsConfig) (_ *AcumAccounts, err error) {
+func NewAcumAccounts(config AcumAccountsConfig) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
 		inputMiddleware  newmiddleware.Middleware
 		outputMiddleware newmiddleware.Middleware
+		err              error
 	)
 
 	defer func() {
