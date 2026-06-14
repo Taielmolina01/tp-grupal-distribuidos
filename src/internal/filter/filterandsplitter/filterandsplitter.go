@@ -110,6 +110,23 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		return nil, fmt.Errorf("creating seqstore client: %w", err)
 	}
 
+	node := &FilterAndSplitter{
+		id:                 config.Id,
+		startDate:          config.StartDate,
+		endDate:            config.EndDate,
+		hasher:             shard.New(config.OutputMiddlewareAmount),
+		queryID:            config.QueryID,
+		handlerMessages:    handlerMessages,
+		monitorPersistPath: config.MonitorPersistPath,
+		tempMonitorPath:    config.MonitorPersistPath + ".tmp",
+		outputPersistPath:  filepath.Join(filepath.Dir(config.MonitorPersistPath), "output.bin"),
+		inputMiddleware:    inputMiddleware,
+		outputMiddleware:   outputMiddleware,
+		eofInput:           eofInput,
+		eofOutput:          eofOutput,
+		seqStore:           seqStore,
+	}
+
 	eofHandler := eofring.CreateEofRingAlgorithm(
 		eofInput,
 		eofOutput,
@@ -127,30 +144,16 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 			}
 			handlerMessages.RemoveClient(clientID)
 
-			// f.commitState()
+			node.commitState()
 
 			return nil
 		},
 		uint8(config.QueryID),
 	)
 
-	return &FilterAndSplitter{
-		id:                 config.Id,
-		startDate:          config.StartDate,
-		endDate:            config.EndDate,
-		hasher:             shard.New(config.OutputMiddlewareAmount),
-		queryID:            config.QueryID,
-		handlerMessages:    handlerMessages,
-		monitorPersistPath: config.MonitorPersistPath,
-		tempMonitorPath:    config.MonitorPersistPath + ".tmp",
-		outputPersistPath:  filepath.Join(filepath.Dir(config.MonitorPersistPath), "output.bin"),
-		inputMiddleware:    inputMiddleware,
-		outputMiddleware:   outputMiddleware,
-		eofInput:           eofInput,
-		eofOutput:          eofOutput,
-		eofHandler:         eofHandler,
-		seqStore:           seqStore,
-	}, nil
+	node.eofHandler = eofHandler
+
+	return node, nil
 }
 
 func (f *FilterAndSplitter) Run() {
