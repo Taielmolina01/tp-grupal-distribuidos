@@ -249,7 +249,7 @@ func (a *AvgAggregator) handleEOF(clientID int, total uint32) {
 	}
 }
 
-func (a *AvgAggregator) onRingConverged(clientID int, total uint32, isCoordinator bool) error {
+func (a *AvgAggregator) onRingConverged(clientID int, _ uint64, total uint32, isCoordinator bool) error {
 	a.mu.Lock()
 	byMethod := a.acumuladores[clientID]
 	delete(a.acumuladores, clientID)

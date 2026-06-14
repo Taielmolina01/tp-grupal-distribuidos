@@ -117,7 +117,7 @@ func newConvertedAmountFilter(
 		config.FilterAmount,
 		uint32(config.Id),
 		messagesMonitor,
-		func(clientID int, total uint32, isCoordinator bool) error {
+		func(clientID int, _ uint64, total uint32, isCoordinator bool) error {
 			if isCoordinator {
 				if err := outputQueue.Send(middleware.Message{Body: batch.WriteEOF(clientID, config.QueryId, 0, 0, total)}); err != nil {
 					slog.Error("while sending EOF from coordinator", "client_id", clientID, "err", err)
