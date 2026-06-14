@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"tp-grupal-distribuidos/internal/aggregate"
+	"tp-grupal-distribuidos/internal/common/pinger"
 )
 
 func run() int {
@@ -19,6 +20,9 @@ func run() int {
 		slog.Error("While initializing aggregate", "err", err)
 		return 1
 	}
+
+	healthPinger := pinger.Serve(":" + pinger.DefaultPort)
+	defer healthPinger.Close()
 
 	go server.HandleSignals()
 	server.Run()

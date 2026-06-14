@@ -29,14 +29,16 @@ type Config struct {
 	FilterAccountSeenQ4 int `yaml:"filter_account_seen_q4"`
 
 	// Query 3
-	FilterRangeQ3    int `yaml:"filter_range_q3"`
-	SumQ3            int `yaml:"sum_q3"`
-	AggregateQ3      int `yaml:"aggregate_q3"`
-	AverageFilterQ3  int `yaml:"average_filter_q3"`
+	FilterRangeQ3   int `yaml:"filter_range_q3"`
+	SumQ3           int `yaml:"sum_q3"`
+	AggregateQ3     int `yaml:"aggregate_q3"`
+	AverageFilterQ3 int `yaml:"average_filter_q3"`
 
 	// Query 5
 	FilterDateAndPayment int `yaml:"filter_date_and_payment"`
 	FilterAmtQ5          int `yaml:"filter_amt_q5"`
+
+	Watchdogs int `yaml:"watchdogs"`
 }
 
 func loadConfig(path string) (*Config, error) {
