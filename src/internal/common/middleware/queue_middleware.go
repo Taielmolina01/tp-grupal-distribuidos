@@ -49,7 +49,7 @@ func CreateQueueMiddlewareHelper(
 
 	q, err := ch.QueueDeclare(
 		queueName, // name
-		false,     // durability
+		true,      // durability
 		false,     // delete when unused
 		false,     // exclusive
 		false,     // no-wait

@@ -16,7 +16,7 @@ func NewQueueMiddleware(settings ConnSettings, queueName string) (Middleware, er
 		return nil, err
 	}
 
-	q, err := ch.QueueDeclare(queueName, false, false, false, false, nil)
+	q, err := ch.QueueDeclare(queueName, true, false, false, false, nil)
 	if err != nil {
 		if err := ch.Close(); err != nil {
 			slog.Error("while closing channel after queue declare failure", "err", err)

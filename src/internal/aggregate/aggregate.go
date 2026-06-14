@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
@@ -16,6 +17,7 @@ import (
 )
 
 const FILE_NAME = "avg_aggregator_%d"
+const STATE_FILE_NAME = "avg_aggregator_state_%d"
 
 func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
@@ -23,24 +25,12 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 	var (
 		inputQueue   middleware.Middleware
 		outputQueues []middleware.Middleware
-		eofInput     middleware.Middleware
-		eofOutput    middleware.Middleware
 		err          error
 	)
 
 	defer func() {
 		if err == nil {
 			return
-		}
-		if eofOutput != nil {
-			if err := eofOutput.Close(); err != nil {
-				slog.Error("While closing EOF output", "id", config.Id, "err", err)
-			}
-		}
-		if eofInput != nil {
-			if err := eofInput.Close(); err != nil {
-				slog.Error("While closing EOF input", "id", config.Id, "err", err)
-			}
 		}
 		for _, q := range outputQueues {
 			if err := q.Close(); err != nil {
@@ -72,18 +62,30 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 	msgMonitor := msgmonitor.NewShardedMessageMonitor()
 
 	a := &AvgAggregator{
-		id:           config.Id,
-		queryID:      config.QueryID,
-		inputQueue:   inputQueue,
-		outputQueues: outputQueues,
-		msgMonitor:   msgMonitor,
-		acumuladores: map[int]map[string]partial{},
-		sumAmount:    config.SumAmount,
-		eofsByClient: map[int]eofInfo{},
+		id:            config.Id,
+		queryID:       config.QueryID,
+		inputQueue:    inputQueue,
+		outputQueues:  outputQueues,
+		stateFilePath: fmt.Sprintf(STATE_FILE_NAME, config.Id),
+		msgMonitor:    msgMonitor,
+		accums:        map[int]map[string]partial{},
+		eofCounts:     map[int]int{},
+		eofTotals:     map[int]uint32{},
+		sumAmount:     config.SumAmount,
+		mu:            sync.Mutex{},
 	}
+
+	a.stateSaver = CreateNewStateSaver(&a.mu, fmt.Sprintf(STATE_FILE_NAME, config.Id))
 
 	if err := a.msgMonitor.LoadFromDisk(fmt.Sprintf(FILE_NAME, a.id)); err != nil {
 		slog.Error("While loading message monitor from disk", "err", err)
+	}
+	if accums, eofCounts, eofTotals, err := a.stateSaver.LoadState(); err != nil {
+		slog.Error("While loading state from disk", "err", err)
+	} else {
+		a.accums = accums
+		a.eofCounts = eofCounts
+		a.eofTotals = eofTotals
 	}
 
 	return a, nil
@@ -96,7 +98,7 @@ func (a *AvgAggregator) Run() {
 	if err := a.inputQueue.StartConsuming(func(msg middleware.Message, ack, _ func()) {
 		a.handleInput(msg, ack)
 	}); err != nil {
-		slog.Error("While consuming from input queue", "err", err)
+		slog.Error("While consuming from input queue", "aggregate_id", a.id, "err", err)
 	}
 }
 
@@ -104,15 +106,33 @@ func (a *AvgAggregator) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
-	slog.Info("SIGTERM signal received, stopping consumer")
+	slog.Info("SIGTERM signal received, saving state and stopping consumer")
+
+	if err := a.stateSaver.SaveState(
+		a.accums,
+		a.eofCounts,
+		a.eofTotals,
+	); err != nil {
+		slog.Error("While saving state on signal", "aggregate_id", a.id, "err", err)
+	}
+
+	if err := a.msgMonitor.SaveToDisk(fmt.Sprintf(FILE_NAME, a.id)); err != nil {
+		slog.Error("While saving message monitor on signal", "aggregate_id", a.id, "err", err)
+	}
 
 	if err := a.inputQueue.StopConsuming(); err != nil {
 		slog.Error("While stopping input queue consumer", "aggregate_id", a.id, "err", err)
 	}
-
 }
 
 func (a *AvgAggregator) close() {
+	if err := a.stateSaver.SaveState(
+		a.accums,
+		a.eofCounts,
+		a.eofTotals,
+	); err != nil {
+		slog.Error("While saving state on close", "aggregate_id", a.id, "err", err)
+	}
 	if err := a.inputQueue.Close(); err != nil {
 		slog.Error("While closing input queue", "aggregate_id", a.id, "err", err)
 	}
@@ -124,16 +144,26 @@ func (a *AvgAggregator) close() {
 }
 
 func (a *AvgAggregator) handleInput(msg middleware.Message, ack func()) {
-	defer ack()
-
 	input, err := summethod.Read(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
+		ack()
 		return
 	}
 
 	if input.EOF {
-		a.handleEOF(input.ClientID, input.Total)
+		a.handleEOF(input.ClientID, input.Total, int(input.SenderID))
+		if err := a.stateSaver.SaveState(
+			a.accums,
+			a.eofCounts,
+			a.eofTotals,
+		); err != nil {
+			slog.Error("While saving state after EOF", "client_id", input.ClientID, "err", err)
+		}
+		if err := a.msgMonitor.SaveToDisk(fmt.Sprintf(FILE_NAME, a.id)); err != nil {
+			slog.Error("While saving message monitor after EOF", "err", err)
+		}
+		ack()
 		return
 	}
 
@@ -144,24 +174,26 @@ func (a *AvgAggregator) handleInput(msg middleware.Message, ack func()) {
 	if err := a.msgMonitor.SaveToDisk(fmt.Sprintf(FILE_NAME, a.id)); err != nil {
 		slog.Error("While saving message monitor to disk", "err", err)
 	}
+
+	ack()
 }
 
 func (a *AvgAggregator) handleRecord(clientID int, p transfer.SumByMethod) {
 	method := p.Method
 
 	a.mu.Lock()
-	if a.acumuladores[clientID] == nil {
-		a.acumuladores[clientID] = map[string]partial{}
+	if a.accums[clientID] == nil {
+		a.accums[clientID] = map[string]partial{}
 	}
-	existing, ok := a.acumuladores[clientID][method]
+	existing, ok := a.accums[clientID][method]
 	if !ok {
-		a.acumuladores[clientID][method] = partial{
+		a.accums[clientID][method] = partial{
 			totalSum:   p.Sum,
 			totalCount: p.Amount,
 		}
 		a.msgMonitor.AddForwardedMessagesAmountByClientId(clientID, 1)
 	} else {
-		a.acumuladores[clientID][method] = partial{
+		a.accums[clientID][method] = partial{
 			totalSum:   existing.totalSum + p.Sum,
 			totalCount: existing.totalCount + p.Amount,
 		}
@@ -170,30 +202,28 @@ func (a *AvgAggregator) handleRecord(clientID int, p transfer.SumByMethod) {
 	a.msgMonitor.AddProcessedMessagesAmountByClientId(clientID, 1)
 }
 
-func (a *AvgAggregator) handleEOF(clientID int, total uint32) {
-	info, ok := a.eofsByClient[clientID]
-	if !ok {
-		a.eofsByClient[clientID] = eofInfo{
-			amount:    1,
-			processed: total,
-		}
-	} else {
-		info.amount++
-		info.processed += total
-		a.eofsByClient[clientID] = info
-	}
-
-	if info.amount < a.sumAmount {
+func (a *AvgAggregator) handleEOF(clientID int, total uint32, senderID int) {
+	a.mu.Lock()
+	a.eofCounts[clientID]++
+	a.eofTotals[clientID] += total
+	if a.eofCounts[clientID] < a.sumAmount {
+		a.mu.Unlock()
 		return
 	}
+	accumulatedTotal := a.eofTotals[clientID]
+	delete(a.eofCounts, clientID)
+	delete(a.eofTotals, clientID)
+	a.mu.Unlock()
 
-	if info.processed != a.msgMonitor.GetProcessedMessagesAmountByClientId(clientID) {
-		slog.Warn("Received EOF with total that does not match processed messages amount", "client_id", clientID, "total_in_eof", info.processed, "processed_amount", a.msgMonitor.GetProcessedMessagesAmountByClientId(clientID))
+	a.msgMonitor.HandleEOF(clientID, total, senderID)
+
+	if accumulatedTotal != a.msgMonitor.GetProcessedMessagesAmountByClientId(clientID) {
+		slog.Warn("Received EOF with total that does not match processed messages amount", "client_id", clientID, "total_in_eof", accumulatedTotal, "processed_amount", a.msgMonitor.GetProcessedMessagesAmountByClientId(clientID))
 	}
 
 	a.mu.Lock()
-	byMethod := a.acumuladores[clientID]
-	delete(a.acumuladores, clientID)
+	byMethod := a.accums[clientID]
+	delete(a.accums, clientID)
 	a.mu.Unlock()
 
 	avgs := make([]transfer.AvgByMethod, 0, len(byMethod))

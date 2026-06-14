@@ -18,6 +18,13 @@ type ShardedMessageMonitor interface {
 	Close()
 	SaveToDisk(path string) error
 	LoadFromDisk(path string) error
+
+	HandleEOF(clientID int, total uint32, senderID int)
+	GetEOFInfo(clientID int) []EofInfo
+}
+
+type EofInfo struct {
+	Processed uint32
 }
 
 type shardedClientState struct {
@@ -25,6 +32,7 @@ type shardedClientState struct {
 	forwarded   uint32
 	seqSent     uint64
 	seqReceived map[int]uint64
+	eofs        map[int]EofInfo
 }
 
 type shardedMessageMonitorImpl struct {
@@ -38,6 +46,18 @@ func NewShardedMessageMonitor() ShardedMessageMonitor {
 	}
 }
 
+func (m *shardedMessageMonitorImpl) initClient(clientID int) {
+	if _, ok := m.clients[clientID]; !ok {
+		m.clients[clientID] = shardedClientState{
+			processed:   0,
+			forwarded:   0,
+			seqSent:     0,
+			seqReceived: map[int]uint64{},
+			eofs:        map[int]EofInfo{},
+		}
+	}
+}
+
 func (m *shardedMessageMonitorImpl) GetProcessedMessagesAmountByClientId(clientID int) uint32 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -47,6 +67,7 @@ func (m *shardedMessageMonitorImpl) GetProcessedMessagesAmountByClientId(clientI
 func (m *shardedMessageMonitorImpl) AddProcessedMessagesAmountByClientId(clientID int, amount uint32) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.initClient(clientID)
 	s := m.clients[clientID]
 	s.processed += amount
 	m.clients[clientID] = s
@@ -61,6 +82,7 @@ func (m *shardedMessageMonitorImpl) GetForwardedMessagesAmountByClientId(clientI
 func (m *shardedMessageMonitorImpl) AddForwardedMessagesAmountByClientId(clientID int, amount uint32) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.initClient(clientID)
 	s := m.clients[clientID]
 	s.forwarded += amount
 	m.clients[clientID] = s
@@ -69,6 +91,7 @@ func (m *shardedMessageMonitorImpl) AddForwardedMessagesAmountByClientId(clientI
 func (m *shardedMessageMonitorImpl) NextSeqByClientId(clientID int) uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.initClient(clientID)
 	s := m.clients[clientID]
 	s.seqSent++
 	m.clients[clientID] = s
@@ -81,6 +104,7 @@ func (m *shardedMessageMonitorImpl) IsDuplicate(clientID, senderID int, seq uint
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.initClient(clientID)
 	s := m.clients[clientID]
 	if s.seqReceived == nil {
 		s.seqReceived = map[int]uint64{}
@@ -123,6 +147,11 @@ func (m *shardedMessageMonitorImpl) SaveToDisk(path string) error {
 			w.Int32(int32(senderID))
 			w.Uint64(val)
 		}
+		w.Uint8(uint8(len(state.eofs)))
+		for senderID, eof := range state.eofs {
+			w.Int32(int32(senderID))
+			w.Uint32(eof.Processed)
+		}
 	}
 
 	tmp := path + ".tmp"
@@ -164,6 +193,15 @@ func (m *shardedMessageMonitorImpl) LoadFromDisk(path string) error {
 			val := r.Uint64()
 			seqReceived[senderID] = val
 		}
+		eofsLen := r.Uint8()
+		eofs := make(map[int]EofInfo, eofsLen)
+		for range eofsLen {
+			senderID := int(r.Int32())
+			processed := r.Uint32()
+			eofs[senderID] = EofInfo{
+				Processed: processed,
+			}
+		}
 		if r.Err() != nil {
 			return r.Err()
 		}
@@ -173,7 +211,30 @@ func (m *shardedMessageMonitorImpl) LoadFromDisk(path string) error {
 			forwarded:   forwarded,
 			seqSent:     seqSent,
 			seqReceived: seqReceived,
+			eofs:        eofs,
 		}
 	}
 	return nil
+}
+
+func (m *shardedMessageMonitorImpl) HandleEOF(clientID int, total uint32, senderID int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	s := m.clients[clientID]
+	s.eofs[senderID] = EofInfo{
+		Processed: uint32(total),
+	}
+	m.clients[clientID] = s
+}
+
+func (m *shardedMessageMonitorImpl) GetEOFInfo(clientID int) []EofInfo {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var eofs []EofInfo
+	for _, eof := range m.clients[clientID].eofs {
+		eofs = append(eofs, eof)
+	}
+	return eofs
 }

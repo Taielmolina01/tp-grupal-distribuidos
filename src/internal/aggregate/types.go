@@ -22,22 +22,21 @@ type partial struct {
 	totalCount int
 }
 
-type eofInfo struct {
-	amount    int
-	processed uint32
-}
-
 type AvgAggregator struct {
 	id      int
 	queryID uint8
 
-	inputQueue   middleware.Middleware
-	outputQueues []middleware.Middleware
-	msgMonitor   msgmonitor.ShardedMessageMonitor
+	inputQueue    middleware.Middleware
+	outputQueues  []middleware.Middleware
+	stateFilePath string
 
-	mu           sync.Mutex
-	acumuladores map[int]map[string]partial
-	eofsByClient map[int]eofInfo
+	msgMonitor msgmonitor.ShardedMessageMonitor
 
-	sumAmount int
+	mu        sync.Mutex
+	accums    map[int]map[string]partial
+	eofCounts map[int]int
+	eofTotals map[int]uint32
+
+	sumAmount  int
+	stateSaver StateSaver
 }

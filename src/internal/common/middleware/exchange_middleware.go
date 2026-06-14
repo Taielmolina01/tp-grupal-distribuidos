@@ -58,7 +58,7 @@ func CreateExchangeMiddlewareHelper(
 	err = ch.ExchangeDeclare(
 		exchange,            // name
 		amqp.ExchangeDirect, // type
-		false,               // durability
+		true,                // durability
 		false,               // auto-deleted
 		false,               // internal
 		false,               // no-wait
@@ -75,7 +75,7 @@ func CreateExchangeMiddlewareHelper(
 	if queuename == "results_queue" {
 		q, err := ch.QueueDeclare(
 			queuename, // name
-			false,     // durability
+			true,      // durability
 			false,     // delete when unused
 			false,     // exclusive
 			false,     // no-wait
@@ -131,7 +131,7 @@ func (e *exchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack f
 
 	q, err := e.channel.QueueDeclare(
 		e.queueName, // name
-		false,       // durability
+		true,        // durability
 		false,       // delete when unused
 		false,       // exclusive
 		false,       // no-wait

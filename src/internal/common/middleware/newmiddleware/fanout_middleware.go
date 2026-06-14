@@ -36,7 +36,7 @@ func NewFanoutMiddleware(settings ConnSettings, exchange string, inputQueue stri
 	}
 
 	if inputQueue != "" {
-		q, err := ch.QueueDeclare(inputQueue, false, false, false, false, nil)
+		q, err := ch.QueueDeclare(inputQueue, true, false, false, false, nil)
 		if err != nil {
 			if err := ch.Close(); err != nil {
 				slog.Error("while closing channel after queue declare failure", "err", err)
