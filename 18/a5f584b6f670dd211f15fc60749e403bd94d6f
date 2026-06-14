@@ -1,0 +1,19 @@
+src/internal/common/seqstoreprotocol/seqstoreprotocol.go
+  s_00e4cc2dc9765a::t_adbd1d213d1193 8,10,13-16,20,22,24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "18a5f584b6f670dd211f15fc60749e403bd94d6f",
+  "prompts": {},
+  "sessions": {
+    "s_00e4cc2dc9765a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ce8b383d-297e-4540-8050-16e13032fcf3",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
