@@ -1,7 +1,6 @@
 package avgmethod
 
 import (
-	"tp-grupal-distribuidos/internal/common/messageprotocol/serializer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -12,15 +11,15 @@ type Msg = batch.Msg[transfer.AvgByMethod]
 var codec = wire.Codec[transfer.AvgByMethod]{
 	Marshal:   marshalRecord,
 	Unmarshal: unmarshalRecord,
-	MinSize:   serializer.UINT64_SIZE + serializer.UINT16_SIZE,
+	MinSize:   wire.Uint64Size + wire.Uint16Size,
 }
 
-func WriteBatch(clientID int, queryID uint8, records []transfer.AvgByMethod) []byte {
-	return batch.Write(clientID, queryID, records, codec)
+func WriteBatch(clientID int, queryID uint8, senderID uint8, seq uint64, records []transfer.AvgByMethod) []byte {
+	return batch.Write(clientID, queryID, senderID, seq, records, codec)
 }
 
-func WriteEOF(clientID int, queryID uint8, total uint32) []byte {
-	return batch.WriteEOF(clientID, queryID, total)
+func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uint32) []byte {
+	return batch.WriteEOF(clientID, queryID, senderID, seq, total)
 }
 
 func Read(body []byte) (Msg, error) {

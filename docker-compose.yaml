@@ -316,6 +316,24 @@ services:
 
   # Query 4
 
+  q4_filter_splitter_seqstore:
+    build:
+      context: ./src/
+      dockerfile: cmd/seqstorenode/Dockerfile
+    container_name: q4_filter_splitter_seqstore
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - REQUEST_QUEUE=Q4_filter_splitter_seqstore
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
   q4_filter_and_splitter_0:
     build:
       context: ./src/
@@ -336,6 +354,10 @@ services:
       - INPUT_ROUTING_KEYS=Q1234_filtered_key
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - QUERY_ID=4
+      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin
+      - SEQ_STORE_QUEUE=Q4_filter_splitter_seqstore
+    volumes:
+      - ./bkp/q4_filter_and_splitter_0:/var/bkp
     logging:
       driver: json-file
       options:
@@ -362,6 +384,10 @@ services:
       - INPUT_ROUTING_KEYS=Q1234_filtered_key
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - QUERY_ID=4
+      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin
+      - SEQ_STORE_QUEUE=Q4_filter_splitter_seqstore
+    volumes:
+      - ./bkp/q4_filter_and_splitter_1:/var/bkp
     logging:
       driver: json-file
       options:

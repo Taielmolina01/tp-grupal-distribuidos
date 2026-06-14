@@ -23,6 +23,7 @@ func SerializeRingMessage(m eofmessagetypes.EofRingMessage) []byte {
 	w.Uint32(m.RealAmount)
 	w.Uint32(uint32(m.ClientId))
 	w.Uint32(m.FilteredAmount)
+	w.Uint64(m.Seq)
 	return w.Bytes()
 }
 
@@ -32,6 +33,7 @@ func serializeCommit(m eofmessagetypes.EofMessageCommit) []byte {
 	w.Uint32(uint32(m.ClientID))
 	w.Uint32(uint32(m.Hops))
 	w.Uint32(m.FilteredAmount)
+	w.Uint64(m.Seq)
 	return w.Bytes()
 }
 
@@ -45,6 +47,7 @@ func deserializeRing(body []byte) (*eofmessagetypes.EofRingMessage, *eofmessaget
 			RealAmount:     r.Uint32(),
 			ClientId:       int(r.Uint32()),
 			FilteredAmount: r.Uint32(),
+			Seq:            r.Uint64(),
 		}
 		return m, nil, r.Err()
 	case typeCommit:
@@ -52,6 +55,7 @@ func deserializeRing(body []byte) (*eofmessagetypes.EofRingMessage, *eofmessaget
 			ClientID:       int(r.Uint32()),
 			Hops:           int(r.Uint32()),
 			FilteredAmount: r.Uint32(),
+			Seq:            r.Uint64(),
 		}
 		return nil, m, r.Err()
 	default:
@@ -76,7 +80,7 @@ type eofRingAlgorithmImpl struct {
 	queryId         uint8
 }
 
-type FinishCallback func(clientID int, total uint32, isCoordinator bool) error
+type FinishCallback func(clientID int, seq uint64, total uint32, isCoordinator bool) error
 
 func CreateEofRingAlgorithm(
 	inputQueue, outputQueue middleware.Middleware,
@@ -114,7 +118,7 @@ func (eofring *eofRingAlgorithmImpl) Close() error {
 }
 
 func (eofring *eofRingAlgorithmImpl) handleEofMessageFromQueue(msg middleware.Message, ack, nack func()) {
-	eofRingMessage, eofRingCommitMessage, err := deserializeRing([]byte(msg.Body))
+	eofRingMessage, eofRingCommitMessage, err := deserializeRing(msg.Body)
 	if err != nil {
 		slog.Error("Error deserializing EOF ring message", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "err", err)
 		ack()
@@ -171,8 +175,9 @@ func (eofring *eofRingAlgorithmImpl) sendEofCommitToReplicas(eofRingMessage *eof
 		ClientID:       eofRingMessage.ClientId,
 		Hops:           0,
 		FilteredAmount: eofRingMessage.FilteredAmount,
+		Seq:            eofRingMessage.Seq,
 	})
-	if err := eofring.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
+	if err := eofring.outputQueue.Send(middleware.Message{Body: body}); err != nil {
 		slog.Error("Error sending EOF commit to ring", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "err", err)
 		nack()
 		return
@@ -183,7 +188,7 @@ func (eofring *eofRingAlgorithmImpl) sendEofCommitToReplicas(eofRingMessage *eof
 func (eofring *eofRingAlgorithmImpl) sendEofMessageToQueue(eofRingMessage *eofmessagetypes.EofRingMessage, ack func()) {
 	defer ack()
 	body := SerializeRingMessage(*eofRingMessage)
-	if err := eofring.outputQueue.Send(middleware.Message{Body: string(body)}); err != nil {
+	if err := eofring.outputQueue.Send(middleware.Message{Body: body}); err != nil {
 		slog.Error("Error forwarding EOF ring message", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "err", err)
 		return
 	}
@@ -191,8 +196,8 @@ func (eofring *eofRingAlgorithmImpl) sendEofMessageToQueue(eofRingMessage *eofme
 
 func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *eofmessagetypes.EofMessageCommit) error {
 
-	if err := eofring.finishCallback(msg.ClientID, msg.FilteredAmount, msg.CoordinatorId == eofring.id); err != nil {
-		slog.Error("Error finishing callback", "err", err)
+	if err := eofring.finishCallback(msg.ClientID, msg.Seq, msg.FilteredAmount, msg.CoordinatorId == eofring.id); err != nil {
+		return fmt.Errorf("finish callback: %w", err)
 	}
 
 	msg.Hops++
@@ -201,7 +206,7 @@ func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *eofmessagetypes
 		return nil
 	}
 
-	if err := eofring.outputQueue.Send(middleware.Message{Body: string(serializeCommit(*msg))}); err != nil {
+	if err := eofring.outputQueue.Send(middleware.Message{Body: serializeCommit(*msg)}); err != nil {
 		slog.Error("Error sending EOF commit to ring", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", msg.ClientID, "err", err)
 		return err
 	}

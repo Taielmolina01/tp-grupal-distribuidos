@@ -107,7 +107,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 	go func() {
 		if err := a.leftInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 			defer ack()
-			input, err := batch.Read([]byte(msg.Body), a.leftCodec)
+			input, err := batch.Read(msg.Body, a.leftCodec)
 			if err != nil {
 				slog.Error("while deserializing left batch", "err", err)
 				return
@@ -130,7 +130,7 @@ func (a *TwoInputAdapter[L, R, O]) Run() {
 
 	if err := a.rightInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		defer ack()
-		input, err := batch.Read([]byte(msg.Body), a.rightCodec)
+		input, err := batch.Read(msg.Body, a.rightCodec)
 		if err != nil {
 			slog.Error("while deserializing right batch", "err", err)
 			return
@@ -169,8 +169,8 @@ func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
 
 	a.join.HandleQueryEOF(clientID)
 
-	eofBody := batch.WriteEOF(clientID, a.queryID, 0)
-	if err := a.output.Send(middleware.Message{Body: string(eofBody)}); err != nil {
+	eofBody := batch.WriteEOF(clientID, a.queryID, 0, 0, 0)
+	if err := a.output.Send(middleware.Message{Body: eofBody}); err != nil {
 		slog.Error("while sending join EOF downstream", "err", err)
 	}
 }

@@ -54,6 +54,11 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		return filterandsplitter.FilterAndSplitterConfig{}, err
 	}
 
+	seqStoreQueue := os.Getenv("SEQ_STORE_QUEUE")
+	if seqStoreQueue == "" {
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("SEQ_STORE_QUEUE environment variable is required")
+	}
+
 	inputRoutingKeys := []string{}
 	if raw := os.Getenv("INPUT_ROUTING_KEYS"); raw != "" {
 		inputRoutingKeys = strings.Split(raw, ",")
@@ -72,6 +77,8 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		InputMiddlewareQueue:   os.Getenv("INPUT_QUEUE"),
 		InputRoutingKeys:       inputRoutingKeys,
 		QueryID:                uint8(queryID),
+		MonitorPersistPath:     os.Getenv("MONITOR_PERSIST_PATH"),
+		SeqStoreQueue:          seqStoreQueue,
 	}, nil
 }
 

@@ -195,7 +195,7 @@ func (a *AvgAggregator) close() {
 func (a *AvgAggregator) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	input, err := summethod.Read([]byte(msg.Body))
+	input, err := summethod.Read(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		return
@@ -243,13 +243,13 @@ func (a *AvgAggregator) handleEOF(clientID int, total uint32) {
 		CoordinatorId:  uint32(a.id),
 		FilteredAmount: a.msgMonitor.GetForwardedMessagesAmountByClientId(clientID),
 	}
-	if err := a.eofOutput.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(ringMsg))}); err != nil {
+	if err := a.eofOutput.Send(middleware.Message{Body: eofring.SerializeRingMessage(ringMsg)}); err != nil {
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 		return
 	}
 }
 
-func (a *AvgAggregator) onRingConverged(clientID int, total uint32, isCoordinator bool) error {
+func (a *AvgAggregator) onRingConverged(clientID int, _ uint64, total uint32, isCoordinator bool) error {
 	a.mu.Lock()
 	byMethod := a.acumuladores[clientID]
 	delete(a.acumuladores, clientID)
@@ -266,9 +266,9 @@ func (a *AvgAggregator) onRingConverged(clientID int, total uint32, isCoordinato
 		})
 	}
 	if len(avgs) > 0 {
-		body := avgmethod.WriteBatch(clientID, a.queryID, avgs)
+		body := avgmethod.WriteBatch(clientID, a.queryID, 0, 0, avgs)
 		for _, q := range a.outputQueues {
-			if err := q.Send(middleware.Message{Body: string(body)}); err != nil {
+			if err := q.Send(middleware.Message{Body: body}); err != nil {
 				return err
 			}
 		}
@@ -277,9 +277,9 @@ func (a *AvgAggregator) onRingConverged(clientID int, total uint32, isCoordinato
 	if !isCoordinator {
 		return nil
 	}
-	eofBody := avgmethod.WriteEOF(clientID, a.queryID, total)
+	eofBody := avgmethod.WriteEOF(clientID, a.queryID, 0, 0, total)
 	for _, q := range a.outputQueues {
-		if err := q.Send(middleware.Message{Body: string(eofBody)}); err != nil {
+		if err := q.Send(middleware.Message{Body: eofBody}); err != nil {
 			return err
 		}
 	}

@@ -45,7 +45,7 @@ func (b *baseMiddleware) StartConsuming(callbackFunc func(msg Message, ack func(
 				return ErrDisconnected
 			}
 			callbackFunc(
-				Message{Body: string(d.Body), RoutingKey: d.RoutingKey},
+				Message{Body: d.Body, RoutingKey: d.RoutingKey},
 				func() {
 					if err := d.Ack(false); err != nil {
 						slog.Error("ack failed", "err", err)

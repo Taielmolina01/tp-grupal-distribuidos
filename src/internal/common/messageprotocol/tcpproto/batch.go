@@ -4,8 +4,8 @@ import (
 	"io"
 
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/byteconv"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/safeio"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
@@ -36,10 +36,10 @@ func (b *BatchBuilder[T]) IsEmpty() bool { return b.count == 0 }
 
 func (b *BatchBuilder[T]) Flush(w io.Writer) error {
 	var hdr [7]byte
-	h := byteconv.AppendUint8(hdr[:0], b.msgType)
-	h = byteconv.AppendUint16(h, uint16(b.count))
+	h := wire.AppendUint8(hdr[:0], b.msgType)
+	h = wire.AppendUint16(h, uint16(b.count))
 	if b.withPayloadSize {
-		h = byteconv.AppendUint32(h, uint32(len(b.buf)))
+		h = wire.AppendUint32(h, uint32(len(b.buf)))
 	}
 	if err := safeio.WriteAll(w, h); err != nil {
 		return err
@@ -138,8 +138,8 @@ func (b *ResultBatchBuilder) TryAddQuery5(r queryresult.Query5Result) bool {
 
 func (b *ResultBatchBuilder) Flush(w io.Writer) error {
 	var hdr [3]byte
-	h := byteconv.AppendUint8(hdr[:0], uint8(ResultBatch))
-	h = byteconv.AppendUint16(h, uint16(b.count))
+	h := wire.AppendUint8(hdr[:0], uint8(ResultBatch))
+	h = wire.AppendUint16(h, uint16(b.count))
 	if err := safeio.WriteAll(w, h); err != nil {
 		return err
 	}

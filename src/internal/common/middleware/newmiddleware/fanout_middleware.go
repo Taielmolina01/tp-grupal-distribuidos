@@ -72,7 +72,7 @@ func (f *fanoutMiddleware) Send(msg Message) error {
 
 	err := f.channel.Publish(f.exchange, "", true, false, amqp.Publishing{
 		ContentType: "text/plain",
-		Body:        []byte(msg.Body),
+		Body:        msg.Body,
 	})
 	if err != nil {
 		return ErrSend

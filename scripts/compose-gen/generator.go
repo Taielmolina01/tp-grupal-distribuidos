@@ -24,6 +24,7 @@ func generateCompose(cfg *Config) string {
 	writeJoinQ2(&b, cfg)
 
 	b.WriteString("\n  # Query 4\n\n")
+	writeSeqStoreQ4FilterSplitter(&b)
 	writeFilterAndSplitterQ4(&b, cfg)
 	writeJoinAccountsQ4(&b, cfg)
 	writeAcumAccountsQ4(&b, cfg)
@@ -93,7 +94,7 @@ func writeWatchdogs(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - INTERVAL=1s\n")
 		b.WriteString("      - TIMEOUT=1s\n")
 		b.WriteString("      - MAX_RETRIES=3\n")
-		b.WriteString("      - STARTUP=30s\n")
+		b.WriteString("      - STARTUP=5s\n")
 		b.WriteString("      - HEALTH_PORT=8001\n")
 		b.WriteString("      - BULLY_PORT=8002\n")
 		b.WriteString("    volumes:\n")
@@ -202,7 +203,7 @@ func writeCountReducerQ5(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - MOM_PORT=5672\n")
 	b.WriteString("      - ID=0\n")
 	b.WriteString("      - REDUCER_AMOUNT=1\n")
-	fmt.Fprintf(b, "      - INPUT_EOFS_EXPECTED=%d\n", cfg.FilterAmtQ5)
+	b.WriteString("      - INPUT_EOFS_EXPECTED=1\n")
 	b.WriteString("      - INPUT_QUEUE=Q5_filtered_to_count_q\n")
 	b.WriteString("      - OUTPUT_QUEUES=results_queue\n")
 	b.WriteString("      - REDUCER_TYPE=COUNT\n")
@@ -364,6 +365,21 @@ func writeJoinQ2(b *strings.Builder, cfg *Config) {
 	}
 }
 
+func writeSeqStoreQ4FilterSplitter(b *strings.Builder) {
+	b.WriteString("  q4_filter_splitter_seqstore:\n")
+	b.WriteString("    build:\n")
+	b.WriteString("      context: ./src/\n")
+	b.WriteString("      dockerfile: cmd/seqstorenode/Dockerfile\n")
+	b.WriteString("    container_name: q4_filter_splitter_seqstore\n")
+	rabbitmqDepends(b)
+	b.WriteString("    environment:\n")
+	b.WriteString("      - MOM_HOST=rabbitmq\n")
+	b.WriteString("      - MOM_PORT=5672\n")
+	b.WriteString("      - REQUEST_QUEUE=Q4_filter_splitter_seqstore\n")
+	jsonFileLogging(b)
+	b.WriteString("\n")
+}
+
 func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 	for i := range cfg.FilterAndSplitterQ4 {
 		fmt.Fprintf(b, "  q4_filter_and_splitter_%d:\n", i)
@@ -384,6 +400,10 @@ func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - INPUT_ROUTING_KEYS=Q1234_filtered_key\n")
 		b.WriteString("      - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00\n")
 		b.WriteString("      - QUERY_ID=4\n")
+		b.WriteString("      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin\n")
+		b.WriteString("      - SEQ_STORE_QUEUE=Q4_filter_splitter_seqstore\n")
+		b.WriteString("    volumes:\n")
+		fmt.Fprintf(b, "      - ./bkp/q4_filter_and_splitter_%d:/var/bkp\n", i)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}

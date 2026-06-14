@@ -77,7 +77,7 @@ func (s *shardedMiddleware) Send(msg Message) error {
 
 	err := s.channel.Publish(s.exchange, msg.RoutingKey, true, false, amqp.Publishing{
 		ContentType: "text/plain",
-		Body:        []byte(msg.Body),
+		Body:        msg.Body,
 	})
 	if err != nil {
 		return ErrSend

@@ -53,6 +53,18 @@ type clientState struct {
 	eofAmt       int
 	seenAccounts map[account.AccountIdentifier]struct{}
 	builder      *batch.Builder[queryresult.Query4Result]
+	seqReceived  map[int]uint64
+}
+
+func (s *clientState) isDuplicateEOF(senderID int, seq uint64) bool {
+	if seq == 0 {
+		return false
+	}
+	if seq <= s.seqReceived[senderID] {
+		return true
+	}
+	s.seqReceived[senderID] = seq
+	return false
 }
 
 func NewFilterAccountSeen(config FilterAccountSeenConfig) (_ *FilterAccountSeen, err error) {
@@ -135,14 +147,14 @@ func (f *FilterAccountSeen) close() {
 
 func (f *FilterAccountSeen) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	input, err := accountid.Read([]byte(msg.Body))
+	input, err := accountid.Read(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		return
 	}
 
 	if input.EOF {
-		f.handleEOF(input.ClientID, input.Total)
+		f.handleEOF(input.ClientID, input.SenderID, input.Seq, input.Total)
 		return
 	}
 
@@ -172,11 +184,17 @@ func (f *FilterAccountSeen) handleRecord(clientID int, record account.AccountIde
 	}
 }
 
-func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
+func (f *FilterAccountSeen) handleEOF(clientID int, senderID uint8, seq uint64, total uint32) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	state := f.stateFor(clientID)
+
+	if state.isDuplicateEOF(int(senderID), seq) {
+		slog.Warn("Discarding duplicate EOF", "clientID", clientID, "senderID", senderID, "seq", seq)
+		return
+	}
+
 	state.eofAmt++
 
 	if state.eofAmt < f.expectedEOFs {
@@ -187,8 +205,8 @@ func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
 		f.flushResults(clientID, state)
 	}
 
-	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), total)
-	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(eofBody)}); err != nil {
+	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), 0, 0, total)
+	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 
@@ -196,8 +214,8 @@ func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
 }
 
 func (f *FilterAccountSeen) flushResults(clientID int, state *clientState) {
-	body := state.builder.Flush(clientID, uint8(f.queryID))
-	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(body)}); err != nil {
+	body := state.builder.Flush(clientID, uint8(f.queryID), 0, 0)
+	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
 		slog.Error("While sending Q4 results batch", "err", err)
 	}
 }
@@ -208,6 +226,7 @@ func (f *FilterAccountSeen) stateFor(clientID int) *clientState {
 		st = &clientState{
 			seenAccounts: map[account.AccountIdentifier]struct{}{},
 			builder:      batch.NewBuilder(f.maxBatchSize, f.maxBatchBytes, records.Query4ResultCodec),
+			seqReceived:  map[int]uint64{},
 		}
 		f.clientsState[clientID] = st
 	}

@@ -1,6 +1,4 @@
-package byteconv
-
-import "math"
+package csvutil
 
 func SplitFields(line []byte, out [][]byte) int {
 	n, start := 0, 0
@@ -47,38 +45,4 @@ func unixSeconds(year, month, day, hour, minute int64) int64 {
 	doy := (153*m+2)/5 + day - 1
 	doe := yoe*365 + yoe/4 - yoe/100 + doy
 	return (era*146097+doe-719468)*86400 + hour*3600 + minute*60
-}
-
-func AppendUint8(dst []byte, v uint8) []byte {
-	return append(dst, v)
-}
-
-func AppendUint32(dst []byte, v uint32) []byte {
-	return append(dst, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
-}
-
-func AppendUint16(dst []byte, v uint16) []byte {
-	return append(dst, byte(v>>8), byte(v))
-}
-
-func AppendUint64(dst []byte, v uint64) []byte {
-	return append(dst,
-		byte(v>>56), byte(v>>48), byte(v>>40), byte(v>>32),
-		byte(v>>24), byte(v>>16), byte(v>>8), byte(v),
-	)
-}
-
-func AppendInt64(dst []byte, v int64) []byte     { return AppendUint64(dst, uint64(v)) }
-func AppendFloat64(dst []byte, v float64) []byte { return AppendUint64(dst, math.Float64bits(v)) }
-
-func AppendBool(dst []byte, v bool) []byte {
-	if v {
-		return append(dst, 1)
-	}
-	return append(dst, 0)
-}
-
-func AppendString(dst []byte, s string) []byte {
-	dst = AppendUint16(dst, uint16(len(s)))
-	return append(dst, s...)
 }

@@ -191,7 +191,7 @@ func (s *SumByPaymentFormat) close() {
 func (s *SumByPaymentFormat) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	input, err := daterange.Read([]byte(msg.Body))
+	input, err := daterange.Read(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		return
@@ -241,13 +241,13 @@ func (s *SumByPaymentFormat) handleEOF(clientID int, total uint32) {
 		CoordinatorId:  uint32(s.id),
 		FilteredAmount: s.msgMonitor.GetForwardedMessagesAmountByClientId(clientID),
 	}
-	if err := s.eofOutput.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(ringMsg))}); err != nil {
+	if err := s.eofOutput.Send(middleware.Message{Body: eofring.SerializeRingMessage(ringMsg)}); err != nil {
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 		return
 	}
 }
 
-func (s *SumByPaymentFormat) onRingConverged(clientID int, total uint32, isCoordinator bool) error {
+func (s *SumByPaymentFormat) onRingConverged(clientID int, _ uint64, total uint32, isCoordinator bool) error {
 	s.mu.Lock()
 	byMethod := s.acumuladores[clientID]
 	delete(s.acumuladores, clientID)
@@ -259,8 +259,8 @@ func (s *SumByPaymentFormat) onRingConverged(clientID int, total uint32, isCoord
 		byShard[idx] = append(byShard[idx], partial)
 	}
 	for idx, group := range byShard {
-		body := summethod.WriteBatch(clientID, s.queryID, group)
-		if err := s.outputQueues[idx].Send(middleware.Message{Body: string(body)}); err != nil {
+		body := summethod.WriteBatch(clientID, s.queryID, 0, 0, group)
+		if err := s.outputQueues[idx].Send(middleware.Message{Body: body}); err != nil {
 			return err
 		}
 	}
@@ -268,9 +268,9 @@ func (s *SumByPaymentFormat) onRingConverged(clientID int, total uint32, isCoord
 	if !isCoordinator {
 		return nil
 	}
-	eofBody := summethod.WriteEOF(clientID, s.queryID, total)
+	eofBody := summethod.WriteEOF(clientID, s.queryID, 0, 0, total)
 	for _, q := range s.outputQueues {
-		if err := q.Send(middleware.Message{Body: string(eofBody)}); err != nil {
+		if err := q.Send(middleware.Message{Body: eofBody}); err != nil {
 			return err
 		}
 	}

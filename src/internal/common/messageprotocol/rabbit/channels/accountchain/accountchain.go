@@ -9,19 +9,18 @@ import (
 
 type Msg = batch.Msg[account.AccountChain]
 
-// codec: a chain is three account identifiers, reusing the shared codec.
 var codec = wire.Codec[account.AccountChain]{
 	Marshal:   marshalRecord,
 	Unmarshal: unmarshalRecord,
 	MinSize:   3 * records.MinSizeAccountIdentifier,
 }
 
-func WriteBatch(clientID int, queryID uint8, chains []account.AccountChain) []byte {
-	return batch.Write(clientID, queryID, chains, codec)
+func WriteBatch(clientID int, queryID uint8, senderID uint8, seq uint64, chains []account.AccountChain) []byte {
+	return batch.Write(clientID, queryID, senderID, seq, chains, codec)
 }
 
-func WriteEOF(clientID int, queryID uint8, total uint32) []byte {
-	return batch.WriteEOF(clientID, queryID, total)
+func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uint32) []byte {
+	return batch.WriteEOF(clientID, queryID, senderID, seq, total)
 }
 
 func Read(body []byte) (Msg, error) {
