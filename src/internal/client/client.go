@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/byteconv"
+	"tp-grupal-distribuidos/internal/common/csvutil"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -134,7 +134,7 @@ func (client *Client) sendAccountRecords() error {
 	var cols [5][]byte
 	scanner.Scan()
 	for scanner.Scan() {
-		if byteconv.SplitFields(scanner.Bytes(), cols[:]) < 5 {
+		if csvutil.SplitFields(scanner.Bytes(), cols[:]) < 5 {
 			continue
 		}
 		acc := account.Account{
@@ -186,10 +186,10 @@ func (client *Client) sendTransRecords() error {
 	var cols [11][]byte
 	scanner.Scan()
 	for scanner.Scan() {
-		if byteconv.SplitFields(scanner.Bytes(), cols[:]) < 11 {
+		if csvutil.SplitFields(scanner.Bytes(), cols[:]) < 11 {
 			continue
 		}
-		tsUnix, ok := byteconv.ParseTimestampUnix(cols[0])
+		tsUnix, ok := csvutil.ParseTimestampUnix(cols[0])
 		if !ok {
 			slog.Debug("Error while parsing trans timestamp", "raw", string(cols[0]))
 			continue

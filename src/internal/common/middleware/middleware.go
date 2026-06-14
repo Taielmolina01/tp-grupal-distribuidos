@@ -9,7 +9,7 @@ var (
 )
 
 type Message struct {
-	Body string
+	Body []byte
 }
 
 type ConnSettings struct {

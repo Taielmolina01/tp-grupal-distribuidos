@@ -72,6 +72,7 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		InputMiddlewareQueue:   os.Getenv("INPUT_QUEUE"),
 		InputRoutingKeys:       inputRoutingKeys,
 		QueryID:                uint8(queryID),
+		MonitorPersistPath:     os.Getenv("MONITOR_PERSIST_PATH"),
 	}, nil
 }
 

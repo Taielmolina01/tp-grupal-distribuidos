@@ -27,6 +27,8 @@ type FilterAndSplitterConfig struct {
 	InputRoutingKeys     []string
 
 	QueryID uint8
+
+	MonitorPersistPath string
 }
 
 type FilterAndSplitter struct {
@@ -42,7 +44,8 @@ type FilterAndSplitter struct {
 	eofOutput        middleware.Middleware
 	eofHandler       eofring.EofRingAlgorithm
 
-	handlerMessages msgmonitor.MessageMonitor
+	handlerMessages    msgmonitor.MessageMonitor
+	monitorPersistPath string
 
 	queryID uint8
 }

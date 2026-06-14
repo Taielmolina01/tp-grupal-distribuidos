@@ -202,7 +202,7 @@ func writeCountReducerQ5(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - MOM_PORT=5672\n")
 	b.WriteString("      - ID=0\n")
 	b.WriteString("      - REDUCER_AMOUNT=1\n")
-	fmt.Fprintf(b, "      - INPUT_EOFS_EXPECTED=%d\n", cfg.FilterAmtQ5)
+	b.WriteString("      - INPUT_EOFS_EXPECTED=1\n")
 	b.WriteString("      - INPUT_QUEUE=Q5_filtered_to_count_q\n")
 	b.WriteString("      - OUTPUT_QUEUES=results_queue\n")
 	b.WriteString("      - REDUCER_TYPE=COUNT\n")
@@ -384,6 +384,9 @@ func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - INPUT_ROUTING_KEYS=Q1234_filtered_key\n")
 		b.WriteString("      - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00\n")
 		b.WriteString("      - QUERY_ID=4\n")
+		b.WriteString("      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin\n")
+		b.WriteString("    volumes:\n")
+		fmt.Fprintf(b, "      - ./bkp/q4_filter_and_splitter_%d:/var/bkp\n", i)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}

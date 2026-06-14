@@ -12,6 +12,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/shard"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 type AcumAccountsConfig struct {
@@ -32,31 +33,35 @@ type AcumAccountsConfig struct {
 }
 
 type clientState struct {
-	eofAmt int
-	acum   map[account.AccountPair]int8
+	eofAmt      int
+	acum        map[account.AccountPair]int8
+	seqSent     uint64
+	seqReceived map[int]uint64
 }
 
-type AcumAccounts struct {
-	id int
-
-	hasher shard.Hasher
-
-	expectedEOFs     int
-	inputMiddleware  newmiddleware.Middleware
-	outputMiddleware newmiddleware.Middleware
-
-	requiredAmt int8
-
-	clientsState map[int]*clientState
-	queryID      int
+func (s *clientState) nextSeq() uint64 {
+	s.seqSent++
+	return s.seqSent
 }
 
-func NewAcumAccounts(config AcumAccountsConfig) (_ *AcumAccounts, err error) {
+func (s *clientState) isDuplicate(senderID int, seq uint64) bool {
+	if seq == 0 {
+		return false
+	}
+	if seq <= s.seqReceived[senderID] {
+		return true
+	}
+	s.seqReceived[senderID] = seq
+	return false
+}
+
+func NewAcumAccounts(config AcumAccountsConfig) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
 		inputMiddleware  newmiddleware.Middleware
 		outputMiddleware newmiddleware.Middleware
+		err              error
 	)
 
 	defer func() {
@@ -131,14 +136,25 @@ func (a *AcumAccounts) close() {
 
 func (a *AcumAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	input, err := accountchain.Read([]byte(msg.Body))
+	input, err := accountchain.Read(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		return
 	}
 
+	state := a.stateFor(input.ClientID)
+
 	if input.EOF {
+		if state.isDuplicate(int(input.SenderID), input.Seq) {
+			slog.Warn("Discarding duplicate EOF", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
+			return
+		}
 		a.handleEOF(input.ClientID, input.Total)
+		return
+	}
+
+	if state.isDuplicate(int(input.SenderID), input.Seq) {
+		slog.Warn("Discarding duplicate batch", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
 		return
 	}
 
@@ -149,9 +165,13 @@ func (a *AcumAccounts) handleInput(msg newmiddleware.Message, ack func()) {
 		}
 	}
 
+	if len(outgoing) == 0 {
+		return
+	}
+	seq := a.stateFor(input.ClientID).nextSeq()
 	for routingKey, ids := range outgoing {
-		body := accountid.WriteBatch(input.ClientID, uint8(a.queryID), ids)
-		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: string(body), RoutingKey: routingKey}); err != nil {
+		body := accountid.WriteBatch(input.ClientID, uint8(a.queryID), uint8(a.id), seq, ids)
+		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
 			slog.Error("While sending output batch", "err", err)
 		}
 	}
@@ -193,8 +213,8 @@ func (a *AcumAccounts) handleEOF(clientID int, total uint32) {
 		return
 	}
 
-	eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), total)
-	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: string(eofBody), RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
+	eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), uint8(a.id), state.nextSeq(), total)
+	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 
@@ -206,7 +226,8 @@ func (a *AcumAccounts) stateFor(clientID int) *clientState {
 	st, ok := a.clientsState[clientID]
 	if !ok {
 		st = &clientState{
-			acum: map[account.AccountPair]int8{},
+			acum:        map[account.AccountPair]int8{},
+			seqReceived: map[int]uint64{},
 		}
 		a.clientsState[clientID] = st
 	}

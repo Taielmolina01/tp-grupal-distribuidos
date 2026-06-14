@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"strconv"
-	"sync"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
@@ -17,43 +15,12 @@ import (
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 const eofRingPrefix = "SUM_"
 
-type SumConfig struct {
-	Id           int
-	SumAmount    int
-	MomHost      string
-	MomPort      int
-	InputQueue   string
-	OutputQueues []string
-	QueryID      uint8
-}
-
-type SumByPaymentFormat struct {
-	id      int
-	queryID uint8
-
-	inputQueue   middleware.Middleware
-	outputQueues []middleware.Middleware
-	eofInput     middleware.Middleware
-	eofOutput    middleware.Middleware
-	eofHandler   eofring.EofRingAlgorithm
-	msgMonitor   msgmonitor.MessageMonitor
-
-	mu           sync.Mutex
-	acumuladores map[int]map[string]transfer.SumByMethod
-}
-
-func getRingNextIndex(config SumConfig) int {
-	if config.Id == config.SumAmount-1 {
-		return 0
-	}
-	return config.Id + 1
-}
-
-func NewSumByPaymentFormat(config SumConfig) (_ *SumByPaymentFormat, err error) {
+func NewSumByPaymentFormat(config SumConfig) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
@@ -61,6 +28,7 @@ func NewSumByPaymentFormat(config SumConfig) (_ *SumByPaymentFormat, err error) 
 		outputQueues []middleware.Middleware
 		eofInput     middleware.Middleware
 		eofOutput    middleware.Middleware
+		err          error
 	)
 
 	defer func() {
@@ -104,8 +72,15 @@ func NewSumByPaymentFormat(config SumConfig) (_ *SumByPaymentFormat, err error) 
 		outputQueues = append(outputQueues, m)
 	}
 
+	eofInputQueueName, eofOutputQueueName := eofring.GetInputAndOutputQueueNames(
+		config.Id,
+		config.SumAmount,
+		eofRingPrefix,
+		eofRingPrefix,
+	)
+
 	eofInput, err = middleware.CreateQueueMiddleware(
-		eofRingPrefix+strconv.Itoa(config.Id),
+		eofInputQueueName,
 		connSettings,
 	)
 	if err != nil {
@@ -113,7 +88,7 @@ func NewSumByPaymentFormat(config SumConfig) (_ *SumByPaymentFormat, err error) 
 	}
 
 	eofOutput, err = middleware.CreateQueueMiddleware(
-		eofRingPrefix+strconv.Itoa(getRingNextIndex(config)),
+		eofOutputQueueName,
 		connSettings,
 	)
 	if err != nil {
@@ -191,7 +166,7 @@ func (s *SumByPaymentFormat) close() {
 func (s *SumByPaymentFormat) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	input, err := daterange.Read([]byte(msg.Body))
+	input, err := daterange.Read(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		return
@@ -241,7 +216,7 @@ func (s *SumByPaymentFormat) handleEOF(clientID int, total uint32) {
 		CoordinatorId:  uint32(s.id),
 		FilteredAmount: s.msgMonitor.GetForwardedMessagesAmountByClientId(clientID),
 	}
-	if err := s.eofOutput.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(ringMsg))}); err != nil {
+	if err := s.eofOutput.Send(middleware.Message{Body: eofring.SerializeRingMessage(ringMsg)}); err != nil {
 		slog.Error("While sending EOF message to EOF ring", "err", err)
 		return
 	}
@@ -259,20 +234,25 @@ func (s *SumByPaymentFormat) onRingConverged(clientID int, total uint32, isCoord
 		byShard[idx] = append(byShard[idx], partial)
 	}
 	for idx, group := range byShard {
-		body := summethod.WriteBatch(clientID, s.queryID, group)
-		if err := s.outputQueues[idx].Send(middleware.Message{Body: string(body)}); err != nil {
+		body := summethod.WriteBatch(clientID, s.queryID, 0, 0, group)
+		if err := s.outputQueues[idx].Send(middleware.Message{Body: body}); err != nil {
 			return err
 		}
 	}
 
-	if !isCoordinator {
-		return nil
-	}
-	eofBody := summethod.WriteEOF(clientID, s.queryID, total)
-	for _, q := range s.outputQueues {
-		if err := q.Send(middleware.Message{Body: string(eofBody)}); err != nil {
-			return err
+	for i, q := range s.outputQueues {
+		if i >= len(byShard) {
+			body := summethod.WriteEOF(clientID, s.queryID, 0, 0, 0)
+			if err := q.Send(middleware.Message{Body: body}); err != nil {
+				return err
+			}
+		} else {
+			eofBody := summethod.WriteEOF(clientID, s.queryID, 0, 0, uint32(len(byShard[i])))
+			if err := q.Send(middleware.Message{Body: eofBody}); err != nil {
+				return err
+			}
 		}
+
 	}
 	return nil
 }

@@ -1,7 +1,10 @@
 package msgmonitor
 
 import (
+	"os"
 	"sync"
+
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 )
 
 type MessageMonitor interface {
@@ -11,74 +14,112 @@ type MessageMonitor interface {
 	AddForwardedMessagesAmountByClientId(int, uint32)
 	RemoveClient(int)
 	Close()
+	SaveToDisk(path string) error
+	LoadFromDisk(path string) error
+}
+
+type clientState struct {
+	processed uint32
+	forwarded uint32
 }
 
 type messageMonitorImpl struct {
-	processedByClient      map[int]uint32
-	forwardedByClient      map[int]uint32
-	processedMessagesMutex sync.Mutex
-	forwardedMessagesMutex sync.Mutex
+	clients map[int]clientState
+	mu      sync.Mutex
 }
 
 func NewMessageMonitor() MessageMonitor {
 	return &messageMonitorImpl{
-		processedByClient:      map[int]uint32{},
-		forwardedByClient:      map[int]uint32{},
-		processedMessagesMutex: sync.Mutex{},
-		forwardedMessagesMutex: sync.Mutex{},
+		clients: map[int]clientState{},
 	}
 }
 
-func (monitor *messageMonitorImpl) GetProcessedMessagesAmountByClientId(clientID int) uint32 {
-	monitor.processedMessagesMutex.Lock()
-	defer monitor.processedMessagesMutex.Unlock()
-
-	amount := monitor.processedByClient[clientID]
-	return amount
+func (m *messageMonitorImpl) GetProcessedMessagesAmountByClientId(clientID int) uint32 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.clients[clientID].processed
 }
 
-func (monitor *messageMonitorImpl) AddProcessedMessagesAmountByClientId(clientID int, amount uint32) {
-	monitor.processedMessagesMutex.Lock()
-	defer monitor.processedMessagesMutex.Unlock()
-
-	actual := monitor.processedByClient[clientID]
-	actual += amount
-	monitor.processedByClient[clientID] = actual
+func (m *messageMonitorImpl) AddProcessedMessagesAmountByClientId(clientID int, amount uint32) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.clients[clientID]
+	s.processed += amount
+	m.clients[clientID] = s
 }
 
-func (monitor *messageMonitorImpl) GetForwardedMessagesAmountByClientId(clientID int) uint32 {
-	monitor.forwardedMessagesMutex.Lock()
-	defer monitor.forwardedMessagesMutex.Unlock()
-
-	amount := monitor.forwardedByClient[clientID]
-	return amount
+func (m *messageMonitorImpl) GetForwardedMessagesAmountByClientId(clientID int) uint32 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.clients[clientID].forwarded
 }
 
-func (monitor *messageMonitorImpl) AddForwardedMessagesAmountByClientId(clientID int, amount uint32) {
-	monitor.forwardedMessagesMutex.Lock()
-	defer monitor.forwardedMessagesMutex.Unlock()
-
-	actual := monitor.forwardedByClient[clientID]
-	actual += amount
-	monitor.forwardedByClient[clientID] = actual
+func (m *messageMonitorImpl) AddForwardedMessagesAmountByClientId(clientID int, amount uint32) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.clients[clientID]
+	s.forwarded += amount
+	m.clients[clientID] = s
 }
 
-func (monitor *messageMonitorImpl) RemoveClient(clientID int) {
-	monitor.processedMessagesMutex.Lock()
-	delete(monitor.processedByClient, clientID)
-	monitor.processedMessagesMutex.Unlock()
-
-	monitor.forwardedMessagesMutex.Lock()
-	delete(monitor.forwardedByClient, clientID)
-	defer monitor.forwardedMessagesMutex.Unlock()
+func (m *messageMonitorImpl) RemoveClient(clientID int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.clients, clientID)
 }
 
-func (monitor *messageMonitorImpl) Close() {
-	monitor.processedMessagesMutex.Lock()
-	clear(monitor.processedByClient)
-	monitor.processedMessagesMutex.Unlock()
+func (m *messageMonitorImpl) Close() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	clear(m.clients)
+}
 
-	monitor.forwardedMessagesMutex.Lock()
-	clear(monitor.forwardedByClient)
-	monitor.forwardedMessagesMutex.Unlock()
+func (m *messageMonitorImpl) SaveToDisk(path string) error {
+	if path == "" {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var w wire.Writer
+	for clientID, state := range m.clients {
+		w.Int32(int32(clientID))
+		w.Uint32(state.processed)
+		w.Uint32(state.forwarded)
+	}
+
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, w.Bytes(), 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func (m *messageMonitorImpl) LoadFromDisk(path string) error {
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	r := wire.NewReader(data)
+	for r.Remaining() > 0 {
+		clientID := int(r.Int32())
+		processed := r.Uint32()
+		forwarded := r.Uint32()
+
+		m.clients[clientID] = clientState{
+			processed: processed,
+			forwarded: forwarded,
+		}
+	}
+	return nil
 }

@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"sync"
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
@@ -14,53 +13,16 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-type FilterAccountSeenConfig struct {
-	Id int
-
-	ExpectedEOFs int
-
-	OutputMiddleware string
-
-	MomHost string
-	MomPort int
-
-	InputMiddlewarePrefix string
-	QueryID               int
-	MaxBatchSize          int
-	MaxBatchBytes         int
-}
-
-type FilterAccountSeen struct {
-	id int
-
-	mu sync.Mutex
-
-	expectedEOFs  int
-	maxBatchSize  int
-	maxBatchBytes int
-
-	inputMiddleware  newmiddleware.Middleware
-	outputMiddleware newmiddleware.Middleware
-
-	clientsState map[int]*clientState
-
-	queryID int
-}
-
-type clientState struct {
-	eofAmt       int
-	seenAccounts map[account.AccountIdentifier]struct{}
-	builder      *batch.Builder[queryresult.Query4Result]
-}
-
-func NewFilterAccountSeen(config FilterAccountSeenConfig) (_ *FilterAccountSeen, err error) {
+func NewFilterAccountSeen(config FilterAccountSeenConfig) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
 		inputMiddleware  newmiddleware.Middleware
 		outputMiddleware newmiddleware.Middleware
+		err              error
 	)
 
 	defer func() {
@@ -135,14 +97,14 @@ func (f *FilterAccountSeen) close() {
 
 func (f *FilterAccountSeen) handleInput(msg newmiddleware.Message, ack func()) {
 	defer ack()
-	input, err := accountid.Read([]byte(msg.Body))
+	input, err := accountid.Read(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		return
 	}
 
 	if input.EOF {
-		f.handleEOF(input.ClientID, input.Total)
+		f.handleEOF(input.ClientID, input.SenderID, input.Seq, input.Total)
 		return
 	}
 
@@ -172,11 +134,17 @@ func (f *FilterAccountSeen) handleRecord(clientID int, record account.AccountIde
 	}
 }
 
-func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
+func (f *FilterAccountSeen) handleEOF(clientID int, senderID uint8, seq uint64, total uint32) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	state := f.stateFor(clientID)
+
+	if state.isDuplicateEOF(int(senderID), seq) {
+		slog.Warn("Discarding duplicate EOF", "clientID", clientID, "senderID", senderID, "seq", seq)
+		return
+	}
+
 	state.eofAmt++
 
 	if state.eofAmt < f.expectedEOFs {
@@ -187,8 +155,8 @@ func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
 		f.flushResults(clientID, state)
 	}
 
-	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), total)
-	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(eofBody)}); err != nil {
+	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), 0, 0, total)
+	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
 
@@ -196,8 +164,8 @@ func (f *FilterAccountSeen) handleEOF(clientID int, total uint32) {
 }
 
 func (f *FilterAccountSeen) flushResults(clientID int, state *clientState) {
-	body := state.builder.Flush(clientID, uint8(f.queryID))
-	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: string(body)}); err != nil {
+	body := state.builder.Flush(clientID, uint8(f.queryID), 0, 0)
+	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
 		slog.Error("While sending Q4 results batch", "err", err)
 	}
 }
@@ -208,6 +176,7 @@ func (f *FilterAccountSeen) stateFor(clientID int) *clientState {
 		st = &clientState{
 			seenAccounts: map[account.AccountIdentifier]struct{}{},
 			builder:      batch.NewBuilder(f.maxBatchSize, f.maxBatchBytes, records.Query4ResultCodec),
+			seqReceived:  map[int]uint64{},
 		}
 		f.clientsState[clientID] = st
 	}

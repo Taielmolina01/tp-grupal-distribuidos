@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
-	"time"
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
@@ -18,47 +17,10 @@ import (
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 const eofRingPrefix = "DATE_RANGE_SPLITTER_"
-
-type DateRangeSplitterConfig struct {
-	Id             int
-	SplitterAmount int
-
-	MomHost string
-	MomPort int
-
-	InputExchange    string
-	InputQueue       string
-	InputRoutingKeys []string
-
-	OutputQueues []string
-
-	QueryID uint8
-
-	AvgPeriodStart    time.Time
-	AvgPeriodEnd      time.Time
-	FilterPeriodStart time.Time
-	FilterPeriodEnd   time.Time
-}
-
-type DateRangeSplitter struct {
-	id uint32
-
-	inputExchange middleware.Middleware
-
-	outputQueues []middleware.Middleware
-	monitors     []msgmonitor.MessageMonitor
-	eofInputs    []middleware.Middleware
-	eofOutputs   []middleware.Middleware
-	eofHandlers  []eofring.EofRingAlgorithm
-
-	queryID uint8
-
-	avgPeriodStart, avgPeriodEnd       time.Time
-	filterPeriodStart, filterPeriodEnd time.Time
-}
 
 func getRingNextIndex(config DateRangeSplitterConfig) int {
 	if config.Id == config.SplitterAmount-1 {
@@ -67,7 +29,7 @@ func getRingNextIndex(config DateRangeSplitterConfig) int {
 	return config.Id + 1
 }
 
-func NewDateRangeSplitter(config DateRangeSplitterConfig) (_ *DateRangeSplitter, err error) {
+func NewDateRangeSplitter(config DateRangeSplitterConfig) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
@@ -75,6 +37,7 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (_ *DateRangeSplitter,
 		outputQueues  []middleware.Middleware
 		eofInputs     []middleware.Middleware
 		eofOutputs    []middleware.Middleware
+		err           error
 	)
 
 	defer func() {
@@ -180,7 +143,7 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (_ *DateRangeSplitter,
 				if !isCoordinator {
 					return nil
 				}
-				if err := s.outputQueues[idx].Send(middleware.Message{Body: string(batch.WriteEOF(clientID, s.queryID, total))}); err != nil {
+				if err := s.outputQueues[idx].Send(middleware.Message{Body: batch.WriteEOF(clientID, s.queryID, 0, 0, total)}); err != nil {
 					return err
 				}
 				return nil
@@ -246,7 +209,7 @@ func (s *DateRangeSplitter) close() {
 func (s *DateRangeSplitter) handleInput(msg middleware.Message, ack func()) {
 	defer ack()
 
-	input, err := batch.Read([]byte(msg.Body), records.TransferAfterCurrencyCodec)
+	input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
 		return
@@ -285,12 +248,12 @@ func (s *DateRangeSplitter) handleBatch(clientID int, recs []transfer.TransferAf
 	}
 
 	if len(avg) > 0 {
-		if err := s.outputQueues[0].Send(middleware.Message{Body: string(daterange.WriteBatch(clientID, s.queryID, avg))}); err != nil {
+		if err := s.outputQueues[0].Send(middleware.Message{Body: daterange.WriteBatch(clientID, s.queryID, 0, 0, avg)}); err != nil {
 			slog.Error("While sending Q3 avg batch", "err", err)
 		}
 	}
 	if len(filter) > 0 {
-		if err := s.outputQueues[1].Send(middleware.Message{Body: string(q3filter.WriteBatch(clientID, s.queryID, filter))}); err != nil {
+		if err := s.outputQueues[1].Send(middleware.Message{Body: q3filter.WriteBatch(clientID, s.queryID, 0, 0, filter)}); err != nil {
 			slog.Error("While sending Q3 filter batch", "err", err)
 		}
 	}
@@ -305,7 +268,7 @@ func (s *DateRangeSplitter) handleEOF(clientID int, total uint32) {
 			CoordinatorId:  uint32(s.id),
 			FilteredAmount: s.monitors[idx].GetForwardedMessagesAmountByClientId(clientID),
 		}
-		if err := eofOut.Send(middleware.Message{Body: string(eofring.SerializeRingMessage(ringMsg))}); err != nil {
+		if err := eofOut.Send(middleware.Message{Body: eofring.SerializeRingMessage(ringMsg)}); err != nil {
 			slog.Error("While sending EOF message to EOF ring", "err", err)
 			continue
 		}
