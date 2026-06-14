@@ -1,0 +1,31 @@
+src/internal/filter/filterandsplitter/types.go
+  s_5d917108152089::t_f9054ebc0d7961 51
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_5d917108152089::t_65e852bc8dbb6b 350
+  s_5d917108152089::t_e7d81d00b96397 5
+  s_5d917108152089::t_5b4168286ba7eb 267,272,277,283,306,313-314,318,321,323-326,328-329,331-332,334
+  s_5d917108152089::t_2897aaa27a004d 309,311-312
+  s_5d917108152089::t_c20767d43f3ae6 291,315
+  s_5d917108152089::t_f7eb183dd3c086 316
+  s_5d917108152089::t_3864ccf3ff192c 145
+  s_5d917108152089::t_0057c11a9e4312 158-159,161-163
+  s_5d917108152089::t_dd89df93af37c6 346-349,351-369
+src/internal/common/diskstore/diskstore.go
+  s_5d917108152089::t_b27d86155b5bf5 36-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "71f73d9b88128e79758bdb1efe488ba4b0bc697a",
+  "prompts": {},
+  "sessions": {
+    "s_5d917108152089": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "af48c0c3-8517-4687-a76d-120a4070a2dd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
