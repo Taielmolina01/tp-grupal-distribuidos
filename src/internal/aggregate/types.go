@@ -33,8 +33,6 @@ type AvgAggregator struct {
 
 	inputQueue   middleware.Middleware
 	outputQueues []middleware.Middleware
-	eofInput     middleware.Middleware
-	eofOutput    middleware.Middleware
 	msgMonitor   msgmonitor.ShardedMessageMonitor
 
 	mu           sync.Mutex

@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/summethod"
 	"tp-grupal-distribuidos/internal/common/middleware"
@@ -16,7 +15,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-const eofRingPrefix = "AGGREGATE_"
+const FILE_NAME = "avg_aggregator_%d"
 
 func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
@@ -70,29 +69,6 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 		outputQueues = append(outputQueues, m)
 	}
 
-	eofRingInputQueueName, eofRingOutputQueueName := eofring.GetInputAndOutputQueueNames(
-		config.Id,
-		config.AggregateAmount,
-		eofRingPrefix,
-		eofRingPrefix,
-	)
-
-	eofInput, err = middleware.CreateQueueMiddleware(
-		eofRingInputQueueName,
-		connSettings,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("creating EOF input queue: %w", err)
-	}
-
-	eofOutput, err = middleware.CreateQueueMiddleware(
-		eofRingOutputQueueName,
-		connSettings,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("creating EOF output queue: %w", err)
-	}
-
 	msgMonitor := msgmonitor.NewShardedMessageMonitor()
 
 	a := &AvgAggregator{
@@ -100,12 +76,14 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 		queryID:      config.QueryID,
 		inputQueue:   inputQueue,
 		outputQueues: outputQueues,
-		eofInput:     eofInput,
-		eofOutput:    eofOutput,
 		msgMonitor:   msgMonitor,
 		acumuladores: map[int]map[string]partial{},
 		sumAmount:    config.SumAmount,
 		eofsByClient: map[int]eofInfo{},
+	}
+
+	if err := a.msgMonitor.LoadFromDisk(fmt.Sprintf(FILE_NAME, a.id)); err != nil {
+		slog.Error("While loading message monitor from disk", "err", err)
 	}
 
 	return a, nil
@@ -114,6 +92,7 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 func (a *AvgAggregator) Run() {
 	defer a.close()
 	slog.Info("Starting avg-aggregator consumers", "aggregate_id", a.id)
+
 	if err := a.inputQueue.StartConsuming(func(msg middleware.Message, ack, _ func()) {
 		a.handleInput(msg, ack)
 	}); err != nil {
@@ -130,20 +109,12 @@ func (a *AvgAggregator) HandleSignals() {
 	if err := a.inputQueue.StopConsuming(); err != nil {
 		slog.Error("While stopping input queue consumer", "aggregate_id", a.id, "err", err)
 	}
-	if err := a.eofInput.StopConsuming(); err != nil {
-		slog.Error("While stopping EOF input consumer", "aggregate_id", a.id, "err", err)
-	}
+
 }
 
 func (a *AvgAggregator) close() {
 	if err := a.inputQueue.Close(); err != nil {
 		slog.Error("While closing input queue", "aggregate_id", a.id, "err", err)
-	}
-	if err := a.eofInput.Close(); err != nil {
-		slog.Error("While closing EOF input", "aggregate_id", a.id, "err", err)
-	}
-	if err := a.eofOutput.Close(); err != nil {
-		slog.Error("While closing EOF output", "aggregate_id", a.id, "err", err)
 	}
 	for _, q := range a.outputQueues {
 		if err := q.Close(); err != nil {
@@ -168,6 +139,10 @@ func (a *AvgAggregator) handleInput(msg middleware.Message, ack func()) {
 
 	for i := range input.Records {
 		a.handleRecord(input.ClientID, input.Records[i])
+	}
+
+	if err := a.msgMonitor.SaveToDisk(fmt.Sprintf(FILE_NAME, a.id)); err != nil {
+		slog.Error("While saving message monitor to disk", "err", err)
 	}
 }
 
