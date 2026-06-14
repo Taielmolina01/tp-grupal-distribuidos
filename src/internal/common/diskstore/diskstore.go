@@ -33,6 +33,13 @@ func WriteAtomic(path string, data map[string][]byte) error {
 	return Commit(path)
 }
 
+func RemoveIfExists(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 func Read(path string) (map[string][]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {

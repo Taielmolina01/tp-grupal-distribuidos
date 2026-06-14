@@ -48,6 +48,7 @@ type FilterAndSplitter struct {
 
 	handlerMessages    msgmonitor.MessageMonitor
 	monitorPersistPath string
+	tempMonitorPath    string
 	outputPersistPath  string
 
 	seqStore newmiddleware.RPCClient
