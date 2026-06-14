@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/summethod"
@@ -105,17 +104,9 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 		eofOutput:    eofOutput,
 		msgMonitor:   msgMonitor,
 		acumuladores: map[int]map[string]partial{},
+		sumAmount:    config.SumAmount,
+		eofsByClient: map[int]eofInfo{},
 	}
-
-	a.eofHandler = eofring.CreateEofRingAlgorithm(
-		eofInput,
-		eofOutput,
-		config.AggregateAmount,
-		uint32(config.Id),
-		msgMonitor,
-		a.onRingConverged,
-		config.QueryID,
-	)
 
 	return a, nil
 }
@@ -123,7 +114,6 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 func (a *AvgAggregator) Run() {
 	defer a.close()
 	slog.Info("Starting avg-aggregator consumers", "aggregate_id", a.id)
-	go a.eofHandler.Run()
 	if err := a.inputQueue.StartConsuming(func(msg middleware.Message, ack, _ func()) {
 		a.handleInput(msg, ack)
 	}); err != nil {
@@ -206,20 +196,26 @@ func (a *AvgAggregator) handleRecord(clientID int, p transfer.SumByMethod) {
 }
 
 func (a *AvgAggregator) handleEOF(clientID int, total uint32) {
-	ringMsg := eofmessagetypes.EofRingMessage{
-		RealAmount:     total,
-		ActualAmount:   a.msgMonitor.GetProcessedMessagesAmountByClientId(clientID),
-		ClientId:       clientID,
-		CoordinatorId:  uint32(a.id),
-		FilteredAmount: a.msgMonitor.GetForwardedMessagesAmountByClientId(clientID),
+	info, ok := a.eofsByClient[clientID]
+	if !ok {
+		a.eofsByClient[clientID] = eofInfo{
+			amount:    1,
+			processed: total,
+		}
+	} else {
+		info.amount++
+		info.processed += total
+		a.eofsByClient[clientID] = info
 	}
-	if err := a.eofOutput.Send(middleware.Message{Body: eofring.SerializeRingMessage(ringMsg)}); err != nil {
-		slog.Error("While sending EOF message to EOF ring", "err", err)
+
+	if info.amount < a.sumAmount {
 		return
 	}
-}
 
-func (a *AvgAggregator) onRingConverged(clientID int, total uint32, isCoordinator bool) error {
+	if info.processed != a.msgMonitor.GetProcessedMessagesAmountByClientId(clientID) {
+		slog.Warn("Received EOF with total that does not match processed messages amount", "client_id", clientID, "total_in_eof", info.processed, "processed_amount", a.msgMonitor.GetProcessedMessagesAmountByClientId(clientID))
+	}
+
 	a.mu.Lock()
 	byMethod := a.acumuladores[clientID]
 	delete(a.acumuladores, clientID)
@@ -235,23 +231,20 @@ func (a *AvgAggregator) onRingConverged(clientID int, total uint32, isCoordinato
 			Avg:    p.totalSum / float64(p.totalCount),
 		})
 	}
+
 	if len(avgs) > 0 {
 		body := avgmethod.WriteBatch(clientID, a.queryID, 0, 0, avgs)
 		for _, q := range a.outputQueues {
 			if err := q.Send(middleware.Message{Body: body}); err != nil {
-				return err
+				slog.Error("While sending output message", "client_id", clientID, "err", err)
 			}
 		}
 	}
 
-	if !isCoordinator {
-		return nil
-	}
-	eofBody := avgmethod.WriteEOF(clientID, a.queryID, 0, 0, total)
+	eofBody := avgmethod.WriteEOF(clientID, a.queryID, 0, 0, uint32(len(avgs)))
 	for _, q := range a.outputQueues {
 		if err := q.Send(middleware.Message{Body: eofBody}); err != nil {
-			return err
+			slog.Error("While sending output EOF", "client_id", clientID, "err", err)
 		}
 	}
-	return nil
 }

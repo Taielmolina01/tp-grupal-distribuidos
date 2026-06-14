@@ -240,14 +240,19 @@ func (s *SumByPaymentFormat) onRingConverged(clientID int, total uint32, isCoord
 		}
 	}
 
-	if !isCoordinator {
-		return nil
-	}
-	eofBody := summethod.WriteEOF(clientID, s.queryID, 0, 0, total)
-	for _, q := range s.outputQueues {
-		if err := q.Send(middleware.Message{Body: eofBody}); err != nil {
-			return err
+	for i, q := range s.outputQueues {
+		if i >= len(byShard) {
+			body := summethod.WriteEOF(clientID, s.queryID, 0, 0, 0)
+			if err := q.Send(middleware.Message{Body: body}); err != nil {
+				return err
+			}
+		} else {
+			eofBody := summethod.WriteEOF(clientID, s.queryID, 0, 0, uint32(len(byShard[i])))
+			if err := q.Send(middleware.Message{Body: eofBody}); err != nil {
+				return err
+			}
 		}
+
 	}
 	return nil
 }

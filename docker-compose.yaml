@@ -612,6 +612,7 @@ services:
         condition: service_healthy
     environment:
       - ID=0
+      - SUM_AMOUNT=2
       - AGGREGATE_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
@@ -629,6 +630,7 @@ services:
         condition: service_healthy
     environment:
       - ID=1
+      - SUM_AMOUNT=2
       - AGGREGATE_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
