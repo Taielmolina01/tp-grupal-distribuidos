@@ -234,7 +234,7 @@ func (s *SumByPaymentFormat) onRingConverged(clientID int, total uint32, isCoord
 		byShard[idx] = append(byShard[idx], partial)
 	}
 	for idx, group := range byShard {
-		body := summethod.WriteBatch(clientID, s.queryID, 0, 0, group)
+		body := summethod.WriteBatch(clientID, s.queryID, uint8(s.id), 0, group)
 		if err := s.outputQueues[idx].Send(middleware.Message{Body: body}); err != nil {
 			return err
 		}

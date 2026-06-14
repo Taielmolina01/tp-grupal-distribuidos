@@ -105,74 +105,17 @@ func newTwoInputJoin[L, R, O any](
 func (a *TwoInputAdapter[L, R, O]) Run() {
 	done := make(chan struct{})
 	go func() {
-		if err := a.leftInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-			defer ack()
-			input, err := batch.Read(msg.Body, a.leftCodec)
-			if err != nil {
-				slog.Error("while deserializing left batch", "err", err)
-				return
-			}
-			if input.EOF {
-				a.lock.Lock()
-				a.leftEofCount[input.ClientID]++
-				a.lock.Unlock()
-				a.handleEOF(input.ClientID)
-				return
-			}
-			for i := range input.Records {
-				a.join.HandleLeft(input.ClientID, input.Records[i])
-			}
-		}); err != nil {
+		if err := a.leftInput.StartConsuming(a.HandleLeft); err != nil {
 			slog.Error("while consuming left input", "err", err)
 		}
 		close(done)
 	}()
 
-	if err := a.rightInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		defer ack()
-		input, err := batch.Read(msg.Body, a.rightCodec)
-		if err != nil {
-			slog.Error("while deserializing right batch", "err", err)
-			return
-		}
-		if input.EOF {
-			a.lock.Lock()
-			a.rightEofCount[input.ClientID]++
-			a.lock.Unlock()
-			a.handleEOF(input.ClientID)
-			return
-		}
-		for i := range input.Records {
-			a.join.HandleRight(input.ClientID, input.Records[i])
-		}
-	}); err != nil {
+	if err := a.rightInput.StartConsuming(a.HandleRight); err != nil {
 		slog.Error("while consuming right input", "err", err)
 	}
 
 	<-done
-}
-
-func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
-	a.lock.Lock()
-	if a.fired[clientID] {
-		a.lock.Unlock()
-		return
-	}
-	if a.leftEofCount[clientID] < a.leftEofsExpected || a.rightEofCount[clientID] < a.rightEofsExpected {
-		a.lock.Unlock()
-		return
-	}
-	a.fired[clientID] = true
-	delete(a.leftEofCount, clientID)
-	delete(a.rightEofCount, clientID)
-	a.lock.Unlock()
-
-	a.join.HandleQueryEOF(clientID)
-
-	eofBody := batch.WriteEOF(clientID, a.queryID, 0, 0, 0)
-	if err := a.output.Send(middleware.Message{Body: eofBody}); err != nil {
-		slog.Error("while sending join EOF downstream", "err", err)
-	}
 }
 
 func (a *TwoInputAdapter[L, R, O]) HandleSignals() {
@@ -194,4 +137,84 @@ func (a *TwoInputAdapter[L, R, O]) HandleSignals() {
 	if err := a.join.output.Close(); err != nil {
 		slog.Error("while closing output", "err", err)
 	}
+}
+
+// Consuming handlers
+
+func (a *TwoInputAdapter[L, R, O]) HandleLeft(msg middleware.Message, ack, nack func()) {
+	defer ack()
+
+	input, err := batch.Read(msg.Body, a.leftCodec)
+	if err != nil {
+		slog.Error("while deserializing left batch", "err", err)
+		return
+	}
+	if input.EOF {
+		a.HandleLeftEof(input.ClientID)
+		a.handleEOF(input.ClientID)
+		return
+	}
+	for i := range input.Records {
+		a.join.HandleLeft(input.ClientID, input.Records[i])
+	}
+}
+
+func (a *TwoInputAdapter[L, R, O]) HandleRight(msg middleware.Message, ack, nack func()) {
+	defer ack()
+
+	input, err := batch.Read(msg.Body, a.rightCodec)
+	if err != nil {
+		slog.Error("while deserializing right batch", "err", err)
+		return
+	}
+	if input.EOF {
+		a.HandleRightEof(input.ClientID)
+		a.handleEOF(input.ClientID)
+		return
+	}
+	for i := range input.Records {
+		a.join.HandleRight(input.ClientID, input.Records[i])
+	}
+}
+
+// Helpers with locking for EOF handling
+
+func (a *TwoInputAdapter[L, R, O]) HandleLeftEof(clientID int) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	a.leftEofCount[clientID]++
+}
+
+func (a *TwoInputAdapter[L, R, O]) HandleRightEof(clientID int) {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	a.rightEofCount[clientID]++
+}
+func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
+	if !a.handleEofWithLock(clientID) {
+		return
+	}
+
+	a.join.HandleQueryEOF(clientID)
+
+	eofBody := batch.WriteEOF(clientID, a.queryID, 0, 0, 0)
+	if err := a.output.Send(middleware.Message{Body: eofBody}); err != nil {
+		slog.Error("while sending join EOF downstream", "err", err)
+	}
+}
+
+func (a *TwoInputAdapter[L, R, O]) handleEofWithLock(clientId int) bool {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	if a.fired[clientId] || a.leftEofCount[clientId] < a.leftEofsExpected || a.rightEofCount[clientId] < a.rightEofsExpected {
+		return false
+	}
+	a.fired[clientId] = true
+	delete(a.leftEofCount, clientId)
+	delete(a.rightEofCount, clientId)
+
+	return true
 }
