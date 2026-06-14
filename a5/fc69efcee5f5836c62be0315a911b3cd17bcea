@@ -1,0 +1,33 @@
+src/internal/seqstorenode/seqstorenode.go
+  s_5d917108152089::t_15371b30fee22a 11
+  s_5d917108152089::t_7fbc60065fbc66 61,75
+  s_5d917108152089::t_bec64fb720d2d0 68-74,76
+  s_5d917108152089::t_b39aaae3d937cf 22-24,36-38
+src/internal/common/seqstoreprotocol/seqstoreprotocol.go
+  s_5d917108152089::t_e3bdafc50c5271 1,8,10,12-13,17,19,21,33
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_5d917108152089::t_ca45683bcdb253 21
+  s_5d917108152089::t_f76c7f4ee3ca1c 114-117
+  s_5d917108152089::t_c7e31517403cdd 276
+  s_5d917108152089::t_8dbd6cd0fdedde 353-356,372-379
+  s_5d917108152089::t_d65681f63c96fb 388
+  s_5d917108152089::t_5b6a333f77d88e 389
+src/cmd/seqstorenode/Dockerfile
+  s_5d917108152089::t_4b284fae1bad37 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "a5fc69efcee5f5836c62be0315a911b3cd17bcea",
+  "prompts": {},
+  "sessions": {
+    "s_5d917108152089": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "af48c0c3-8517-4687-a76d-120a4070a2dd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
