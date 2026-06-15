@@ -1,7 +1,6 @@
 package filterandsplitter
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,6 +18,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/seqstoreprotocol"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -26,6 +26,7 @@ import (
 
 const (
 	_EOF_RING_QUEUE_PREFIX = "FILTER_AND_SPLIITER_EOF"
+	_EOF_OUTPUT_KEY        = "__eof"
 )
 
 func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error) {
@@ -110,6 +111,10 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		return nil, fmt.Errorf("creating seqstore client: %w", err)
 	}
 
+	if err = os.MkdirAll(filepath.Dir(config.MonitorPersistPath), 0755); err != nil {
+		return nil, fmt.Errorf("creating persist directory: %w", err)
+	}
+
 	node := &FilterAndSplitter{
 		id:                 config.Id,
 		startDate:          config.StartDate,
@@ -167,7 +172,7 @@ func (f *FilterAndSplitter) Run() {
 	go f.eofHandler.Run()
 
 	if err := f.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		f.newHandleInput(msg, ack, nack)
+		f.handleInput(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
 	}
@@ -243,19 +248,7 @@ func (f *FilterAndSplitter) handleBatch(clientID int, seq uint64, records []tran
 	return output
 }
 
-func (f *FilterAndSplitter) sendEOF(clientID int, total uint32, seq uint64) error {
-	eofRingMessage := eofmessagetypes.EofRingMessage{
-		RealAmount:     total,
-		ActualAmount:   f.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
-		ClientId:       clientID,
-		CoordinatorId:  uint32(f.id),
-		FilteredAmount: f.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
-		Seq:            seq,
-	}
-	return f.eofOutput.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)})
-}
-
-func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), nack func()) {
+func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack func()) {
 	input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
 	if err != nil {
 		slog.Error("While deserializing input batch", "err", err)
@@ -266,22 +259,26 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 	//
 	byShard, err := f.processBatch(input)
 	if err != nil {
+		slog.Error("While processing batch", "err", err)
 		ack()
 		return
 	}
 
 	if err = f.writeTemp(); err != nil {
+		slog.Error("While writing temp", "err", err)
 		nack()
 		return
 	}
 
 	if err = f.writeOutput(byShard); err != nil {
+		slog.Error("While writing ouput", "err", err)
 		nack()
 		return
 	}
 
-	accept, err := f.tryCommit(input.Seq)
+	accept, err := f.tryCommit(input.ClientID, input.Seq, input.EOF)
 	if err != nil {
+		slog.Error("While trying to commit", "err", err)
 		nack()
 		return
 	}
@@ -292,14 +289,6 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 	if !accept {
 		slog.Warn("Seq rejected, rolling back", "seq", input.Seq)
 		f.recoverState()
-		return
-	}
-
-	if input.EOF {
-		if err = f.sendEOF(input.ClientID, input.Total, input.Seq); err != nil {
-			slog.Error("sendEOF failed, killing process", "err", err)
-			f.kill()
-		}
 		return
 	}
 
@@ -316,6 +305,8 @@ func (f *FilterAndSplitter) newHandleInput(msg middleware.Message, ack func(), n
 }
 
 func (f *FilterAndSplitter) recoverState() {
+	return
+
 	if err := diskstore.RemoveIfExists(f.outputPersistPath); err != nil {
 		slog.Error("recoverState: cannot clean output, killing node", "err", err)
 		f.kill()
@@ -339,13 +330,23 @@ func (f *FilterAndSplitter) kill() {
 
 func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterCurrency]) (map[string][]byte, error) {
 	if input.EOF {
-		return nil, nil
+		msg := eofmessagetypes.EofRingMessage{
+			RealAmount:     input.Total,
+			ActualAmount:   f.handlerMessages.GetProcessedMessagesAmountByClientId(input.ClientID),
+			ClientId:       input.ClientID,
+			CoordinatorId:  uint32(f.id),
+			FilteredAmount: f.handlerMessages.GetForwardedMessagesAmountByClientId(input.ClientID),
+			Seq:            input.Seq,
+		}
+		return map[string][]byte{_EOF_OUTPUT_KEY: eofring.SerializeRingMessage(msg)}, nil
 	}
 
 	return f.handleBatch(input.ClientID, input.Seq, input.Records), nil
 }
 
 func (f *FilterAndSplitter) writeTemp() error {
+	return nil
+
 	return f.handlerMessages.SaveToDisk(f.tempMonitorPath)
 }
 
@@ -357,6 +358,10 @@ func (f *FilterAndSplitter) commitState() error {
 }
 
 func (f *FilterAndSplitter) startupRecovery() error {
+	if err := f.loadState(); err != nil {
+		return fmt.Errorf("startup recovery: load state: %w", err)
+	}
+
 	byShard, err := diskstore.Read(f.outputPersistPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -372,17 +377,26 @@ func (f *FilterAndSplitter) startupRecovery() error {
 	return f.commitState()
 }
 
+func (f *FilterAndSplitter) loadState() error {
+	return nil
+
+	if _, err := os.Stat(f.tempMonitorPath); err == nil {
+		if err := f.handlerMessages.LoadFromDisk(f.tempMonitorPath); err == nil {
+			return nil
+		}
+		slog.Warn("Temp monitor state unreadable, falling back to backup", "filter_id", f.id)
+	}
+	return f.handlerMessages.LoadFromDisk(f.monitorPersistPath)
+}
+
 func (f *FilterAndSplitter) writeOutput(byShard map[string][]byte) error {
 	return diskstore.WriteAtomic(f.outputPersistPath, byShard)
 }
 
 const seqStoreTimeout = 5 * time.Second
 
-func (f *FilterAndSplitter) tryCommit(seq uint64) (bool, error) {
-	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, seq)
-
-	resp, err := f.seqStore.Call(buf, seqStoreTimeout)
+func (f *FilterAndSplitter) tryCommit(clientID int, seq uint64, isEOF bool) (bool, error) {
+	resp, err := f.seqStore.Call(seqstoreprotocol.EncodeRequest(clientID, seq, isEOF), seqStoreTimeout)
 	if err != nil {
 		return false, fmt.Errorf("tryCommit rpc call: %w", err)
 	}
@@ -392,8 +406,13 @@ func (f *FilterAndSplitter) tryCommit(seq uint64) (bool, error) {
 	return resp[0] != 0, nil
 }
 
-func (f *FilterAndSplitter) sendOutputs(byShard map[string][]byte) error {
-	for routingKey, body := range byShard {
+func (f *FilterAndSplitter) sendOutputs(output map[string][]byte) error {
+	if body, ok := output[_EOF_OUTPUT_KEY]; ok {
+		slog.Info("SEND OUTPUT")
+		return f.eofOutput.Send(middleware.Message{Body: body})
+	}
+
+	for routingKey, body := range output {
 		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
 			return fmt.Errorf("sending shard %s: %w", routingKey, err)
 		}

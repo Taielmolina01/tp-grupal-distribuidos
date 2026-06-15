@@ -34,11 +34,17 @@ func loadConfig() (seqstorenode.Config, error) {
 		capacity = parsed
 	}
 
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return seqstorenode.Config{}, errors.New("PERSIST_PATH is required")
+	}
+
 	return seqstorenode.Config{
 		MomHost:      momHost,
 		MomPort:      momPort,
 		RequestQueue: requestQueue,
 		Capacity:     capacity,
+		PersistPath:  persistPath,
 	}, nil
 }
 

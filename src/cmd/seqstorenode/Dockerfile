@@ -5,7 +5,10 @@ WORKDIR /build/
 COPY go.mod .
 COPY go.sum .
 COPY internal/common/seqstore ./internal/common/seqstore
+COPY internal/common/seqstoreprotocol ./internal/common/seqstoreprotocol
 COPY internal/common/middleware/newmiddleware ./internal/common/middleware/newmiddleware
+COPY internal/common/messageprotocol/safeio ./internal/common/messageprotocol/safeio
+COPY internal/common/diskstore ./internal/common/diskstore
 COPY internal/seqstorenode ./internal/seqstorenode
 COPY cmd/seqstorenode ./cmd/seqstorenode
 RUN go mod download

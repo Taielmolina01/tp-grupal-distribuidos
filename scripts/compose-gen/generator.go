@@ -372,6 +372,7 @@ func writeSeqStoreQ4FilterSplitter(b *strings.Builder) {
 	b.WriteString("    environment:\n")
 	b.WriteString("      - MOM_HOST=rabbitmq\n")
 	b.WriteString("      - MOM_PORT=5672\n")
+	b.WriteString("      - PERSIST_PATH=/var/bkp/Q4_filter_splitter_seqstore.bin\n")
 	b.WriteString("      - REQUEST_QUEUE=Q4_filter_splitter_seqstore\n")
 	jsonFileLogging(b)
 	b.WriteString("\n")
@@ -399,8 +400,6 @@ func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - QUERY_ID=4\n")
 		b.WriteString("      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin\n")
 		b.WriteString("      - SEQ_STORE_QUEUE=Q4_filter_splitter_seqstore\n")
-		b.WriteString("    volumes:\n")
-		fmt.Fprintf(b, "      - ./bkp/q4_filter_and_splitter_%d:/var/bkp\n", i)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
