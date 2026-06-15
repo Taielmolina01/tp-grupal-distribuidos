@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
@@ -23,67 +22,14 @@ import (
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
+	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 const eofRingPrefix = "AVG_FILTER_T_"
 
 const avgFractionThreshold = 100
 
-type AverageFilterConfig struct {
-	Id           int
-	FilterAmount int
-
-	MomHost string
-	MomPort int
-
-	InputTransfersQueue string
-	InputAvgsQueue      string
-	OutputQueue         string
-
-	AvgsExpectedEofs int
-
-	QueryID uint8
-}
-
-type AverageFilter struct {
-	id      uint32
-	queryID uint8
-
-	inputTransfersQueue middleware.Middleware
-	inputAvgsQueue      middleware.Middleware
-	outputQueue         middleware.Middleware
-
-	transfersEofOut  middleware.Middleware
-	transfersEofIn   middleware.Middleware
-	transfersRing    eofring.EofRingAlgorithm
-	transfersMonitor msgmonitor.MessageMonitor
-
-	avgsExpectedEofs int
-
-	lock  sync.Mutex
-	state map[int]*clientState
-}
-
-type clientState struct {
-	avgs                map[string]float64
-	avgsReady           bool
-	ringeof             bool
-	avgsEofsReceived    int
-	expectedAvgRecords  int
-	transfersEofPending bool
-	transfersEofRealAmt uint32
-	pending             []queryresult.Query3Result
-	bufferFiles         map[string]*os.File
-}
-
-func getRingNextIndex(config AverageFilterConfig) int {
-	if config.Id == config.FilterAmount-1 {
-		return 0
-	}
-	return config.Id + 1
-}
-
-func NewAverageFilter(config AverageFilterConfig) (_ *AverageFilter, err error) {
+func NewAverageFilter(config AverageFilterConfig) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
@@ -92,6 +38,7 @@ func NewAverageFilter(config AverageFilterConfig) (_ *AverageFilter, err error) 
 		outputQueue         middleware.Middleware
 		transfersEofIn      middleware.Middleware
 		transfersEofOut     middleware.Middleware
+		err                 error
 	)
 
 	defer func() {
@@ -140,8 +87,15 @@ func NewAverageFilter(config AverageFilterConfig) (_ *AverageFilter, err error) 
 		return nil, fmt.Errorf("creating output queue: %w", err)
 	}
 
+	eofInputQueueName, eofOutputQueueName := eofring.GetInputAndOutputQueueNames(
+		config.Id,
+		config.FilterAmount,
+		eofRingPrefix,
+		eofRingPrefix,
+	)
+
 	transfersEofIn, err = middleware.CreateQueueMiddleware(
-		eofRingPrefix+strconv.Itoa(config.Id),
+		eofInputQueueName,
 		connSettings,
 	)
 	if err != nil {
@@ -149,7 +103,7 @@ func NewAverageFilter(config AverageFilterConfig) (_ *AverageFilter, err error) 
 	}
 
 	transfersEofOut, err = middleware.CreateQueueMiddleware(
-		eofRingPrefix+strconv.Itoa(getRingNextIndex(config)),
+		eofOutputQueueName,
 		connSettings,
 	)
 	if err != nil {
@@ -368,7 +322,7 @@ func (af *AverageFilter) handleAvgEOFLocked(clientID int, state *clientState, to
 }
 
 func (af *AverageFilter) checkAvgsReady(clientID int, state *clientState) {
-	if state.avgsReady || state.avgsEofsReceived == 0 || len(state.avgs) < state.expectedAvgRecords {
+	if state.avgsReady || state.avgsEofsReceived < af.avgsExpectedEofs || len(state.avgs) < state.expectedAvgRecords {
 		return
 	}
 	state.avgsReady = true
