@@ -1,0 +1,126 @@
+src/internal/reducer/reducer.go
+  s_62a801a7eee931::t_4d45b0304c68e5 116
+src/internal/seqstorenode/protocol.go
+  s_db7320f687abdd::t_d27cd2322a72b0 1-7,9,11,13-15,17,33,35
+  s_62a801a7eee931::t_f2ba3003c2725b 8,10,12,16,18-32,34
+src/internal/sum/sum.go
+  s_62a801a7eee931::t_5d821aa6e9e0eb 250
+scripts/compose-gen/generator.go
+  s_62a801a7eee931::t_d257e6710ab983 27
+  s_62a801a7eee931::t_d2baf8a4f9ca88 309-323
+  s_62a801a7eee931::t_9967b16f7691a9 345
+src/internal/gateway/gateway.go
+  s_62a801a7eee931::t_dd139378e4d6aa 49-52
+  s_62a801a7eee931::t_bd29673dcb1a95 125-127
+  s_62a801a7eee931::t_7af88281dae352 432
+  s_62a801a7eee931::t_c41d2a82b5c9c0 473-474
+  s_62a801a7eee931::t_18a0902a19987a 501,504-505,507
+  s_62a801a7eee931::t_94b8f822589ab4 502-503
+  s_62a801a7eee931::t_cb4ac66491c0c2 523,526-528
+  s_62a801a7eee931::t_7af29119c9e633 524-525
+  s_62a801a7eee931::t_affbc14fcf07e0 541-542,544-546
+  s_62a801a7eee931::t_6ea5b7bf96f160 543,547,553-558
+src/internal/common/middleware/newmiddleware/rpc_server_middleware.go
+  s_62a801a7eee931::t_f174bcb2acf40b 1-110
+src/internal/common/seqstore/seqstore.go
+  s_db7320f687abdd::t_c6c7d15e39cfa1 1-3,5-9,11-13,16-17,21,28
+  s_62a801a7eee931::t_7364c81596f3d9 14-15,18-20,22-23,26-27
+  h_3c9b41718876fe 24-25
+src/internal/filter/filterandsplitter/types.go
+  s_62a801a7eee931::t_0db517b9491c5e 32-33,52
+  s_5d917108152089::t_f9054ebc0d7961 51
+src/internal/aggregate/aggregate.go
+  s_62a801a7eee931::t_e6e40ee81fa2d9 252
+src/internal/common/eofring/eofring.go
+  s_62a801a7eee931::t_f9699e68e913c3 26,36,50,58
+  s_62a801a7eee931::t_88069107fecc65 83
+  s_62a801a7eee931::t_bd266ed9186bc8 178
+  s_62a801a7eee931::t_040f61bfd8d83f 199
+src/internal/filter/convertedamountfilter/convertedamountfilter.go
+  s_62a801a7eee931::t_dfd1a12410f896 120
+src/internal/seqstorenode/seqstorenode.go
+  s_db7320f687abdd::t_2e6c82e54f853c 1-57,59-64,68-69
+  s_62a801a7eee931::t_48ae31c41a7b8e 58,65-67
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_62a801a7eee931::t_75b9a06cfe3c74 4,10
+  s_5d917108152089::t_e7d81d00b96397 5
+  s_62a801a7eee931::t_0693fb8c835ace 9,12
+  s_62a801a7eee931::t_53245c733ed317 39,65-67
+  s_62a801a7eee931::t_66d871fe6d023f 105-109
+  s_62a801a7eee931::t_ca5e4d7f9bca12 116,121
+  s_62a801a7eee931::t_e8bc1c294c9eaa 142
+  s_5d917108152089::t_3864ccf3ff192c 145
+  s_5d917108152089::t_0057c11a9e4312 158-159,161-163
+  s_62a801a7eee931::t_702e58a3bf265d 187-189
+  s_62a801a7eee931::t_3a9faf6a2a9864 195,226-230
+  s_62a801a7eee931::t_f8be3f829a5dfe 208,239
+  s_62a801a7eee931::t_b87c6dc560969e 234
+  h_3c9b41718876fe 251-261,265-266,268-271,273-275,282,284-288,290,292-293,295-299,301-304,307,310,317,319-320
+  s_62a801a7eee931::t_3fc26e02bd8ac4 262
+  s_62a801a7eee931::t_9146f618334372 263-264
+  s_5d917108152089::t_5b4168286ba7eb 267,272,277,283,306,313-314,318,321,323-326,328-329,331-332,334
+  s_62a801a7eee931::t_1899331a90cfa9 276,278-281
+  s_62a801a7eee931::t_64cd94f3f111b5 289
+  s_5d917108152089::t_c20767d43f3ae6 291,315
+  s_62a801a7eee931::t_8b840771a4072f 294
+  s_62a801a7eee931::t_59ae40d286aca4 300,305
+  s_62a801a7eee931::t_8f6163df57d738 308
+  s_5d917108152089::t_2897aaa27a004d 309,311-312
+  s_5d917108152089::t_f7eb183dd3c086 316
+  s_62a801a7eee931::t_4898b31212f377 322,327,330,335
+  s_62a801a7eee931::t_10223dc86cce65 333
+  s_62a801a7eee931::t_1f6aaf4928f636 338-344
+  s_5d917108152089::t_dd89df93af37c6 346-349,351-369
+  s_5d917108152089::t_65e852bc8dbb6b 350
+src/cmd/filterandsplitter/config.go
+  s_62a801a7eee931::t_fd662378c06751 57-61,81
+src/internal/averagefilter/averagefilter.go
+  s_62a801a7eee931::t_81d12fc9e26e90 389
+src/internal/common/middleware/newmiddleware/rpc_client_middleware.go
+  s_62a801a7eee931::t_b481084589124d 1-96
+src/internal/daterangesplitter/daterangesplitter.go
+  s_62a801a7eee931::t_37ca6b49b10951 179
+src/internal/common/eofmessagetypes/types.go
+  s_62a801a7eee931::t_c267a2cdd30ef6 9,17
+src/internal/common/diskstore/diskstore.go
+  s_62a801a7eee931::t_f7c83767450fa0 1-7,10-35,43-45,48-50,53-54,56-57,60-61,63-69,72-73,76-77,80-81,84-85,88-89,92-97
+  s_62a801a7eee931::t_6fba502cb8a16b 8-9,46-47,51-52,55,58-59,62,70-71,74-75,78-79,82-83,86-87,90-91
+  s_5d917108152089::t_b27d86155b5bf5 36-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "ef15f200bdc984b781d9e868abdcf96da9a3c47d",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_5d917108152089": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "af48c0c3-8517-4687-a76d-120a4070a2dd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    },
+    "s_62a801a7eee931": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "851aefb9-10c7-48d7-ad08-263a8a1e1647",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    },
+    "s_db7320f687abdd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e0c4c2c5-64c6-46ec-bc6e-a3873cf04fbd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
