@@ -1,11 +1,15 @@
 package filterandsplitter
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
+	"time"
+	"tp-grupal-distribuidos/internal/common/diskstore"
 	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
 	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
@@ -14,6 +18,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/seqstoreprotocol"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -21,6 +26,7 @@ import (
 
 const (
 	_EOF_RING_QUEUE_PREFIX = "FILTER_AND_SPLIITER_EOF"
+	_EOF_OUTPUT_KEY        = "__eof"
 )
 
 func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error) {
@@ -28,15 +34,13 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	handlerMessages := msgmonitor.NewMessageMonitor()
-	// if err := handlerMessages.LoadFromDisk(config.MonitorPersistPath); err != nil {
-	// 	return nil, fmt.Errorf("loading monitor state from disk: %w", err)
-	// }
 
 	var (
 		inputMiddleware  middleware.Middleware
 		outputMiddleware newmiddleware.Middleware
 		eofInput         middleware.Middleware
 		eofOutput        middleware.Middleware
+		seqStore         newmiddleware.RPCClient
 		err              error
 	)
 
@@ -62,6 +66,11 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		if inputMiddleware != nil {
 			if err := inputMiddleware.Close(); err != nil {
 				slog.Error("While closing input middleware", "err", err)
+			}
+			if seqStore != nil {
+				if err := seqStore.Close(); err != nil {
+					slog.Error("While closing seqstore client", "err", err)
+				}
 			}
 		}
 	}()
@@ -98,34 +107,16 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		return nil, fmt.Errorf("creating EOF output queue: %w", err)
 	}
 
-	eofHandler := eofring.CreateEofRingAlgorithm(
-		eofInput,
-		eofOutput,
-		config.FilterAndSpliterAmount,
-		uint32(config.Id),
-		handlerMessages,
-		func(clientID int, total uint32, isCoordinator bool) error {
-			if isCoordinator {
-				// seq := handlerMessages.NextSeqByClientId(clientID)
-				handlerMessages.RemoveClient(clientID)
-				// if err := handlerMessages.SaveToDisk(config.MonitorPersistPath); err != nil {
-				// 	slog.Error("While persisting monitor state after EOF", "err", err)
-				// }
-				return outputMiddleware.Send(newmiddleware.Message{
-					Body:       batch.WriteEOF(clientID, config.QueryID, uint8(config.Id), 0, total),
-					RoutingKey: newmiddleware.BroadcastRoutingKey,
-				})
-			}
-			handlerMessages.RemoveClient(clientID)
-			// if err := handlerMessages.SaveToDisk(config.MonitorPersistPath); err != nil {
-			// 	slog.Error("While persisting monitor state after EOF", "err", err)
-			// }
-			return nil
-		},
-		uint8(config.QueryID),
-	)
+	seqStore, err = newmiddleware.NewRPCClientMiddleware(newConnSettings, config.SeqStoreQueue)
+	if err != nil {
+		return nil, fmt.Errorf("creating seqstore client: %w", err)
+	}
 
-	return &FilterAndSplitter{
+	if err = os.MkdirAll(filepath.Dir(config.MonitorPersistPath), 0755); err != nil {
+		return nil, fmt.Errorf("creating persist directory: %w", err)
+	}
+
+	node := &FilterAndSplitter{
 		id:                 config.Id,
 		startDate:          config.StartDate,
 		endDate:            config.EndDate,
@@ -133,20 +124,56 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		queryID:            config.QueryID,
 		handlerMessages:    handlerMessages,
 		monitorPersistPath: config.MonitorPersistPath,
+		tempMonitorPath:    config.MonitorPersistPath + ".tmp",
+		outputPersistPath:  filepath.Join(filepath.Dir(config.MonitorPersistPath), "output.bin"),
 		inputMiddleware:    inputMiddleware,
 		outputMiddleware:   outputMiddleware,
 		eofInput:           eofInput,
 		eofOutput:          eofOutput,
-		eofHandler:         eofHandler,
-	}, nil
+		seqStore:           seqStore,
+	}
+
+	eofHandler := eofring.CreateEofRingAlgorithm(
+		eofInput,
+		eofOutput,
+		config.FilterAndSpliterAmount,
+		uint32(config.Id),
+		handlerMessages,
+		func(clientID int, seq uint64, total uint32, isCoordinator bool) error {
+			if isCoordinator {
+				handlerMessages.RemoveClient(clientID)
+
+				return outputMiddleware.Send(newmiddleware.Message{
+					Body:       batch.WriteEOF(clientID, config.QueryID, uint8(config.Id), seq, total),
+					RoutingKey: newmiddleware.BroadcastRoutingKey,
+				})
+			}
+			handlerMessages.RemoveClient(clientID)
+
+			node.commitState()
+
+			return nil
+		},
+		uint8(config.QueryID),
+	)
+
+	node.eofHandler = eofHandler
+
+	return node, nil
 }
 
 func (f *FilterAndSplitter) Run() {
 	defer f.close()
+
+	if err := f.startupRecovery(); err != nil {
+		slog.Error("Startup recovery failed, aborting", "err", err)
+		return
+	}
+
 	go f.eofHandler.Run()
 
-	if err := f.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, _ func()) {
-		f.handleInput(msg, ack)
+	if err := f.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+		f.handleInput(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
 	}
@@ -159,54 +186,32 @@ func (f *FilterAndSplitter) HandleSignals() {
 	slog.Info("SIGTERM signal received, stopping consumer")
 
 	if err := f.inputMiddleware.StopConsuming(); err != nil {
-		slog.Error("While stopping input middleware consumer", "filter_id", f.id, "err", err)
+		slog.Error("While stopping input middleware consumer", "err", err)
 	}
 	if err := f.eofInput.StopConsuming(); err != nil {
-		slog.Error("While stopping EOF input consumer", "filter_id", f.id, "err", err)
+		slog.Error("While stopping EOF input consumer", "err", err)
 	}
 }
 
 func (f *FilterAndSplitter) close() {
 	if err := f.inputMiddleware.Close(); err != nil {
-		slog.Error("While closing input middleware", "filter_id", f.id, "err", err)
+		slog.Error("While closing input middleware", "err", err)
 	}
 	if err := f.eofInput.Close(); err != nil {
-		slog.Error("While closing EOF input", "filter_id", f.id, "err", err)
+		slog.Error("While closing EOF input", "err", err)
 	}
 	if err := f.eofOutput.Close(); err != nil {
-		slog.Error("While closing EOF output", "filter_id", f.id, "err", err)
+		slog.Error("While closing EOF output", "err", err)
 	}
 	if err := f.outputMiddleware.Close(); err != nil {
-		slog.Error("While closing output middleware", "filter_id", f.id, "err", err)
+		slog.Error("While closing output middleware", "err", err)
+	}
+	if err := f.seqStore.Close(); err != nil {
+		slog.Error("While closing seqstore client", "err", err)
 	}
 }
 
-func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func()) {
-	defer ack()
-	input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
-	if err != nil {
-		slog.Error("While deserializing input batch", "err", err)
-		return
-	}
-
-	if input.EOF {
-		f.handleEOF(input.ClientID, input.Total)
-		return
-	}
-
-	// if f.handlerMessages.IsDuplicate(input.ClientID, int(input.SenderID), input.Seq) {
-	// 	slog.Warn("Discarding duplicate batch", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
-	// 	return
-	// }
-
-	f.handleBatch(input.ClientID, input.Records)
-	// if err := f.handlerMessages.SaveToDisk(f.monitorPersistPath); err != nil {
-	// 	slog.Error("While persisting monitor state", "err", err)
-	// }
-}
-
-func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.TransferAfterCurrency) {
-	// seq := f.handlerMessages.NextSeqByClientId(clientID)
+func (f *FilterAndSplitter) handleBatch(clientID int, seq uint64, records []transfer.TransferAfterCurrency) map[string][]byte {
 	byShard := make(map[string][]transfer.SplittedTransfer)
 
 	for i := range records {
@@ -216,9 +221,9 @@ func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.Transfe
 		if record.Timestamp.Before(f.startDate) || record.Timestamp.After(f.endDate) {
 			continue
 		}
-		if record.FromBankAccount == record.ToBankAccount && record.FromBank == record.ToBank {
-			continue
-		}
+		// if record.FromBankAccount == record.ToBankAccount && record.FromBank == record.ToBank {
+		// 	continue
+		// }
 
 		projected := transfer.ProjectForQ4(record)
 		for _, o := range []transfer.SplittedTransfer{
@@ -237,23 +242,181 @@ func (f *FilterAndSplitter) handleBatch(clientID int, records []transfer.Transfe
 		}
 	}
 
+	output := make(map[string][]byte, len(byShard))
 	for routingKey, group := range byShard {
-		body := splittransfer.WriteBatch(clientID, f.queryID, uint8(f.id), 0, group) // body := splittransfer.WriteBatch(clientID, f.queryID, uint8(f.id), seq, group)
-		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
-			slog.Error("While sending output batch", "err", err)
-		}
+		output[routingKey] = splittransfer.WriteBatch(clientID, f.queryID, uint8(f.id), seq, group)
+	}
+	return output
+}
+
+func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack func()) {
+	input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
+	if err != nil {
+		slog.Error("While deserializing input batch", "err", err)
+		ack()
+		return
+	}
+
+	//
+	byShard, err := f.processBatch(input)
+	if err != nil {
+		slog.Error("While processing batch", "err", err)
+		ack()
+		return
+	}
+
+	if err = f.writeTemp(); err != nil {
+		slog.Error("While writing temp", "err", err)
+		nack()
+		return
+	}
+
+	if err = f.writeOutput(byShard); err != nil {
+		slog.Error("While writing ouput", "err", err)
+		nack()
+		return
+	}
+
+	accept, err := f.tryCommit(input.ClientID, input.Seq, input.EOF)
+	if err != nil {
+		slog.Error("While trying to commit", "err", err)
+		nack()
+		return
+	}
+
+	// A partir de acá damos el ack y trabajamos con lo que tenemos en disco ante caidas
+	ack()
+
+	if !accept {
+		slog.Warn("Seq rejected, rolling back", "seq", input.Seq)
+		f.recoverState()
+		return
+	}
+
+	if err = f.sendOutputs(byShard); err != nil {
+		slog.Error("sendOutputs failed, killing process", "err", err)
+		f.kill()
+		return
+	}
+
+	if err = f.commitState(); err != nil {
+		slog.Error("commitState failed, killing process", "err", err)
+		f.kill()
 	}
 }
 
-func (f *FilterAndSplitter) handleEOF(clientID int, total uint32) {
-	eofRingMessage := eofmessagetypes.EofRingMessage{
-		RealAmount:     total,
-		ActualAmount:   f.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
-		ClientId:       clientID,
-		CoordinatorId:  uint32(f.id),
-		FilteredAmount: f.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
+func (f *FilterAndSplitter) recoverState() {
+	return
+
+	if err := diskstore.RemoveIfExists(f.outputPersistPath); err != nil {
+		slog.Error("recoverState: cannot clean output, killing node", "err", err)
+		f.kill()
 	}
-	if err := f.eofOutput.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)}); err != nil {
-		slog.Error("While sending EOF message to EOF ring", "err", err)
+
+	if err := f.handlerMessages.LoadFromDisk(f.monitorPersistPath); err != nil {
+		slog.Error("recoverState: cannot load backup, killing node", "err", err)
+		f.kill()
+		return
 	}
+}
+
+func (f *FilterAndSplitter) kill() {
+	if err := f.inputMiddleware.StopConsuming(); err != nil {
+		slog.Error("kill: stopping input middleware", "err", err)
+	}
+	if err := f.eofInput.StopConsuming(); err != nil {
+		slog.Error("kill: stopping EOF input", "err", err)
+	}
+}
+
+func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterCurrency]) (map[string][]byte, error) {
+	if input.EOF {
+		msg := eofmessagetypes.EofRingMessage{
+			RealAmount:     input.Total,
+			ActualAmount:   f.handlerMessages.GetProcessedMessagesAmountByClientId(input.ClientID),
+			ClientId:       input.ClientID,
+			CoordinatorId:  uint32(f.id),
+			FilteredAmount: f.handlerMessages.GetForwardedMessagesAmountByClientId(input.ClientID),
+			Seq:            input.Seq,
+		}
+		return map[string][]byte{_EOF_OUTPUT_KEY: eofring.SerializeRingMessage(msg)}, nil
+	}
+
+	return f.handleBatch(input.ClientID, input.Seq, input.Records), nil
+}
+
+func (f *FilterAndSplitter) writeTemp() error {
+	return nil
+
+	return f.handlerMessages.SaveToDisk(f.tempMonitorPath)
+}
+
+func (f *FilterAndSplitter) commitState() error {
+	if err := os.Rename(f.tempMonitorPath, f.monitorPersistPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("commit: rename monitor: %w", err)
+	}
+	return diskstore.RemoveIfExists(f.outputPersistPath)
+}
+
+func (f *FilterAndSplitter) startupRecovery() error {
+	if err := f.loadState(); err != nil {
+		return fmt.Errorf("startup recovery: load state: %w", err)
+	}
+
+	byShard, err := diskstore.Read(f.outputPersistPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("startup recovery: read output: %w", err)
+	}
+
+	slog.Info("Pending output found, re-sending", "filter_id", f.id)
+	if err := f.sendOutputs(byShard); err != nil {
+		return fmt.Errorf("startup recovery: send outputs: %w", err)
+	}
+	return f.commitState()
+}
+
+func (f *FilterAndSplitter) loadState() error {
+	return nil
+
+	if _, err := os.Stat(f.tempMonitorPath); err == nil {
+		if err := f.handlerMessages.LoadFromDisk(f.tempMonitorPath); err == nil {
+			return nil
+		}
+		slog.Warn("Temp monitor state unreadable, falling back to backup", "filter_id", f.id)
+	}
+	return f.handlerMessages.LoadFromDisk(f.monitorPersistPath)
+}
+
+func (f *FilterAndSplitter) writeOutput(byShard map[string][]byte) error {
+	return diskstore.WriteAtomic(f.outputPersistPath, byShard)
+}
+
+const seqStoreTimeout = 5 * time.Second
+
+func (f *FilterAndSplitter) tryCommit(clientID int, seq uint64, isEOF bool) (bool, error) {
+	resp, err := f.seqStore.Call(seqstoreprotocol.EncodeRequest(clientID, seq, isEOF), seqStoreTimeout)
+	if err != nil {
+		return false, fmt.Errorf("tryCommit rpc call: %w", err)
+	}
+	if len(resp) < 1 {
+		return false, fmt.Errorf("tryCommit: empty response")
+	}
+	return resp[0] != 0, nil
+}
+
+func (f *FilterAndSplitter) sendOutputs(output map[string][]byte) error {
+	if body, ok := output[_EOF_OUTPUT_KEY]; ok {
+		slog.Info("SEND OUTPUT")
+		return f.eofOutput.Send(middleware.Message{Body: body})
+	}
+
+	for routingKey, body := range output {
+		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
+			return fmt.Errorf("sending shard %s: %w", routingKey, err)
+		}
+	}
+	return nil
 }

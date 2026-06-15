@@ -6,6 +6,7 @@ type EofRingMessage struct {
 	ClientId       int
 	CoordinatorId  uint32
 	FilteredAmount uint32
+	Seq            uint64
 }
 
 type EofMessageCommit struct {
@@ -13,4 +14,5 @@ type EofMessageCommit struct {
 	ClientID       int
 	Hops           int
 	FilteredAmount uint32
+	Seq            uint64
 }

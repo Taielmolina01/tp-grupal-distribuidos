@@ -29,6 +29,8 @@ type FilterAndSplitterConfig struct {
 	QueryID uint8
 
 	MonitorPersistPath string
+
+	SeqStoreQueue string
 }
 
 type FilterAndSplitter struct {
@@ -46,6 +48,10 @@ type FilterAndSplitter struct {
 
 	handlerMessages    msgmonitor.MessageMonitor
 	monitorPersistPath string
+	tempMonitorPath    string
+	outputPersistPath  string
+
+	seqStore newmiddleware.RPCClient
 
 	queryID uint8
 }

@@ -104,9 +104,9 @@ func NewFilter[T any, O any](
 			config.FilterAmount,
 			uint32(config.Id),
 			handlerMessages,
-			func(clientID int, total uint32, isCoordinator bool) error {
+			func(clientID int, seq uint64, total uint32, isCoordinator bool) error {
 				if isCoordinator {
-					return outputExchange.Send(middleware.Message{Body: batch.WriteEOF(clientID, config.QueryId, 0, 0, total)})
+					return outputExchange.Send(middleware.Message{Body: batch.WriteEOF(clientID, config.QueryId, 0, seq, total)})
 				}
 				return nil
 			},
@@ -147,7 +147,7 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, _ func())
 	}
 
 	if input.EOF {
-		filter.handleEOF(input.ClientID, input.Total)
+		filter.handleEOF(input.ClientID, input.Total, input.Seq)
 		return
 	}
 
@@ -164,19 +164,20 @@ func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, _ func())
 		return
 	}
 
-	body := batch.Write(input.ClientID, filter.queryId, 0, 0, outputs, filter.outputCodec)
+	body := batch.Write(input.ClientID, filter.queryId, uint8(filter.id), input.Seq, outputs, filter.outputCodec)
 	if err := filter.outputExchange.Send(middleware.Message{Body: body}); err != nil {
 		slog.Error("While sending batch to output exchange", "err", err)
 	}
 }
 
-func (filter *Filter[T, O]) handleEOF(clientID int, total uint32) {
+func (filter *Filter[T, O]) handleEOF(clientID int, total uint32, seq uint64) {
 	eofRingMessage := eofmessagetypes.EofRingMessage{
 		RealAmount:     total,
 		ActualAmount:   filter.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
 		ClientId:       clientID,
 		CoordinatorId:  uint32(filter.id),
 		FilteredAmount: filter.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
+		Seq:            seq,
 	}
 
 	if err := filter.outputQueueEof.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)}); err != nil {

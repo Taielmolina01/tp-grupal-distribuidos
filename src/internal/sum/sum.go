@@ -222,7 +222,7 @@ func (s *SumByPaymentFormat) handleEOF(clientID int, total uint32) {
 	}
 }
 
-func (s *SumByPaymentFormat) onRingConverged(clientID int, total uint32, isCoordinator bool) error {
+func (s *SumByPaymentFormat) onRingConverged(clientID int, _ uint64, total uint32, isCoordinator bool) error {
 	s.mu.Lock()
 	byMethod := s.acumuladores[clientID]
 	delete(s.acumuladores, clientID)

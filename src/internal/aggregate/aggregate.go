@@ -78,10 +78,10 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 	a.stateSaver = CreateNewStateSaver(&a.mu, fmt.Sprintf(STATE_FILE_NAME, config.Id))
 
 	if err := a.msgMonitor.LoadFromDisk(fmt.Sprintf(FILE_NAME, a.id)); err != nil {
-		slog.Error("While loading message monitor from disk", "err", err)
+		slog.Warn("While loading message monitor from disk", "err", err)
 	}
 	if accums, eofCounts, eofTotals, err := a.stateSaver.LoadState(); err != nil {
-		slog.Error("While loading state from disk", "err", err)
+		slog.Warn("While loading state from disk", "err", err)
 	} else {
 		a.accums = accums
 		a.eofCounts = eofCounts
