@@ -1,0 +1,37 @@
+src/internal/common/msgmonitor/msgmonitor.go
+  s_85eeedc427c7f5::t_a6e7124e42070f 193
+  s_85eeedc427c7f5::t_6b0decd0ae9b97 186-192,194,225-228,230-234,236-238,241-247,250-251
+  s_85eeedc427c7f5::t_87a385df63092e 229,235
+  s_85eeedc427c7f5::t_f8199f54cbabf8 148-161
+  s_85eeedc427c7f5::t_03e195c2dd777d 23-30,41-45
+  s_85eeedc427c7f5::t_9075fdd4bf6d18 46-47
+  s_85eeedc427c7f5::t_77289cf3ffe2d6 10-17
+  s_85eeedc427c7f5::t_084c6688f6334d 92-147
+  s_85eeedc427c7f5::t_dbdaa2a57fd497 31-32
+src/internal/common/messageprotocol/wire/wire.go
+  s_85eeedc427c7f5::t_4f43fb978897b7 184-201
+  s_85eeedc427c7f5::t_e835241fa5a85b 59-62
+src/internal/seqstorenode/seqstorenode.go
+  s_85eeedc427c7f5::t_d025c7f2fe3185 22-24,27-31,33-34,83-84,101,103-104,106,118-119,121,126-136
+  s_85eeedc427c7f5::t_045724f8f5d9b0 109
+  s_85eeedc427c7f5::t_bd5cbe44ad0019 108,110
+  s_85eeedc427c7f5::t_7726e519ebd30f 36-39,41,48-52
+src/internal/common/seqstoreprotocol/seqstoreprotocol.go
+  s_85eeedc427c7f5::t_94db4bdc365dd6 9-11,25,29-30,34,36,38-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "61571ef600be05fecc1ae0a10008f32b8f6b18e8",
+  "prompts": {},
+  "sessions": {
+    "s_85eeedc427c7f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "831b31a3-c071-4a36-bab8-9f64ef4c91bd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
