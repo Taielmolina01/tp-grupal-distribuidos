@@ -3,8 +3,11 @@ package main
 import (
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
+
 	"tp-grupal-distribuidos/internal/common/pinger"
-	"tp-grupal-distribuidos/internal/filter/amountfilter"
+	"tp-grupal-distribuidos/internal/watchdog/healthcheck"
 )
 
 func run() int {
@@ -14,19 +17,18 @@ func run() int {
 		return 1
 	}
 
-	server, err := amountfilter.CreateAmountFilter(config)
-
-	if err != nil {
-		slog.Error("While initializing filter", "err", err)
-		return 1
-	}
-
 	healthPinger := pinger.Serve(":" + pinger.DefaultPort)
 	defer healthPinger.Close()
 
-	go server.HandleSignals()
+	checker := healthcheck.New(config)
+	checker.Start()
 
-	server.Run()
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	<-signals
+	slog.Info("SIGTERM signal received, stopping watchdog")
+
+	checker.Stop()
 	return 0
 }
 

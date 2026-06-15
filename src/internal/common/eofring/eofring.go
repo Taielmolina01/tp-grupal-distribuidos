@@ -23,6 +23,7 @@ func SerializeRingMessage(m eofmessagetypes.EofRingMessage) []byte {
 	w.Uint32(m.RealAmount)
 	w.Uint32(uint32(m.ClientId))
 	w.Uint32(m.FilteredAmount)
+	w.Uint64(m.Seq)
 	return w.Bytes()
 }
 
@@ -32,6 +33,7 @@ func serializeCommit(m eofmessagetypes.EofMessageCommit) []byte {
 	w.Uint32(uint32(m.ClientID))
 	w.Uint32(uint32(m.Hops))
 	w.Uint32(m.FilteredAmount)
+	w.Uint64(m.Seq)
 	return w.Bytes()
 }
 
@@ -45,6 +47,7 @@ func deserializeRing(body []byte) (*eofmessagetypes.EofRingMessage, *eofmessaget
 			RealAmount:     r.Uint32(),
 			ClientId:       int(r.Uint32()),
 			FilteredAmount: r.Uint32(),
+			Seq:            r.Uint64(),
 		}
 		return m, nil, r.Err()
 	case typeCommit:
@@ -52,6 +55,7 @@ func deserializeRing(body []byte) (*eofmessagetypes.EofRingMessage, *eofmessaget
 			ClientID:       int(r.Uint32()),
 			Hops:           int(r.Uint32()),
 			FilteredAmount: r.Uint32(),
+			Seq:            r.Uint64(),
 		}
 		return nil, m, r.Err()
 	default:
@@ -76,7 +80,7 @@ type eofRingAlgorithmImpl struct {
 	queryId         uint8
 }
 
-type FinishCallback func(clientID int, total uint32, isCoordinator bool) error
+type FinishCallback func(clientID int, seq uint64, total uint32, isCoordinator bool) error
 
 func CreateEofRingAlgorithm(
 	inputQueue, outputQueue middleware.Middleware,
@@ -171,6 +175,7 @@ func (eofring *eofRingAlgorithmImpl) sendEofCommitToReplicas(eofRingMessage *eof
 		ClientID:       eofRingMessage.ClientId,
 		Hops:           0,
 		FilteredAmount: eofRingMessage.FilteredAmount,
+		Seq:            eofRingMessage.Seq,
 	})
 	if err := eofring.outputQueue.Send(middleware.Message{Body: body}); err != nil {
 		slog.Error("Error sending EOF commit to ring", fmt.Sprintf("%s_id", eofring.typeOfNode), eofring.id, "client_id", eofRingMessage.ClientId, "err", err)
@@ -191,7 +196,7 @@ func (eofring *eofRingAlgorithmImpl) sendEofMessageToQueue(eofRingMessage *eofme
 
 func (eofring *eofRingAlgorithmImpl) handleEOFCommitMessage(msg *eofmessagetypes.EofMessageCommit) error {
 
-	if err := eofring.finishCallback(msg.ClientID, msg.FilteredAmount, msg.CoordinatorId == eofring.id); err != nil {
+	if err := eofring.finishCallback(msg.ClientID, msg.Seq, msg.FilteredAmount, msg.CoordinatorId == eofring.id); err != nil {
 		return fmt.Errorf("finish callback: %w", err)
 	}
 

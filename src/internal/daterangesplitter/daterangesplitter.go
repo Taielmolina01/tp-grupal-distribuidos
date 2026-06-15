@@ -139,7 +139,7 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (worker.Worker, error)
 			config.SplitterAmount,
 			uint32(config.Id),
 			monitors[idx],
-			func(clientID int, total uint32, isCoordinator bool) error {
+			func(clientID int, _ uint64, total uint32, isCoordinator bool) error {
 				if !isCoordinator {
 					return nil
 				}

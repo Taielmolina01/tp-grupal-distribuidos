@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"tp-grupal-distribuidos/internal/common/pinger"
 	"tp-grupal-distribuidos/internal/common/worker"
 	"tp-grupal-distribuidos/internal/reducer"
 )
@@ -101,6 +102,9 @@ func run() int {
 		slog.Error("While initializing join", "err", err)
 		return 1
 	}
+
+	healthPinger := pinger.Serve(":" + pinger.DefaultPort)
+	defer healthPinger.Close()
 
 	go server.HandleSignals()
 

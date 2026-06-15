@@ -15,9 +15,9 @@ import (
 
 	"tp-grupal-distribuidos/internal/clientregistry"
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/normalizer"
@@ -49,6 +49,7 @@ type Gateway struct {
 	countsMu          sync.Mutex
 	accountsCount     map[int]uint32
 	transfersCount    map[int]uint32
+	seqByClient       map[int]uint64
 	queryEOFsByClient map[int]map[uint8]int
 	buildersMu        sync.Mutex
 	resultBuilders    map[int]*tcpproto.ResultBatchBuilder
@@ -123,6 +124,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		listener:          listener,
 		accountsCount:     map[int]uint32{},
 		transfersCount:    map[int]uint32{},
+		seqByClient:       map[int]uint64{},
 		queryEOFsByClient: map[int]map[uint8]int{},
 		resultBuilders:    map[int]*tcpproto.ResultBatchBuilder{},
 		maxBatchSize:      config.MaxBatchSize,
@@ -427,6 +429,7 @@ func (gateway *Gateway) closeClient(clientID int) {
 	gateway.countsMu.Lock()
 	delete(gateway.accountsCount, clientID)
 	delete(gateway.transfersCount, clientID)
+	delete(gateway.seqByClient, clientID)
 	delete(gateway.queryEOFsByClient, clientID)
 	gateway.countsMu.Unlock()
 
@@ -467,8 +470,8 @@ func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
 	return total
 }
 
-func (gateway *Gateway) sendEOF(clientID int, total uint32, targets ...middleware.Middleware) error {
-	body := batch.WriteEOF(clientID, 0, 0, 0, total)
+func (gateway *Gateway) sendEOF(clientID int, seq uint64, total uint32, targets ...middleware.Middleware) error {
+	body := batch.WriteEOF(clientID, 0, 0, seq, total)
 	var errs []error
 	for _, t := range targets {
 		if err := t.Send(middleware.Message{Body: body}); err != nil {
@@ -495,8 +498,13 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState, r 
 		)
 		byShard[idx] = append(byShard[idx], acc)
 	}
+	gateway.countsMu.Lock()
+	seq := gateway.seqByClient[client.ID]
+	gateway.seqByClient[client.ID]++
+	gateway.countsMu.Unlock()
+
 	for idx, group := range byShard {
-		body := batch.Write(client.ID, 0, 0, 0, group, records.AccountCodec)
+		body := batch.Write(client.ID, 0, 0, seq, group, records.AccountCodec)
 		if err := gateway.accountQueues[idx].Send(middleware.Message{Body: body}); err != nil {
 			slog.Debug("While sending accounts batch", "err", err)
 			return err
@@ -512,7 +520,12 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 		slog.Debug("While reading TRANS_BATCH", "err", err)
 		return err
 	}
-	body := batch.WriteRaw(client.ID, 0, 0, 0, count, payload)
+	gateway.countsMu.Lock()
+	seq := gateway.seqByClient[client.ID]
+	gateway.seqByClient[client.ID]++
+	gateway.countsMu.Unlock()
+
+	body := batch.WriteRaw(client.ID, 0, 0, seq, count, payload)
 	if err := gateway.transfersExchange.Send(middleware.Message{Body: body}); err != nil {
 		slog.Debug("While sending transfers batch", "err", err)
 		return err
@@ -525,11 +538,22 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState) error {
 	total := gateway.takeCount(gateway.accountsCount, client.ID)
 	slog.Info("Received EOF message", "kind", "accounts", "client_id", client.ID, "total", total)
-	return gateway.sendEOF(client.ID, total, gateway.accountQueues...)
+
+	gateway.countsMu.Lock()
+	seq := gateway.seqByClient[client.ID]
+	gateway.seqByClient[client.ID] = 0
+	gateway.countsMu.Unlock()
+
+	return gateway.sendEOF(client.ID, seq, total, gateway.accountQueues...)
 }
 
 func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState) error {
 	total := gateway.takeCount(gateway.transfersCount, client.ID)
 	slog.Info("Received EOF message", "kind", "transfers", "client_id", client.ID, "total", total)
-	return gateway.sendEOF(client.ID, total, gateway.transfersExchange)
+
+	gateway.countsMu.Lock()
+	seq := gateway.seqByClient[client.ID]
+	gateway.countsMu.Unlock()
+
+	return gateway.sendEOF(client.ID, seq, total, gateway.transfersExchange)
 }

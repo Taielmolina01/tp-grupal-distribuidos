@@ -24,6 +24,7 @@ func generateCompose(cfg *Config) string {
 	writeJoinQ2(&b, cfg)
 
 	b.WriteString("\n  # Query 4\n\n")
+	writeSeqStoreQ4FilterSplitter(&b)
 	writeFilterAndSplitterQ4(&b, cfg)
 	writeJoinAccountsQ4(&b, cfg)
 	writeAcumAccountsQ4(&b, cfg)
@@ -41,7 +42,63 @@ func generateCompose(cfg *Config) string {
 	writeFilterAmtQ5(&b, cfg)
 	writeCountReducerQ5(&b, cfg)
 
+	b.WriteString("\n  # Tolerancia a fallas\n\n")
+	writeWatchdogs(&b, cfg)
+
 	return b.String()
+}
+
+func workerNodes(cfg *Config) []string {
+	var nodes []string
+	add := func(prefix string, n int) {
+		for i := range n {
+			nodes = append(nodes, fmt.Sprintf("%s_%d", prefix, i))
+		}
+	}
+
+	add("q1234_filter_currency", cfg.FilterCurrency)
+	add("q1_filter_amount", cfg.FilterAmount)
+	add("q2_reducer", cfg.ReducerQ2)
+	add("q2_filter_bank_distinct", cfg.FilterBankIdAlreadySeen)
+	add("q2_join", cfg.JoinQ2)
+	add("q4_filter_and_splitter", cfg.FilterAndSplitterQ4)
+	add("q4_join_accounts", cfg.JoinAccountsQ4)
+	add("q4_acum_accounts", cfg.AcumAccountsQ4)
+	add("q4_filter_account_seen", cfg.FilterAccountSeenQ4)
+	add("q3_filter_range", cfg.FilterRangeQ3)
+	add("q3_sum", cfg.SumQ3)
+	add("q3_aggregate", cfg.AggregateQ3)
+	add("q3_average_filter", cfg.AverageFilterQ3)
+	add("q5_filter_date_and_payment", cfg.FilterDateAndPayment)
+	add("q5_filter_amount", cfg.FilterAmtQ5)
+	nodes = append(nodes, "q5_fetcher", "q5_count_reducer")
+
+	return nodes
+}
+
+func writeWatchdogs(b *strings.Builder, cfg *Config) {
+	nodes := strings.Join(workerNodes(cfg), " ")
+
+	for i := range cfg.Watchdogs {
+		fmt.Fprintf(b, "  watchdog_%d:\n", i)
+		b.WriteString("    build:\n")
+		b.WriteString("      context: ./src/\n")
+		b.WriteString("      dockerfile: cmd/watchdog/Dockerfile\n")
+		fmt.Fprintf(b, "    container_name: watchdog_%d\n", i)
+		rabbitmqDepends(b)
+		b.WriteString("    environment:\n")
+		fmt.Fprintf(b, "      - ID=%d\n", i)
+		fmt.Fprintf(b, "      - PEERS=%d\n", cfg.Watchdogs)
+		fmt.Fprintf(b, "      - NODES=%s\n", nodes)
+		b.WriteString("      - INTERVAL=1s\n")
+		b.WriteString("      - TIMEOUT=1s\n")
+		b.WriteString("      - MAX_RETRIES=3\n")
+		b.WriteString("      - STARTUP=30s\n")
+		b.WriteString("    volumes:\n")
+		b.WriteString("      - /var/run/docker.sock:/var/run/docker.sock\n")
+		jsonFileLogging(b)
+		b.WriteString("\n")
+	}
 }
 
 func queues(prefix string, n int) string {
@@ -305,6 +362,22 @@ func writeJoinQ2(b *strings.Builder, cfg *Config) {
 	}
 }
 
+func writeSeqStoreQ4FilterSplitter(b *strings.Builder) {
+	b.WriteString("  q4_filter_splitter_seqstore:\n")
+	b.WriteString("    build:\n")
+	b.WriteString("      context: ./src/\n")
+	b.WriteString("      dockerfile: cmd/seqstorenode/Dockerfile\n")
+	b.WriteString("    container_name: q4_filter_splitter_seqstore\n")
+	rabbitmqDepends(b)
+	b.WriteString("    environment:\n")
+	b.WriteString("      - MOM_HOST=rabbitmq\n")
+	b.WriteString("      - MOM_PORT=5672\n")
+	b.WriteString("      - PERSIST_PATH=/var/bkp/Q4_filter_splitter_seqstore.bin\n")
+	b.WriteString("      - REQUEST_QUEUE=Q4_filter_splitter_seqstore\n")
+	jsonFileLogging(b)
+	b.WriteString("\n")
+}
+
 func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 	for i := range cfg.FilterAndSplitterQ4 {
 		fmt.Fprintf(b, "  q4_filter_and_splitter_%d:\n", i)
@@ -326,8 +399,7 @@ func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00\n")
 		b.WriteString("      - QUERY_ID=4\n")
 		b.WriteString("      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin\n")
-		b.WriteString("    volumes:\n")
-		fmt.Fprintf(b, "      - ./bkp/q4_filter_and_splitter_%d:/var/bkp\n", i)
+		b.WriteString("      - SEQ_STORE_QUEUE=Q4_filter_splitter_seqstore\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 
+	"tp-grupal-distribuidos/internal/common/pinger"
 	"tp-grupal-distribuidos/internal/joinaccounts"
 )
 
@@ -19,6 +20,9 @@ func run() int {
 		slog.Error("While initializing join-accounts", "err", err)
 		return 1
 	}
+
+	healthPinger := pinger.Serve(":" + pinger.DefaultPort)
+	defer healthPinger.Close()
 
 	go server.HandleSignals()
 	server.Run()
