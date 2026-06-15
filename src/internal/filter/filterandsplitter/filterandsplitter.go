@@ -404,7 +404,7 @@ func (f *FilterAndSplitter) writeOutput(byShard map[string][]byte) error {
 const seqStoreTimeout = 5 * time.Second
 
 func (f *FilterAndSplitter) tryCommit(clientID int, seq uint64) (bool, error) {
-	resp, err := f.seqStore.Call(seqstoreprotocol.EncodeClaimRequest(clientID, seq), seqStoreTimeout)
+	resp, err := f.seqStore.Call(seqstoreprotocol.EncodeClaimRequest(clientID, uint8(f.id), seq), seqStoreTimeout)
 	if err != nil {
 		return false, fmt.Errorf("tryCommit rpc call: %w", err)
 	}

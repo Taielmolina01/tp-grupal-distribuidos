@@ -1,16 +1,11 @@
 package seqstorenode
 
 import (
-	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strconv"
 	"syscall"
 
-	"tp-grupal-distribuidos/internal/common/diskstore"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/seqstore"
 	"tp-grupal-distribuidos/internal/common/seqstoreprotocol"
@@ -21,40 +16,40 @@ type Config struct {
 	MomPort      int
 	RequestQueue string
 	Capacity     uint64
-	PersistPath  string
+}
+
+type SeqStoreClient struct {
+	claim   *seqstore.SeqStore
+	confirm *seqstore.SeqStore
+	lastSeq map[uint8]uint64
+}
+
+func newSeqStoreClient(capacity uint64) SeqStoreClient {
+	return SeqStoreClient{
+		claim:   seqstore.New(capacity),
+		confirm: seqstore.New(capacity),
+		lastSeq: make(map[uint8]uint64),
+	}
 }
 
 type SeqStoreNode struct {
-	stores      map[int]*seqstore.SeqStore
-	capacity    uint64
-	persistPath string
-	server      newmiddleware.RPCServer
+	stores   map[int]SeqStoreClient
+	capacity uint64
+	server   newmiddleware.RPCServer
 }
 
 func New(cfg Config) (*SeqStoreNode, error) {
-	if err := os.MkdirAll(filepath.Dir(cfg.PersistPath), 0755); err != nil {
-		return nil, fmt.Errorf("seqstorenode: create persist dir: %w", err)
-	}
-
 	connSettings := newmiddleware.ConnSettings{Hostname: cfg.MomHost, Port: cfg.MomPort}
 	server, err := newmiddleware.NewRPCServerMiddleware(connSettings, cfg.RequestQueue)
 	if err != nil {
 		return nil, err
 	}
 
-	node := &SeqStoreNode{
-		stores:      make(map[int]*seqstore.SeqStore),
-		capacity:    cfg.Capacity,
-		persistPath: cfg.PersistPath,
-		server:      server,
-	}
-
-	if err := node.loadState(); err != nil {
-		server.Close()
-		return nil, err
-	}
-
-	return node, nil
+	return &SeqStoreNode{
+		stores:   make(map[int]SeqStoreClient),
+		capacity: cfg.Capacity,
+		server:   server,
+	}, nil
 }
 
 func (n *SeqStoreNode) Run() {
@@ -85,6 +80,8 @@ func (n *SeqStoreNode) handle(req newmiddleware.RPCMessage, reply func([]byte) e
 	switch msgType {
 	case seqstoreprotocol.TypeClaim:
 		n.handleClaim(req.Body, reply, nack)
+	case seqstoreprotocol.TypeConfirm:
+		n.handleConfirm(req.Body, reply, nack)
 	case seqstoreprotocol.TypeRemove:
 		n.handleRemove(req.Body, reply, nack)
 	default:
@@ -94,31 +91,49 @@ func (n *SeqStoreNode) handle(req newmiddleware.RPCMessage, reply func([]byte) e
 }
 
 func (n *SeqStoreNode) handleClaim(body []byte, reply func([]byte) error, nack func()) {
-	clientID, seq, err := seqstoreprotocol.DecodeClaimRequest(body)
+	clientID, sender, seq, err := seqstoreprotocol.DecodeClaimRequest(body)
 	if err != nil {
 		slog.Error("malformed claim request", "err", err)
 		nack()
 		return
 	}
 
-	store, ok := n.stores[clientID]
+	client, ok := n.stores[clientID]
 	if !ok {
-		store = seqstore.New(n.capacity)
-		n.stores[clientID] = store
+		client = newSeqStoreClient(n.capacity)
+		n.stores[clientID] = client
 	}
-	free := store.Claim(seq)
-
+	free := client.claim.Claim(seq)
 	if free {
-		if err := diskstore.WriteAtomic(n.persistPath, n.snapshot()); err != nil {
-			slog.Error("while persisting state, stopping server", "err", err)
-			nack()
-			go n.server.StopConsuming()
-			return
-		}
+		client.lastSeq[sender] = seq
+	} else if client.lastSeq[sender] == seq && !client.confirm.IsSet(seq) {
+		free = true
 	}
 
 	if err := reply(seqstoreprotocol.EncodeResponse(free)); err != nil {
 		slog.Error("while sending reply", "clientID", clientID, "seq", seq, "err", err)
+	}
+}
+
+func (n *SeqStoreNode) handleConfirm(body []byte, reply func([]byte) error, nack func()) {
+	clientID, _, seq, err := seqstoreprotocol.DecodeConfirmRequest(body)
+	if err != nil {
+		slog.Error("malformed confirm request", "err", err)
+		nack()
+		return
+	}
+
+	client, ok := n.stores[clientID]
+	if !ok {
+		if err := reply(seqstoreprotocol.EncodeResponse(false)); err != nil {
+			slog.Error("while sending confirm reply", "clientID", clientID, "err", err)
+		}
+		return
+	}
+	free := client.confirm.Claim(seq)
+
+	if err := reply(seqstoreprotocol.EncodeResponse(free)); err != nil {
+		slog.Error("while sending confirm reply", "clientID", clientID, "seq", seq, "err", err)
 	}
 }
 
@@ -131,48 +146,9 @@ func (n *SeqStoreNode) handleRemove(body []byte, reply func([]byte) error, nack 
 	}
 
 	delete(n.stores, clientID)
-	snapshot := n.snapshot()
-
-	if err := diskstore.WriteAtomic(n.persistPath, snapshot); err != nil {
-		slog.Error("while persisting remove, stopping server", "clientID", clientID, "err", err)
-		nack()
-		go n.server.StopConsuming()
-		return
-	}
-
 	slog.Info("seqstore: client removed", "clientID", clientID)
 
 	if err := reply(seqstoreprotocol.EncodeResponse(true)); err != nil {
 		slog.Error("while sending remove reply", "clientID", clientID, "err", err)
 	}
-}
-
-func (n *SeqStoreNode) snapshot() map[string][]byte {
-	data := make(map[string][]byte, len(n.stores))
-	for clientID, store := range n.stores {
-		data[strconv.Itoa(clientID)] = store.Marshal()
-	}
-	return data
-}
-
-func (n *SeqStoreNode) loadState() error {
-	data, err := diskstore.Read(n.persistPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("seqstorenode: load state: %w", err)
-	}
-	for key, val := range data {
-		clientID, err := strconv.Atoi(key)
-		if err != nil {
-			return fmt.Errorf("seqstorenode: invalid client key %q: %w", key, err)
-		}
-		store, err := seqstore.NewFromBytes(val)
-		if err != nil {
-			return fmt.Errorf("seqstorenode: load store for client %d: %w", clientID, err)
-		}
-		n.stores[clientID] = store
-	}
-	return nil
 }

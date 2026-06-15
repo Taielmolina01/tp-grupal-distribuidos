@@ -56,6 +56,10 @@ func (w *Writer) String(v string) {
 func (w *Writer) Time(t time.Time) {
 	w.buf = binary.BigEndian.AppendUint64(w.buf, uint64(t.Unix()))
 }
+func (w *Writer) ByteSlice(v []byte) {
+	w.buf = binary.BigEndian.AppendUint32(w.buf, uint32(len(v)))
+	w.buf = append(w.buf, v...)
+}
 
 func (w *Writer) Bytes() []byte  { return w.buf }
 func (w *Writer) Len() int       { return len(w.buf) }
@@ -175,6 +179,24 @@ func (r *Reader) Time() time.Time {
 		return time.Time{}
 	}
 	return time.Unix(int64(binary.BigEndian.Uint64(b)), 0).UTC()
+}
+
+func (r *Reader) ByteSlice() []byte {
+	n := r.Uint32()
+	if r.err != nil {
+		return nil
+	}
+	if int(n) > r.Remaining() {
+		r.err = ErrFieldTooLarge
+		return nil
+	}
+	b := r.read(int(n))
+	if r.err != nil {
+		return nil
+	}
+	out := make([]byte, n)
+	copy(out, b)
+	return out
 }
 
 func (r *Reader) Count(minRecordSize uint32) uint32 {

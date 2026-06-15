@@ -6,11 +6,13 @@ import (
 )
 
 const (
-	TypeClaim  byte = 0
-	TypeRemove byte = 1
+	TypeClaim   byte = 0
+	TypeRemove  byte = 1
+	TypeConfirm byte = 2
 )
 
-const claimRequestSize = 13
+const claimRequestSize = 14
+const confirmRequestSize = 14
 const removeRequestSize = 5
 
 func DecodeType(buf []byte) (byte, error) {
@@ -20,19 +22,36 @@ func DecodeType(buf []byte) (byte, error) {
 	return buf[0], nil
 }
 
-func EncodeClaimRequest(clientID int, seq uint64) []byte {
+func EncodeClaimRequest(clientID int, sender uint8, seq uint64) []byte {
 	buf := make([]byte, claimRequestSize)
 	buf[0] = TypeClaim
 	binary.BigEndian.PutUint32(buf[1:5], uint32(clientID))
-	binary.BigEndian.PutUint64(buf[5:13], seq)
+	buf[5] = sender
+	binary.BigEndian.PutUint64(buf[6:14], seq)
 	return buf
 }
 
-func DecodeClaimRequest(buf []byte) (clientID int, seq uint64, err error) {
+func DecodeClaimRequest(buf []byte) (clientID int, sender uint8, seq uint64, err error) {
 	if len(buf) < claimRequestSize {
-		return 0, 0, fmt.Errorf("seqstoreprotocol: claim request too short (%d bytes)", len(buf))
+		return 0, 0, 0, fmt.Errorf("seqstoreprotocol: claim request too short (%d bytes)", len(buf))
 	}
-	return int(binary.BigEndian.Uint32(buf[1:5])), binary.BigEndian.Uint64(buf[5:13]), nil
+	return int(binary.BigEndian.Uint32(buf[1:5])), buf[5], binary.BigEndian.Uint64(buf[6:14]), nil
+}
+
+func EncodeConfirmRequest(clientID int, sender uint8, seq uint64) []byte {
+	buf := make([]byte, confirmRequestSize)
+	buf[0] = TypeConfirm
+	binary.BigEndian.PutUint32(buf[1:5], uint32(clientID))
+	buf[5] = sender
+	binary.BigEndian.PutUint64(buf[6:14], seq)
+	return buf
+}
+
+func DecodeConfirmRequest(buf []byte) (clientID int, sender uint8, seq uint64, err error) {
+	if len(buf) < confirmRequestSize {
+		return 0, 0, 0, fmt.Errorf("seqstoreprotocol: confirm request too short (%d bytes)", len(buf))
+	}
+	return int(binary.BigEndian.Uint32(buf[1:5])), buf[5], binary.BigEndian.Uint64(buf[6:14]), nil
 }
 
 func EncodeRemoveRequest(clientID int) []byte {

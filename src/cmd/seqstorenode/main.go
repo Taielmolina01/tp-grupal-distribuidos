@@ -44,7 +44,7 @@ func loadConfig() (seqstorenode.Config, error) {
 		MomPort:      momPort,
 		RequestQueue: requestQueue,
 		Capacity:     capacity,
-		PersistPath:  persistPath,
+		// PersistPath:  persistPath,
 	}, nil
 }
 
