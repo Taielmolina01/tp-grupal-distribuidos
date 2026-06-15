@@ -1,0 +1,19 @@
+src/internal/common/msgmonitor/msgmonitor.go
+  s_4018125e714a66::t_7dc00bd625fbff 116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "ca102870e5d10a0e46ba90e1139ae1bde199f561",
+  "prompts": {},
+  "sessions": {
+    "s_4018125e714a66": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8f359464-200d-4445-af33-6577f2d6c000",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
