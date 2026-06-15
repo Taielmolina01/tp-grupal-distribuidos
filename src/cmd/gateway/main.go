@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"tp-grupal-distribuidos/internal/common/pinger"
 	"tp-grupal-distribuidos/internal/common/splitter"
 	"tp-grupal-distribuidos/internal/gateway"
 )
@@ -134,6 +135,9 @@ func run() int {
 		slog.Error("While initializing gateway", "err", err)
 		return 1
 	}
+
+	healthPinger := pinger.Serve(":" + pinger.DefaultPort)
+	defer healthPinger.Close()
 
 	if err := server.Run(); err != nil {
 		slog.Error("Gateway stopped with error", "err", err)

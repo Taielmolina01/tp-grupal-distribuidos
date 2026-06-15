@@ -59,6 +59,8 @@ func workerNodes(cfg *Config) []string {
 		}
 	}
 
+	nodes = append(nodes, "gateway")
+
 	add("q1234_filter_currency", cfg.FilterCurrency)
 	add("q1_filter_amount", cfg.FilterAmount)
 	add("q2_reducer", cfg.ReducerQ2)
