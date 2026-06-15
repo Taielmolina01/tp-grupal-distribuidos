@@ -1,0 +1,26 @@
+src/internal/seqstorenode/seqstorenode.go
+  s_00e4cc2dc9765a::t_3b0d6b2c5cdebe 4-5,9-10,15,26,32-36,40-42,44,50-62,98-101,104-112,114,118,120-121,123,125,133-161
+src/internal/common/seqstore/seqstore.go
+  s_00e4cc2dc9765a::t_dbd2592e3be834 3-7
+  s_00e4cc2dc9765a::t_43e2464fad3351 34-53
+src/cmd/seqstorenode/main.go
+  s_00e4cc2dc9765a::t_26f7bf8beab1d1 37-41,47
+src/cmd/seqstorenode/Dockerfile
+  s_00e4cc2dc9765a::t_3cb6992d28e202 10-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "8db72cce2cbf319d8bb442f7cee919b72a2a78e2",
+  "prompts": {},
+  "sessions": {
+    "s_00e4cc2dc9765a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ce8b383d-297e-4540-8050-16e13032fcf3",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
