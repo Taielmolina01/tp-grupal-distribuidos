@@ -259,7 +259,6 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 		return
 	}
 
-	//
 	byShard, err := f.processBatch(input)
 	if err != nil {
 		slog.Error("While processing batch", "err", err)
@@ -318,6 +317,8 @@ func (f *FilterAndSplitter) recoverState() {
 		f.kill()
 		return
 	}
+
+	slog.Info("STATUS RECOVERED", "len", f.handlerMessages.Len())
 }
 
 func (f *FilterAndSplitter) kill() {
@@ -357,15 +358,14 @@ func (f *FilterAndSplitter) commitState() error {
 }
 
 func (f *FilterAndSplitter) startupRecovery() error {
-	if err := f.loadState(); err != nil {
-		return fmt.Errorf("startup recovery: load state: %w", err)
-	}
-
+	slog.Info("Start recovery")
 	byShard, err := diskstore.Read(f.outputPersistPath)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil
+		slog.Info(".output not found")
+		return f.handlerMessages.LoadFromDisk(f.monitorPersistPath)
 	}
 	if err != nil {
+		slog.Info(".output file err", "err", err)
 		return fmt.Errorf("startup recovery: read output: %w", err)
 	}
 
@@ -373,12 +373,15 @@ func (f *FilterAndSplitter) startupRecovery() error {
 	if err := f.sendOutputs(byShard); err != nil {
 		return fmt.Errorf("startup recovery: send outputs: %w", err)
 	}
+
+	if err := f.loadState(); err != nil {
+		return fmt.Errorf("startup recovery: load state: %w", err)
+	}
+
 	return f.commitState()
 }
 
 func (f *FilterAndSplitter) loadState() error {
-	return nil
-
 	if _, err := os.Stat(f.tempMonitorPath); err == nil {
 		if err := f.handlerMessages.LoadFromDisk(f.tempMonitorPath); err == nil {
 			return nil

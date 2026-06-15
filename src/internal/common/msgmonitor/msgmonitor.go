@@ -1,6 +1,7 @@
 package msgmonitor
 
 import (
+	"log/slog"
 	"os"
 	"sync"
 
@@ -16,6 +17,7 @@ type MessageMonitor interface {
 	Close()
 	SaveToDisk(path string) error
 	LoadFromDisk(path string) error
+	Len() int
 }
 
 type clientState struct {
@@ -26,6 +28,7 @@ type clientState struct {
 type messageMonitorImpl struct {
 	clients map[int]clientState
 	mu      sync.Mutex
+	otroMu  sync.Mutex
 }
 
 func NewMessageMonitor() MessageMonitor {
@@ -34,6 +37,9 @@ func NewMessageMonitor() MessageMonitor {
 	}
 }
 
+func (m *messageMonitorImpl) Len() int {
+	return len(m.clients)
+}
 func (m *messageMonitorImpl) GetProcessedMessagesAmountByClientId(clientID int) uint32 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -96,19 +102,29 @@ func (m *messageMonitorImpl) SaveToDisk(path string) error {
 }
 
 func (m *messageMonitorImpl) LoadFromDisk(path string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	slog.Info("loading from disk", "path", path)
+
 	if path == "" {
 		return nil
 	}
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
+		slog.Info("not exists", "path", path)
+		clear(m.clients)
 		return nil
 	}
 	if err != nil {
+		slog.Info("error reading", "path", path, "err", err)
 		return err
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	slog.Info("antes", "path", path)
+	for k, v := range m.clients {
+		slog.Info("antes", "k", k, "v", v)
+	}
 
 	r := wire.NewReader(data)
 	for r.Remaining() > 0 {
@@ -120,6 +136,11 @@ func (m *messageMonitorImpl) LoadFromDisk(path string) error {
 			processed: processed,
 			forwarded: forwarded,
 		}
+	}
+
+	slog.Info("despues", "path", path)
+	for k, v := range m.clients {
+		slog.Info("despues", "k", k, "v", v)
 	}
 	return nil
 }
