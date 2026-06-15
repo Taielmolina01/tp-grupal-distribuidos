@@ -42,6 +42,15 @@ func (b *Builder[T]) TryAdd(record *T) bool {
 
 func (b *Builder[T]) IsEmpty() bool { return b.count == 0 }
 
+func (b *Builder[T]) Records() []T {
+	r := wire.NewReader(b.w.Bytes())
+	records := make([]T, 0, b.count)
+	for range b.count {
+		records = append(records, b.codec.Unmarshal(r))
+	}
+	return records
+}
+
 func (b *Builder[T]) Flush(clientID int, queryID uint8, senderID uint8, seq uint64) []byte {
 	msg := WriteRaw(clientID, queryID, senderID, seq, uint16(b.count), b.w.Bytes())
 	b.w.Reset()

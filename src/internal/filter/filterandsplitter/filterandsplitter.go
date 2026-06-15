@@ -41,26 +41,27 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 	)
 
 	defer func() {
-		if err != nil {
-			if eofOutput != nil {
-				if err := eofOutput.Close(); err != nil {
-					slog.Error("While closing EOF output", "err", err)
-				}
+		if err == nil {
+			return
+		}
+		if eofOutput != nil {
+			if err := eofOutput.Close(); err != nil {
+				slog.Error("While closing EOF output", "err", err)
 			}
-			if eofInput != nil {
-				if err := eofInput.Close(); err != nil {
-					slog.Error("While closing EOF input", "err", err)
-				}
+		}
+		if eofInput != nil {
+			if err := eofInput.Close(); err != nil {
+				slog.Error("While closing EOF input", "err", err)
 			}
-			if outputMiddleware != nil {
-				if err := outputMiddleware.Close(); err != nil {
-					slog.Error("While closing output middleware", "err", err)
-				}
+		}
+		if outputMiddleware != nil {
+			if err := outputMiddleware.Close(); err != nil {
+				slog.Error("While closing output middleware", "err", err)
 			}
-			if inputMiddleware != nil {
-				if err := inputMiddleware.Close(); err != nil {
-					slog.Error("While closing input middleware", "err", err)
-				}
+		}
+		if inputMiddleware != nil {
+			if err := inputMiddleware.Close(); err != nil {
+				slog.Error("While closing input middleware", "err", err)
 			}
 		}
 	}()

@@ -11,10 +11,13 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
+
+const FILTER_STATE_FILE = "filter_account_seen_%d"
 
 func NewFilterAccountSeen(config FilterAccountSeenConfig) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
@@ -26,16 +29,17 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (worker.Worker, error)
 	)
 
 	defer func() {
-		if err != nil {
-			if outputMiddleware != nil {
-				if err := outputMiddleware.Close(); err != nil {
-					slog.Error("While closing output middleware", "err", err)
-				}
+		if err == nil {
+			return
+		}
+		if outputMiddleware != nil {
+			if err := outputMiddleware.Close(); err != nil {
+				slog.Error("While closing output middleware", "err", err)
 			}
-			if inputMiddleware != nil {
-				if err := inputMiddleware.Close(); err != nil {
-					slog.Error("While closing input middleware", "err", err)
-				}
+		}
+		if inputMiddleware != nil {
+			if err := inputMiddleware.Close(); err != nil {
+				slog.Error("While closing input middleware", "err", err)
 			}
 		}
 	}()
@@ -53,16 +57,23 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (worker.Worker, error)
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
-	return &FilterAccountSeen{
+	f := &FilterAccountSeen{
 		id:               config.Id,
 		queryID:          config.QueryID,
 		inputMiddleware:  inputMiddleware,
 		outputMiddleware: outputMiddleware,
 		clientsState:     map[int]*clientState{},
+		stateFilePath:    fmt.Sprintf(FILTER_STATE_FILE, config.Id),
 		expectedEOFs:     config.ExpectedEOFs,
 		maxBatchSize:     config.MaxBatchSize,
 		maxBatchBytes:    config.MaxBatchBytes,
-	}, nil
+	}
+
+	if err := f.loadState(); err != nil {
+		slog.Error("While loading state from disk", "err", err)
+	}
+
+	return f, nil
 }
 
 func (f *FilterAccountSeen) Run() {
@@ -161,6 +172,10 @@ func (f *FilterAccountSeen) handleEOF(clientID int, senderID uint8, seq uint64, 
 	}
 
 	delete(f.clientsState, clientID)
+
+	if err := f.saveState(); err != nil {
+		slog.Error("While saving state after EOF", "client_id", clientID, "err", err)
+	}
 }
 
 func (f *FilterAccountSeen) flushResults(clientID int, state *clientState) {
@@ -181,4 +196,95 @@ func (f *FilterAccountSeen) stateFor(clientID int) *clientState {
 		f.clientsState[clientID] = st
 	}
 	return st
+}
+
+func (f *FilterAccountSeen) saveState() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	w := wire.NewWriter()
+
+	w.Uint32(uint32(len(f.clientsState)))
+	for clientID, state := range f.clientsState {
+		w.Int32(int32(clientID))
+		w.Int32(int32(state.eofAmt))
+
+		w.Uint32(uint32(len(state.seqReceived)))
+		for senderID, seq := range state.seqReceived {
+			w.Int32(int32(senderID))
+			w.Uint64(seq)
+		}
+
+		w.Uint32(uint32(len(state.seenAccounts)))
+		for acc := range state.seenAccounts {
+			w.String(acc.BankID)
+			w.String(acc.AccountNumber)
+		}
+
+		pending := state.builder.Records()
+		w.Uint32(uint32(len(pending)))
+		for i := range pending {
+			records.Query4ResultCodec.Marshal(w, &pending[i])
+		}
+	}
+
+	tmp := f.stateFilePath + ".tmp"
+	if err := os.WriteFile(tmp, w.Bytes(), 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, f.stateFilePath)
+}
+
+func (f *FilterAccountSeen) loadState() error {
+	data, err := os.ReadFile(f.stateFilePath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	r := wire.NewReader(data)
+
+	numClients := r.Uint32()
+	for range numClients {
+		clientID := int(r.Int32())
+		eofAmt := int(r.Int32())
+
+		seqLen := r.Uint32()
+		seqReceived := make(map[int]uint64, seqLen)
+		for range seqLen {
+			senderID := int(r.Int32())
+			seq := r.Uint64()
+			seqReceived[senderID] = seq
+		}
+
+		seenLen := r.Uint32()
+		seenAccounts := make(map[account.AccountIdentifier]struct{}, seenLen)
+		for range seenLen {
+			bankID := r.String()
+			accNumber := r.String()
+			seenAccounts[account.AccountIdentifier{BankID: bankID, AccountNumber: accNumber}] = struct{}{}
+		}
+
+		pendingLen := r.Uint32()
+		st := &clientState{
+			eofAmt:       eofAmt,
+			seenAccounts: seenAccounts,
+			builder:      batch.NewBuilder(f.maxBatchSize, f.maxBatchBytes, records.Query4ResultCodec),
+			seqReceived:  seqReceived,
+		}
+		for range pendingLen {
+			result := records.Query4ResultCodec.Unmarshal(r)
+			st.builder.TryAdd(&result)
+		}
+
+		if r.Err() != nil {
+			return r.Err()
+		}
+
+		f.clientsState[clientID] = st
+	}
+
+	return r.Err()
 }

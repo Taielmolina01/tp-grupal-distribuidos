@@ -106,7 +106,7 @@ func (a *AvgAggregator) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
-	slog.Info("SIGTERM signal received, saving state and stopping consumer")
+	slog.Info("SIGTERM signal received, stopping consumer")
 
 	if err := a.inputQueue.StopConsuming(); err != nil {
 		slog.Error("While stopping input queue consumer", "aggregate_id", a.id, "err", err)
@@ -114,13 +114,6 @@ func (a *AvgAggregator) HandleSignals() {
 }
 
 func (a *AvgAggregator) close() {
-	if err := a.stateSaver.SaveState(
-		a.accums,
-		a.eofCounts,
-		a.eofTotals,
-	); err != nil {
-		slog.Error("While saving state on close", "aggregate_id", a.id, "err", err)
-	}
 	if err := a.inputQueue.Close(); err != nil {
 		slog.Error("While closing input queue", "aggregate_id", a.id, "err", err)
 	}

@@ -65,18 +65,20 @@ func NewAcumAccounts(config AcumAccountsConfig) (worker.Worker, error) {
 	)
 
 	defer func() {
-		if err != nil {
-			if outputMiddleware != nil {
-				if err := outputMiddleware.Close(); err != nil {
-					slog.Error("While closing output middleware", "err", err)
-				}
-			}
-			if inputMiddleware != nil {
-				if err := inputMiddleware.Close(); err != nil {
-					slog.Error("While closing input middleware", "err", err)
-				}
+		if err == nil {
+			return
+		}
+		if outputMiddleware != nil {
+			if err := outputMiddleware.Close(); err != nil {
+				slog.Error("While closing output middleware", "err", err)
 			}
 		}
+		if inputMiddleware != nil {
+			if err := inputMiddleware.Close(); err != nil {
+				slog.Error("While closing input middleware", "err", err)
+			}
+		}
+
 	}()
 
 	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)

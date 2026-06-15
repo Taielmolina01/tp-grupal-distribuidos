@@ -36,7 +36,8 @@ type FilterAccountSeen struct {
 	inputMiddleware  newmiddleware.Middleware
 	outputMiddleware newmiddleware.Middleware
 
-	clientsState map[int]*clientState
+	clientsState  map[int]*clientState
+	stateFilePath string
 
 	queryID int
 }
