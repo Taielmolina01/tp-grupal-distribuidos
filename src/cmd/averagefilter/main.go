@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"tp-grupal-distribuidos/internal/averagefilter"
+	"tp-grupal-distribuidos/internal/common/pinger"
 )
 
 func run() int {
@@ -19,6 +20,9 @@ func run() int {
 		slog.Error("While initializing average filter", "err", err)
 		return 1
 	}
+
+	healthPinger := pinger.Serve(":" + pinger.DefaultPort)
+	defer healthPinger.Close()
 
 	go server.HandleSignals()
 	server.Run()

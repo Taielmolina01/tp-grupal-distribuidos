@@ -113,7 +113,7 @@ func newReducer[T, O comparable](
 		config.ReducerAmount,
 		uint32(config.Id),
 		handlerMessages,
-		func(clientID int, total uint32, isCoordinator bool) error {
+		func(clientID int, _ uint64, total uint32, isCoordinator bool) error {
 			values := reducer.reducerMonitor.GetValuesCopyByClientIdAndDelete(clientID)
 
 			byShard := make(map[int][]O)

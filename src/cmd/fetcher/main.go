@@ -3,6 +3,7 @@ package main
 import (
 	"log/slog"
 	"os"
+	"tp-grupal-distribuidos/internal/common/pinger"
 	"tp-grupal-distribuidos/internal/fetcher"
 )
 
@@ -18,6 +19,9 @@ func run() int {
 		slog.Error("While creating fetcher", "err", err)
 		return 1
 	}
+
+	healthPinger := pinger.Serve(":" + pinger.DefaultPort)
+	defer healthPinger.Close()
 
 	go server.HandleSignals()
 
