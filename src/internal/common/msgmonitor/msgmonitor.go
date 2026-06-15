@@ -17,8 +17,10 @@ const (
 
 type MessageMonitor interface {
 	GetProcessedMessagesAmountByClientId(int) uint32
+	SetProcessedMessagesAmountByClientId(int, uint32)
 	AddProcessedMessagesAmountByClientId(int, uint32)
 	GetForwardedMessagesAmountByClientId(int) uint32
+	SetForwardedMessagesAmountByClientId(int, uint32)
 	AddForwardedMessagesAmountByClientId(int, uint32)
 	GetProcessedOldByClientId(int) uint32
 	SetProcessedOldByClientId(int, uint32)
@@ -67,6 +69,14 @@ func (m *messageMonitorImpl) GetProcessedMessagesAmountByClientId(clientID int) 
 	return m.clients[clientID].processed
 }
 
+func (m *messageMonitorImpl) SetProcessedMessagesAmountByClientId(clientID int, amount uint32) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.clients[clientID]
+	s.processed = amount
+	m.clients[clientID] = s
+}
+
 func (m *messageMonitorImpl) AddProcessedMessagesAmountByClientId(clientID int, amount uint32) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -79,6 +89,14 @@ func (m *messageMonitorImpl) GetForwardedMessagesAmountByClientId(clientID int) 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.clients[clientID].forwarded
+}
+
+func (m *messageMonitorImpl) SetForwardedMessagesAmountByClientId(clientID int, amount uint32) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.clients[clientID]
+	s.forwarded = amount
+	m.clients[clientID] = s
 }
 
 func (m *messageMonitorImpl) AddForwardedMessagesAmountByClientId(clientID int, amount uint32) {

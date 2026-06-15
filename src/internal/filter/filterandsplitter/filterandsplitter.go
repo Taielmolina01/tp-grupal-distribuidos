@@ -123,7 +123,6 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		queryID:            config.QueryID,
 		handlerMessages:    handlerMessages,
 		monitorPersistPath: config.MonitorPersistPath,
-		tempMonitorPath:    config.MonitorPersistPath + ".tmp",
 		outputPersistPath:  filepath.Join(filepath.Dir(config.MonitorPersistPath), "output.bin"),
 		inputMiddleware:    inputMiddleware,
 		outputMiddleware:   outputMiddleware,
@@ -263,40 +262,46 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 		return
 	}
 
+	f.handlerMessages.SetLastSeqNumberByClientId(input.ClientID, input.Seq)
+	f.handlerMessages.SetProcessedOldByClientId(input.ClientID, f.handlerMessages.GetProcessedMessagesAmountByClientId(input.ClientID))
+	f.handlerMessages.SetForwardedOldByClientId(input.ClientID, f.handlerMessages.GetForwardedMessagesAmountByClientId(input.ClientID))
+
 	byShard, err := f.processBatch(input)
 	if err != nil {
 		slog.Error("While processing batch", "err", err)
-		f.recoverState()
+		f.recoverState(input.ClientID, msgmonitor.StatusReady)
 		ack()
 		return
 	}
 
-	if err = f.writeTemp(); err != nil {
+	f.handlerMessages.SetStatusByClientId(input.ClientID, msgmonitor.StatusClaim)
+	f.handlerMessages.SetOutputsByClientId(input.ClientID, byShard)
+
+	if err = f.handlerMessages.SaveToDisk(f.monitorPersistPath); err != nil {
 		slog.Error("While writing temp", "err", err)
-		f.recoverState()
+		f.recoverState(input.ClientID, msgmonitor.StatusReady)
 		nack()
 		return
 	}
 
-	if err = f.writeOutput(byShard); err != nil {
-		slog.Error("While writing ouput", "err", err)
-		nack()
-		return
-	}
-
-	accept, err := f.tryCommit(input.ClientID, input.Seq)
+	claimResp, err := f.claim(input.ClientID, input.Seq)
 	if err != nil {
-		slog.Error("While trying to commit", "err", err)
+		slog.Error("While claiming seq", "err", err)
+		f.recoverState(input.ClientID, msgmonitor.StatusReady)
 		nack()
 		return
 	}
 
-	// A partir de acá damos el ack y trabajamos con lo que tenemos en disco ante caidas
-	ack()
-
-	if !accept {
-		slog.Warn("Seq rejected, rolling back", "seq", input.Seq)
-		f.recoverState()
+	switch claimResp {
+	case seqstoreprotocol.ClaimConfirmed:
+		slog.Warn("Seq already confirmed, rolling back", "seq", input.Seq)
+		f.recoverState(input.ClientID, msgmonitor.StatusReady)
+		ack()
+		return
+	case seqstoreprotocol.ClaimClaimed:
+		slog.Warn("Seq claimed by another sender, rolling back", "seq", input.Seq)
+		f.recoverState(input.ClientID, msgmonitor.StatusReady)
+		nack()
 		return
 	}
 
@@ -306,25 +311,46 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 		return
 	}
 
-	if err = f.commitState(); err != nil {
-		slog.Error("commitState failed, killing process", "err", err)
-		f.kill()
-	}
-}
+	f.handlerMessages.SetStatusByClientId(input.ClientID, msgmonitor.StatusConfirm)
+	f.handlerMessages.SetOutputsByClientId(input.ClientID, nil)
 
-func (f *FilterAndSplitter) recoverState() {
-	if err := diskstore.RemoveIfExists(f.outputPersistPath); err != nil {
-		slog.Error("recoverState: cannot clean output, killing node", "err", err)
-		f.kill()
-	}
-
-	if err := f.handlerMessages.LoadFromDisk(f.monitorPersistPath); err != nil {
-		slog.Error("recoverState: cannot load backup, killing node", "err", err)
+	if err = f.handlerMessages.SaveToDisk(f.monitorPersistPath); err != nil {
+		slog.Error("While writing confirm state, killing process", "err", err)
 		f.kill()
 		return
 	}
 
-	slog.Info("STATUS RECOVERED", "len", f.handlerMessages.Len())
+	if err = f.confirmSeq(input.ClientID, input.Seq); err != nil {
+		slog.Error("confirm failed, killing process", "err", err)
+		f.kill()
+		return
+	}
+
+	f.handlerMessages.SetStatusByClientId(input.ClientID, msgmonitor.StatusReady)
+
+	if err = f.handlerMessages.SaveToDisk(f.monitorPersistPath); err != nil {
+		slog.Error("While writing confirm state, killing process", "err", err)
+		f.kill()
+		return
+	}
+
+	ack()
+}
+
+func (f *FilterAndSplitter) recoverState(clientID int, target msgmonitor.ClientStatus) {
+	switch target {
+	case msgmonitor.StatusReady:
+		f.handlerMessages.SetProcessedMessagesAmountByClientId(clientID, f.handlerMessages.GetProcessedOldByClientId(clientID))
+		f.handlerMessages.SetForwardedMessagesAmountByClientId(clientID, f.handlerMessages.GetForwardedOldByClientId(clientID))
+		f.handlerMessages.SetLastSeqNumberByClientId(clientID, 0)
+		f.handlerMessages.SetOutputsByClientId(clientID, nil)
+		f.handlerMessages.SetStatusByClientId(clientID, msgmonitor.StatusReady)
+	case msgmonitor.StatusClaim:
+		f.handlerMessages.SetStatusByClientId(clientID, msgmonitor.StatusClaim)
+	case msgmonitor.StatusConfirm:
+		f.handlerMessages.SetOutputsByClientId(clientID, nil)
+		f.handlerMessages.SetStatusByClientId(clientID, msgmonitor.StatusConfirm)
+	}
 }
 
 func (f *FilterAndSplitter) kill() {
@@ -352,14 +378,10 @@ func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterC
 	return f.handleBatch(input.ClientID, input.Seq, input.Records), nil
 }
 
-func (f *FilterAndSplitter) writeTemp() error {
-	return f.handlerMessages.SaveToDisk(f.tempMonitorPath)
-}
-
 func (f *FilterAndSplitter) commitState() error {
-	if err := os.Rename(f.tempMonitorPath, f.monitorPersistPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("commit: rename monitor: %w", err)
-	}
+	// if err := os.Rename(f.tempMonitorPath, f.monitorPersistPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+	// 	return fmt.Errorf("commit: rename monitor: %w", err)
+	// }
 	return diskstore.RemoveIfExists(f.outputPersistPath)
 }
 
@@ -388,12 +410,12 @@ func (f *FilterAndSplitter) startupRecovery() error {
 }
 
 func (f *FilterAndSplitter) loadState() error {
-	if _, err := os.Stat(f.tempMonitorPath); err == nil {
-		if err := f.handlerMessages.LoadFromDisk(f.tempMonitorPath); err == nil {
-			return nil
-		}
-		slog.Warn("Temp monitor state unreadable, falling back to backup", "filter_id", f.id)
-	}
+	// if _, err := os.Stat(f.tempMonitorPath); err == nil {
+	// 	if err := f.handlerMessages.LoadFromDisk(f.tempMonitorPath); err == nil {
+	// 		return nil
+	// 	}
+	// 	slog.Warn("Temp monitor state unreadable, falling back to backup", "filter_id", f.id)
+	// }
 	return f.handlerMessages.LoadFromDisk(f.monitorPersistPath)
 }
 
@@ -403,15 +425,17 @@ func (f *FilterAndSplitter) writeOutput(byShard map[string][]byte) error {
 
 const seqStoreTimeout = 5 * time.Second
 
-func (f *FilterAndSplitter) tryCommit(clientID int, seq uint64) (bool, error) {
+func (f *FilterAndSplitter) claim(clientID int, seq uint64) (seqstoreprotocol.ClaimResponse, error) {
 	resp, err := f.seqStore.Call(seqstoreprotocol.EncodeClaimRequest(clientID, uint8(f.id), seq), seqStoreTimeout)
 	if err != nil {
-		return false, fmt.Errorf("tryCommit rpc call: %w", err)
+		return 0, fmt.Errorf("claim rpc call: %w", err)
 	}
-	if len(resp) < 1 {
-		return false, fmt.Errorf("tryCommit: empty response")
-	}
-	return resp[0] != 0, nil
+	return seqstoreprotocol.DecodeClaimResponse(resp)
+}
+
+func (f *FilterAndSplitter) confirmSeq(clientID int, seq uint64) error {
+	_, err := f.seqStore.Call(seqstoreprotocol.EncodeConfirmRequest(clientID, uint8(f.id), seq), seqStoreTimeout)
+	return err
 }
 
 func (f *FilterAndSplitter) removeFromSeqStore(clientID int) error {

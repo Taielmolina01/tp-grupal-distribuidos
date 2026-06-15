@@ -103,14 +103,21 @@ func (n *SeqStoreNode) handleClaim(body []byte, reply func([]byte) error, nack f
 		client = newSeqStoreClient(n.capacity)
 		n.stores[clientID] = client
 	}
-	free := client.claim.Claim(seq)
-	if free {
+
+	var resp seqstoreprotocol.ClaimResponse
+	switch {
+	case client.confirm.IsSet(seq):
+		resp = seqstoreprotocol.ClaimConfirmed
+	case client.claim.Claim(seq):
 		client.lastSeq[sender] = seq
-	} else if client.lastSeq[sender] == seq && !client.confirm.IsSet(seq) {
-		free = true
+		resp = seqstoreprotocol.ClaimFree
+	case client.lastSeq[sender] == seq:
+		resp = seqstoreprotocol.ClaimFree
+	default:
+		resp = seqstoreprotocol.ClaimClaimed
 	}
 
-	if err := reply(seqstoreprotocol.EncodeResponse(free)); err != nil {
+	if err := reply(seqstoreprotocol.EncodeClaimResponse(resp)); err != nil {
 		slog.Error("while sending reply", "clientID", clientID, "seq", seq, "err", err)
 	}
 }

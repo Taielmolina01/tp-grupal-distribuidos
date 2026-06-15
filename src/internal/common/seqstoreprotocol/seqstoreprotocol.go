@@ -68,6 +68,25 @@ func DecodeRemoveRequest(buf []byte) (clientID int, err error) {
 	return int(binary.BigEndian.Uint32(buf[1:5])), nil
 }
 
+type ClaimResponse byte
+
+const (
+	ClaimFree      ClaimResponse = 0
+	ClaimClaimed   ClaimResponse = 1
+	ClaimConfirmed ClaimResponse = 2
+)
+
+func EncodeClaimResponse(r ClaimResponse) []byte {
+	return []byte{byte(r)}
+}
+
+func DecodeClaimResponse(buf []byte) (ClaimResponse, error) {
+	if len(buf) < 1 {
+		return 0, fmt.Errorf("seqstoreprotocol: claim response too short")
+	}
+	return ClaimResponse(buf[0]), nil
+}
+
 func EncodeResponse(free bool) []byte {
 	if free {
 		return []byte{1}
