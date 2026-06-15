@@ -1,6 +1,7 @@
 package join
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -12,6 +13,8 @@ import (
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
+
+const JOIN_STATE_FILE = "join_state_%d"
 
 type TwoInputAdapter[L, R, O any] struct {
 	id                int
@@ -28,6 +31,7 @@ type TwoInputAdapter[L, R, O any] struct {
 	leftEofsExpected  int
 	rightEofsExpected int
 	fired             map[int]bool
+	stateFilePath     string
 	lock              sync.Mutex
 }
 
@@ -97,6 +101,11 @@ func newTwoInputJoin[L, R, O any](
 		leftEofsExpected:  leftEofs,
 		rightEofsExpected: rightEofs,
 		fired:             map[int]bool{},
+		stateFilePath:     fmt.Sprintf(JOIN_STATE_FILE, config.Id),
+	}
+
+	if err := adapter.loadState(); err != nil {
+		slog.Error("While loading join state from disk", "err", err)
 	}
 
 	return adapter, nil
@@ -134,39 +143,56 @@ func (a *TwoInputAdapter[L, R, O]) HandleSignals() {
 // Consuming handlers
 
 func (a *TwoInputAdapter[L, R, O]) HandleLeft(msg middleware.Message, ack, nack func()) {
-	defer ack()
-
 	input, err := batch.Read(msg.Body, a.leftCodec)
 	if err != nil {
 		slog.Error("while deserializing left batch", "err", err)
+		ack()
 		return
 	}
 	if input.EOF {
 		a.HandleLeftEof(input.ClientID)
-		a.handleEOF(input.ClientID)
+		a.checkClientIsFinishedAndSendEOF(input.ClientID)
+		if err := a.saveState(); err != nil {
+			slog.Error("While saving state after left EOF", "client_id", input.ClientID, "err", err)
+		}
+		ack()
 		return
 	}
 	for i := range input.Records {
 		a.join.HandleLeft(input.ClientID, input.Records[i])
 	}
+
+	if err := a.saveState(); err != nil {
+		slog.Error("While saving state after right EOF", "client_id", input.ClientID, "err", err)
+	}
+	ack()
 }
 
 func (a *TwoInputAdapter[L, R, O]) HandleRight(msg middleware.Message, ack, nack func()) {
-	defer ack()
-
 	input, err := batch.Read(msg.Body, a.rightCodec)
 	if err != nil {
 		slog.Error("while deserializing right batch", "err", err)
+		ack()
 		return
 	}
 	if input.EOF {
 		a.HandleRightEof(input.ClientID)
-		a.handleEOF(input.ClientID)
+		a.checkClientIsFinishedAndSendEOF(input.ClientID)
+		if err := a.saveState(); err != nil {
+			slog.Error("While saving state after right EOF", "client_id", input.ClientID, "err", err)
+		}
+		ack()
 		return
 	}
 	for i := range input.Records {
 		a.join.HandleRight(input.ClientID, input.Records[i])
 	}
+
+	if err := a.saveState(); err != nil {
+		slog.Error("While saving state after right EOF", "client_id", input.ClientID, "err", err)
+	}
+
+	ack()
 }
 
 // Helpers with locking for EOF handling
@@ -184,8 +210,8 @@ func (a *TwoInputAdapter[L, R, O]) HandleRightEof(clientID int) {
 
 	a.rightEofCount[clientID]++
 }
-func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
-	if !a.handleEofWithLock(clientID) {
+func (a *TwoInputAdapter[L, R, O]) checkClientIsFinishedAndSendEOF(clientID int) {
+	if !a.isClientFinished(clientID) {
 		return
 	}
 
@@ -197,7 +223,7 @@ func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
 	}
 }
 
-func (a *TwoInputAdapter[L, R, O]) handleEofWithLock(clientId int) bool {
+func (a *TwoInputAdapter[L, R, O]) isClientFinished(clientId int) bool {
 	a.lock.Lock()
 	defer a.lock.Unlock()
 
@@ -209,6 +235,151 @@ func (a *TwoInputAdapter[L, R, O]) handleEofWithLock(clientId int) bool {
 	delete(a.rightEofCount, clientId)
 
 	return true
+}
+
+// State persistence
+
+func (a *TwoInputAdapter[L, R, O]) saveState() error {
+	a.join.mu.Lock()
+	a.lock.Lock()
+	defer func() {
+		a.lock.Unlock()
+		a.join.mu.Unlock()
+	}()
+
+	w := wire.NewWriter()
+
+	w.Uint32(uint32(len(a.join.leftBuffer)))
+	for clientID, methods := range a.join.leftBuffer {
+		w.Int32(int32(clientID))
+		w.Uint32(uint32(len(methods)))
+		for key, record := range methods {
+			w.String(key)
+			a.leftCodec.Marshal(w, &record)
+		}
+	}
+
+	w.Uint32(uint32(len(a.join.rightBuffer)))
+	for clientID, methods := range a.join.rightBuffer {
+		w.Int32(int32(clientID))
+		w.Uint32(uint32(len(methods)))
+		for key, record := range methods {
+			w.String(key)
+			a.rightCodec.Marshal(w, &record)
+		}
+	}
+
+	w.Uint32(uint32(len(a.join.pending)))
+	for clientID, records := range a.join.pending {
+		w.Int32(int32(clientID))
+		w.Uint32(uint32(len(records)))
+		for _, record := range records {
+			a.join.outputCodec.Marshal(w, &record)
+		}
+	}
+
+	w.Uint32(uint32(len(a.leftEofCount)))
+	for clientID, count := range a.leftEofCount {
+		w.Int32(int32(clientID))
+		w.Int32(int32(count))
+	}
+
+	w.Uint32(uint32(len(a.rightEofCount)))
+	for clientID, count := range a.rightEofCount {
+		w.Int32(int32(clientID))
+		w.Int32(int32(count))
+	}
+
+	w.Uint32(uint32(len(a.fired)))
+	for clientID := range a.fired {
+		w.Int32(int32(clientID))
+	}
+
+	tmp := a.stateFilePath + ".tmp"
+	if err := os.WriteFile(tmp, w.Bytes(), 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, a.stateFilePath)
+}
+
+func (a *TwoInputAdapter[L, R, O]) loadState() error {
+	data, err := os.ReadFile(a.stateFilePath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	r := wire.NewReader(data)
+
+	numClients := r.Uint32()
+	for range numClients {
+		clientID := int(r.Int32())
+		numMethods := r.Uint32()
+		methods := make(map[string]L, numMethods)
+		for range numMethods {
+			key := r.String()
+			record := a.leftCodec.Unmarshal(r)
+			methods[key] = record
+		}
+		if r.Err() != nil {
+			return r.Err()
+		}
+		a.join.leftBuffer[clientID] = methods
+	}
+
+	numClients = r.Uint32()
+	for range numClients {
+		clientID := int(r.Int32())
+		numMethods := r.Uint32()
+		methods := make(map[string]R, numMethods)
+		for range numMethods {
+			key := r.String()
+			record := a.rightCodec.Unmarshal(r)
+			methods[key] = record
+		}
+		if r.Err() != nil {
+			return r.Err()
+		}
+		a.join.rightBuffer[clientID] = methods
+	}
+
+	numClients = r.Uint32()
+	for range numClients {
+		clientID := int(r.Int32())
+		numRecords := r.Uint32()
+		records := make([]O, numRecords)
+		for i := range numRecords {
+			records[i] = a.join.outputCodec.Unmarshal(r)
+		}
+		if r.Err() != nil {
+			return r.Err()
+		}
+		a.join.pending[clientID] = records
+	}
+
+	numClients = r.Uint32()
+	for range numClients {
+		clientID := int(r.Int32())
+		count := int(r.Int32())
+		a.leftEofCount[clientID] = count
+	}
+
+	numClients = r.Uint32()
+	for range numClients {
+		clientID := int(r.Int32())
+		count := int(r.Int32())
+		a.rightEofCount[clientID] = count
+	}
+
+	numClients = r.Uint32()
+	for range numClients {
+		clientID := int(r.Int32())
+		a.fired[clientID] = true
+	}
+
+	return r.Err()
 }
 
 // Close helper
