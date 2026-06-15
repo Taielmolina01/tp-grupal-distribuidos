@@ -26,3 +26,6 @@ average_filter_q3: 2
 # Query 5:
 filter_date_and_payment: 2
 filter_amt_q5: 2
+
+# Tolerancia a fallas:
+watchdogs: 1
