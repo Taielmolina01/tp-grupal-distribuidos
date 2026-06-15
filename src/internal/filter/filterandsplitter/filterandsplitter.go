@@ -139,19 +139,22 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		uint32(config.Id),
 		handlerMessages,
 		func(clientID int, seq uint64, total uint32, isCoordinator bool) error {
-			if isCoordinator {
-				handlerMessages.RemoveClient(clientID)
-
-				return outputMiddleware.Send(newmiddleware.Message{
-					Body:       batch.WriteEOF(clientID, config.QueryID, uint8(config.Id), seq, total),
-					RoutingKey: newmiddleware.BroadcastRoutingKey,
-				})
-			}
 			handlerMessages.RemoveClient(clientID)
 
-			node.commitState()
+			if isCoordinator {
+				if err := node.removeFromSeqStore(clientID); err != nil {
+					return fmt.Errorf("removing client %d from seqstore: %w", clientID, err)
+				}
 
-			return nil
+				if err := outputMiddleware.Send(newmiddleware.Message{
+					Body:       batch.WriteEOF(clientID, config.QueryID, uint8(config.Id), seq, total),
+					RoutingKey: newmiddleware.BroadcastRoutingKey,
+				}); err != nil {
+					return err
+				}
+			}
+
+			return node.commitState()
 		},
 		uint8(config.QueryID),
 	)
@@ -276,7 +279,7 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 		return
 	}
 
-	accept, err := f.tryCommit(input.ClientID, input.Seq, input.EOF)
+	accept, err := f.tryCommit(input.ClientID, input.Seq)
 	if err != nil {
 		slog.Error("While trying to commit", "err", err)
 		nack()
@@ -305,8 +308,6 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 }
 
 func (f *FilterAndSplitter) recoverState() {
-	return
-
 	if err := diskstore.RemoveIfExists(f.outputPersistPath); err != nil {
 		slog.Error("recoverState: cannot clean output, killing node", "err", err)
 		f.kill()
@@ -345,8 +346,6 @@ func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterC
 }
 
 func (f *FilterAndSplitter) writeTemp() error {
-	return nil
-
 	return f.handlerMessages.SaveToDisk(f.tempMonitorPath)
 }
 
@@ -395,8 +394,8 @@ func (f *FilterAndSplitter) writeOutput(byShard map[string][]byte) error {
 
 const seqStoreTimeout = 5 * time.Second
 
-func (f *FilterAndSplitter) tryCommit(clientID int, seq uint64, isEOF bool) (bool, error) {
-	resp, err := f.seqStore.Call(seqstoreprotocol.EncodeRequest(clientID, seq, isEOF), seqStoreTimeout)
+func (f *FilterAndSplitter) tryCommit(clientID int, seq uint64) (bool, error) {
+	resp, err := f.seqStore.Call(seqstoreprotocol.EncodeClaimRequest(clientID, seq), seqStoreTimeout)
 	if err != nil {
 		return false, fmt.Errorf("tryCommit rpc call: %w", err)
 	}
@@ -404,6 +403,11 @@ func (f *FilterAndSplitter) tryCommit(clientID int, seq uint64, isEOF bool) (boo
 		return false, fmt.Errorf("tryCommit: empty response")
 	}
 	return resp[0] != 0, nil
+}
+
+func (f *FilterAndSplitter) removeFromSeqStore(clientID int) error {
+	_, err := f.seqStore.Call(seqstoreprotocol.EncodeRemoveRequest(clientID), seqStoreTimeout)
+	return err
 }
 
 func (f *FilterAndSplitter) sendOutputs(output map[string][]byte) error {
