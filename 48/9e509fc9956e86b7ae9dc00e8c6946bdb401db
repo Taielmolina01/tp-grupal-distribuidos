@@ -1,0 +1,36 @@
+src/internal/common/seqstoreprotocol/seqstoreprotocol.go
+  s_c97747414f38b3::t_537277f436ae27 8-12,15-33,35-41,45-47,49
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_c97747414f38b3::t_3c30eabbc2b94d 142-143,147
+  s_c97747414f38b3::t_32e88de4f44063 397-398,409-410
+  s_c97747414f38b3::t_170c29c18c15d2 282
+src/internal/seqstorenode/seqstorenode.go
+  s_c97747414f38b3::t_e2c2440d656023 79,85-99,122-131,133,135-140,143-146
+  s_f2d8e4d5d126ca::t_32f7d7470c0b7a 150
+  s_f2d8e4d5d126ca::t_b9c9e025b920cc 112
+  s_f2d8e4d5d126ca::t_ce570a76776b2a 134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "489e509fc9956e86b7ae9dc00e8c6946bdb401db",
+  "prompts": {},
+  "sessions": {
+    "s_c97747414f38b3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6bdfca6b-6f5d-4768-a34f-25d51ec06fe3",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    },
+    "s_f2d8e4d5d126ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adeeca0a-ec02-4c61-8b55-33068a09e446",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
