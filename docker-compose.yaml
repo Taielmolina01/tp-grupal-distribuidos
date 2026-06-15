@@ -327,6 +327,7 @@ services:
     environment:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
+      - PERSIST_PATH=/var/bkp/Q4_filter_splitter_seqstore.bin
       - REQUEST_QUEUE=Q4_filter_splitter_seqstore
     logging:
       driver: json-file
