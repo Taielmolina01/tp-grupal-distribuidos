@@ -1,0 +1,35 @@
+src/internal/seqstorenode/seqstorenode.go
+  s_85eeedc427c7f5::t_e3bf9b4cea2e4f 106-111,113-117,120
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_85eeedc427c7f5::t_d060d2fd85997b 428,431,433
+  s_85eeedc427c7f5::t_0b13be5fd219c6 436-438
+  s_85eeedc427c7f5::t_a6ff1e8099350b 287,289,295-297,301-302,304
+  s_85eeedc427c7f5::t_c66fb447c46fd4 266-268,277-278
+  s_85eeedc427c7f5::t_ce61dc3f579808 323-324,326
+  s_85eeedc427c7f5::t_b51579ae524cc9 340-353
+  s_85eeedc427c7f5::t_e65bd18c1dcf01 314-316,318,320
+  s_85eeedc427c7f5::t_dfa45dab4739d8 272,282,290,298,303
+  s_85eeedc427c7f5::t_f3339f3fce3e77 299-300
+src/internal/common/msgmonitor/msgmonitor.go
+  s_85eeedc427c7f5::t_ecb459c9a47238 94-101
+  s_85eeedc427c7f5::t_f4a6d1297df20b 20,23
+  s_85eeedc427c7f5::t_5c7cf6f17a6700 72-79
+src/internal/common/seqstoreprotocol/seqstoreprotocol.go
+  s_85eeedc427c7f5::t_ef6e127f3ae93f 71-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "3df1daa7588cbc071130178dede161963b097c19",
+  "prompts": {},
+  "sessions": {
+    "s_85eeedc427c7f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "831b31a3-c071-4a36-bab8-9f64ef4c91bd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
