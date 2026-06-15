@@ -262,12 +262,14 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 	byShard, err := f.processBatch(input)
 	if err != nil {
 		slog.Error("While processing batch", "err", err)
+		f.recoverState()
 		ack()
 		return
 	}
 
 	if err = f.writeTemp(); err != nil {
 		slog.Error("While writing temp", "err", err)
+		f.recoverState()
 		nack()
 		return
 	}
