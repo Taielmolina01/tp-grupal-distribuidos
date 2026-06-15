@@ -40,6 +40,8 @@ type GatewayConfig struct {
 
 const gatewaySenderID uint8 = 0
 
+const readBufferSize = 64 * 1024
+
 type Gateway struct {
 	registry          clientregistry.ClientRegistry
 	accountQueues     []middleware.Middleware
@@ -252,7 +254,7 @@ func (gateway *Gateway) handshake(conn net.Conn, r io.Reader) (clientregistry.Cl
 }
 
 func (gateway *Gateway) handleClientRequest(conn net.Conn) {
-	r := bufio.NewReaderSize(conn, 64*1024)
+	r := bufio.NewReaderSize(conn, readBufferSize)
 
 	client, phase, err := gateway.handshake(conn, r)
 	if err != nil {

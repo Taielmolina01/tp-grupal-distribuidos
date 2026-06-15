@@ -187,8 +187,6 @@ func (client *Client) closeConn() {
 
 func (client *Client) sendRecords(conn net.Conn, phase tcpproto.Phase) error {
 	var seq uint64
-	// On a transfers-phase resume, accounts are already done: replay them only to
-	// advance the seq counter (so transfer seqs match), without re-sending.
 	skipAccounts := phase != tcpproto.PhaseAccounts
 	if err := client.sendAccountRecords(conn, &seq, skipAccounts); err != nil {
 		return err

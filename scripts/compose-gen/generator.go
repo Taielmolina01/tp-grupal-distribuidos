@@ -45,9 +45,6 @@ func generateCompose(cfg *Config) string {
 	b.WriteString("\n  # Tolerancia a fallas\n\n")
 	writeWatchdogs(&b, cfg)
 
-	b.WriteString("\nvolumes:\n")
-	b.WriteString("  gateway_sessions:\n")
-
 	return b.String()
 }
 
@@ -174,8 +171,6 @@ func writeGateway(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - SERVER_HOST=gateway\n")
 	b.WriteString("      - SERVER_PORT=5678\n")
 	fmt.Fprintf(b, "      - QUERY_EOFS_EXPECTED=%s\n", queryEofs)
-	b.WriteString("    volumes:\n")
-	b.WriteString("      - gateway_sessions:/data\n")
 	b.WriteString("\n")
 }
 
