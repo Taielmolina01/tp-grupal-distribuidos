@@ -174,7 +174,7 @@ func (distinctfilter *DistinctFilter[T]) LoadState() error {
 	state, err := os.ReadFile(distinctfilter.stateFilePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil // No state file, start fresh
+			return nil
 		}
 		return err
 	}
