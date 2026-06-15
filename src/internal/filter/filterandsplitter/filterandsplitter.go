@@ -176,6 +176,10 @@ func (f *FilterAndSplitter) Run() {
 
 	if err := f.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		f.handleInput(msg, ack, nack)
+		// msg1 := middleware.Message{Body: append([]byte(nil), msg.Body...)}
+		// msg2 := middleware.Message{Body: append([]byte(nil), msg.Body...)}
+		// f.handleInput(msg1, ack, nack)
+		// f.handleInput(msg2, func() {}, func() {})
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
 	}
@@ -416,6 +420,10 @@ func (f *FilterAndSplitter) removeFromSeqStore(clientID int) error {
 }
 
 func (f *FilterAndSplitter) sendOutputs(output map[string][]byte) error {
+	// if rand.Intn(1000) == 0 {
+	// 	slog.Error("error random outputs")
+	// 	return fmt.Errorf("error random outputs")
+	// }
 	if body, ok := output[_EOF_OUTPUT_KEY]; ok {
 		slog.Info("SEND OUTPUT")
 		return f.eofOutput.Send(middleware.Message{Body: body})
