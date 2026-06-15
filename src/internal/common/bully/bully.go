@@ -27,8 +27,7 @@ func CreateBullyAlgorithm(id int, peerCount int, basePort int) (Bully, error) {
 		if i == id {
 			continue
 		}
-		peerPort := basePort + i
-		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s_%d:%d", _CONTAINER_PREFIX, i, peerPort))
+		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s_%d:%d", _CONTAINER_PREFIX, i, basePort+i))
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve peer %s_%d: %v", _CONTAINER_PREFIX, i, err)
 		}
