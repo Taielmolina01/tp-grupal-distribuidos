@@ -38,7 +38,7 @@ services:
       - SERVER_PORT=5678
       - QUERY_EOFS_EXPECTED=1:1,2:2,3:2,4:2,5:1
     volumes:
-      - gateway_wal:/data
+      - gateway_sessions:/data
 
   client_0:
     build:
@@ -848,4 +848,4 @@ services:
 
 
 volumes:
-  gateway_wal:
+  gateway_sessions:

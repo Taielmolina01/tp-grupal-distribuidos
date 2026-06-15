@@ -71,7 +71,7 @@ func (client *Client) Run() error {
 	backoff := time.Duration(client.config.ConnectionAttemptDelayMs) * time.Millisecond
 
 	for client.running.Load() {
-		conn, phase, nextSeq, err := client.connectAndHandshake()
+		conn, phase, err := client.connectAndHandshake()
 		if err != nil {
 			if !client.running.Load() {
 				return nil
@@ -82,7 +82,7 @@ func (client *Client) Run() error {
 		}
 		client.setConn(conn)
 
-		err = client.runSession(conn, phase, nextSeq)
+		err = client.runSession(conn, phase)
 		client.closeConn()
 
 		if err == nil {
@@ -97,37 +97,37 @@ func (client *Client) Run() error {
 	return nil
 }
 
-func (client *Client) connectAndHandshake() (net.Conn, tcpproto.Phase, uint64, error) {
+func (client *Client) connectAndHandshake() (net.Conn, tcpproto.Phase, error) {
 	conn, err := net.Dial("tcp", client.config.ServerHost+":"+client.config.ServerPort)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, err
 	}
 
 	if err := tcpproto.WriteHello(conn, client.sessionID); err != nil {
 		conn.Close()
-		return nil, 0, 0, err
+		return nil, 0, err
 	}
 	msgType, err := tcpproto.ReadMsgType(conn)
 	if err != nil {
 		conn.Close()
-		return nil, 0, 0, err
+		return nil, 0, err
 	}
 	if msgType != tcpproto.Welcome {
 		conn.Close()
-		return nil, 0, 0, fmt.Errorf("expected WELCOME message, got %d", msgType)
+		return nil, 0, fmt.Errorf("expected WELCOME message, got %d", msgType)
 	}
-	sessionID, phase, nextSeq, err := tcpproto.ReadWelcome(conn)
+	sessionID, phase, _, err := tcpproto.ReadWelcome(conn)
 	if err != nil {
 		conn.Close()
-		return nil, 0, 0, err
+		return nil, 0, err
 	}
 
 	client.sessionID = sessionID
-	slog.Info("Session established", "session_id", sessionID, "phase", phase, "next_seq", nextSeq)
-	return conn, phase, nextSeq, nil
+	slog.Info("Session established", "session_id", sessionID, "phase", phase)
+	return conn, phase, nil
 }
 
-func (client *Client) runSession(conn net.Conn, phase tcpproto.Phase, nextSeq uint64) error {
+func (client *Client) runSession(conn net.Conn, phase tcpproto.Phase) error {
 	var wg sync.WaitGroup
 	var sendErr, recvErr error
 
@@ -144,7 +144,7 @@ func (client *Client) runSession(conn net.Conn, phase tcpproto.Phase, nextSeq ui
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sendErr = client.sendRecords(conn, nextSeq)
+			sendErr = client.sendRecords(conn, phase)
 			if sendErr != nil {
 				conn.Close()
 			}
@@ -185,18 +185,21 @@ func (client *Client) closeConn() {
 	}
 }
 
-func (client *Client) sendRecords(conn net.Conn, resumeFrom uint64) error {
+func (client *Client) sendRecords(conn net.Conn, phase tcpproto.Phase) error {
 	var seq uint64
-	if err := client.sendAccountRecords(conn, &seq, resumeFrom); err != nil {
+	// On a transfers-phase resume, accounts are already done: replay them only to
+	// advance the seq counter (so transfer seqs match), without re-sending.
+	skipAccounts := phase != tcpproto.PhaseAccounts
+	if err := client.sendAccountRecords(conn, &seq, skipAccounts); err != nil {
 		return err
 	}
-	if err := client.sendTransRecords(conn, &seq, resumeFrom); err != nil {
+	if err := client.sendTransRecords(conn, &seq, false); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (client *Client) sendAccountRecords(conn net.Conn, seq *uint64, resumeFrom uint64) error {
+func (client *Client) sendAccountRecords(conn net.Conn, seq *uint64, skip bool) error {
 	file, err := os.Open(client.config.InputFileAccounts)
 	if err != nil {
 		slog.Debug("Error while opening accounts file", "err", err)
@@ -213,7 +216,7 @@ func (client *Client) sendAccountRecords(conn net.Conn, seq *uint64, resumeFrom 
 
 	flush := func() error {
 		*seq++
-		if *seq < resumeFrom {
+		if skip {
 			builder.Reset()
 			return nil
 		}
@@ -253,10 +256,10 @@ func (client *Client) sendAccountRecords(conn net.Conn, seq *uint64, resumeFrom 
 		}
 	}
 
-	return client.sendEndOfRecords(conn, seq, resumeFrom, total)
+	return client.sendEndOfRecords(conn, seq, skip, total)
 }
 
-func (client *Client) sendTransRecords(conn net.Conn, seq *uint64, resumeFrom uint64) error {
+func (client *Client) sendTransRecords(conn net.Conn, seq *uint64, skip bool) error {
 	file, err := os.Open(client.config.InputFileTrans)
 	if err != nil {
 		slog.Debug("Error while opening trans file", "err", err)
@@ -273,7 +276,7 @@ func (client *Client) sendTransRecords(conn net.Conn, seq *uint64, resumeFrom ui
 
 	flush := func() error {
 		*seq++
-		if *seq < resumeFrom {
+		if skip {
 			builder.Reset()
 			return nil
 		}
@@ -334,12 +337,12 @@ func (client *Client) sendTransRecords(conn net.Conn, seq *uint64, resumeFrom ui
 		}
 	}
 
-	return client.sendEndOfRecords(conn, seq, resumeFrom, total)
+	return client.sendEndOfRecords(conn, seq, skip, total)
 }
 
-func (client *Client) sendEndOfRecords(conn net.Conn, seq *uint64, resumeFrom uint64, total uint32) error {
+func (client *Client) sendEndOfRecords(conn net.Conn, seq *uint64, skip bool, total uint32) error {
 	*seq++
-	if *seq < resumeFrom {
+	if skip {
 		return nil
 	}
 	return tcpproto.WriteEndOfRecords(conn, *seq, total)

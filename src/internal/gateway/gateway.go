@@ -35,8 +35,7 @@ type GatewayConfig struct {
 	MomPort              int
 	MaxBatchSize         int
 	QueryEOFsExpected    map[uint8]int
-	WALPath              string
-	WALPersistEvery      int
+	SessionStorePath     string
 }
 
 const gatewaySenderID uint8 = 0
@@ -48,7 +47,7 @@ type Gateway struct {
 	resultsQueue      middleware.Middleware
 	listener          net.Listener
 	running           atomic.Bool
-	wal               *wal
+	sessions          *sessionStore
 	queryEOFsExpected map[uint8]int
 }
 
@@ -112,7 +111,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		return nil, err
 	}
 
-	gatewayWAL, err := newWAL(config.WALPath, config.WALPersistEvery)
+	sessions, err := newSessionStore(config.SessionStorePath)
 	if err != nil {
 		for _, q := range accountQueues {
 			if err := q.Close(); err != nil {
@@ -136,7 +135,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		transfersExchange: transfersExchange,
 		resultsQueue:      resultsQueue,
 		listener:          listener,
-		wal:               gatewayWAL,
+		sessions:          sessions,
 		queryEOFsExpected: config.QueryEOFsExpected,
 	}
 	gateway.running.Store(true)
@@ -227,25 +226,23 @@ func (gateway *Gateway) handshake(conn net.Conn, r io.Reader) (clientregistry.Cl
 
 	clientID := int(sessionID)
 	phase := tcpproto.PhaseAccounts
-	nextSeq := uint64(1)
 
-	if session, ok := gateway.wal.session(clientID); sessionID != 0 && ok {
+	if session, ok := gateway.sessions.session(clientID); sessionID != 0 && ok {
 		phase = session.phase
-		nextSeq = session.lastSeq + 1
 		gateway.registry.RemoveByID(clientID)
-		slog.Info("Client resuming session", "client_id", clientID, "phase", phase, "next_seq", nextSeq)
+		slog.Info("Client resuming session", "client_id", clientID, "phase", phase)
 	} else {
 		if sessionID != 0 {
 			slog.Warn("Unknown session, assigning new one", "requested_session_id", sessionID)
 		}
-		clientID, err = gateway.wal.allocateClient()
+		clientID, err = gateway.sessions.allocateClient()
 		if err != nil {
 			return clientregistry.ClientState{}, 0, err
 		}
 		slog.Info("Client connected", "client_id", clientID)
 	}
 
-	if err := tcpproto.WriteWelcome(conn, uint32(clientID), phase, nextSeq); err != nil {
+	if err := tcpproto.WriteWelcome(conn, uint32(clientID), phase, 0); err != nil {
 		return clientregistry.ClientState{}, 0, err
 	}
 
@@ -441,7 +438,7 @@ func (gateway *Gateway) forwardResult(client clientregistry.ClientState, info ba
 }
 
 func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite bool, shouldClose bool, err error) {
-	counts, err := gateway.wal.incEOF(clientID, queryID)
+	counts, err := gateway.sessions.incEOF(clientID, queryID)
 	if err != nil {
 		return false, false, err
 	}
@@ -478,8 +475,8 @@ func (gateway *Gateway) closeClient(clientID int) {
 	}
 	gateway.registry.RemoveByID(clientID)
 
-	if err := gateway.wal.removeClient(clientID); err != nil {
-		slog.Error("While removing client from WAL", "client_id", clientID, "err", err)
+	if err := gateway.sessions.removeClient(clientID); err != nil {
+		slog.Error("While removing client from session store", "client_id", clientID, "err", err)
 	}
 
 	slog.Info("Client closed", "client_id", clientID)
@@ -535,7 +532,7 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState, r 
 			return err
 		}
 	}
-	return gateway.wal.advanceSeq(client.ID, seq)
+	return nil
 }
 
 func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io.Reader) error {
@@ -549,7 +546,7 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 		slog.Debug("While sending transfers batch", "err", err)
 		return err
 	}
-	return gateway.wal.advanceSeq(client.ID, seq)
+	return nil
 }
 
 func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState, r io.Reader) error {
@@ -562,7 +559,7 @@ func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState, r
 	if err := gateway.sendEOF(client.ID, seq, total, gateway.accountQueues...); err != nil {
 		return err
 	}
-	return gateway.wal.completePhase(client.ID, seq, tcpproto.PhaseTransfers)
+	return gateway.sessions.setPhase(client.ID, tcpproto.PhaseTransfers)
 }
 
 func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState, r io.Reader) error {
@@ -575,5 +572,5 @@ func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState, 
 	if err := gateway.sendEOF(client.ID, seq, total, gateway.transfersExchange); err != nil {
 		return err
 	}
-	return gateway.wal.completePhase(client.ID, seq, tcpproto.PhaseResults)
+	return gateway.sessions.setPhase(client.ID, tcpproto.PhaseResults)
 }

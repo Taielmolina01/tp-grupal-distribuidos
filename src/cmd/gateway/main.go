@@ -93,18 +93,9 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		return gateway.GatewayConfig{}, errors.New("QUERY_EOFS_EXPECTED must define at least one query")
 	}
 
-	walPath := os.Getenv("WAL_PERSIST_PATH")
-	if walPath == "" {
-		walPath = "/data/gateway.wal"
-	}
-
-	walPersistEvery := 50
-	if v := os.Getenv("WAL_PERSIST_EVERY"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed <= 0 {
-			return gateway.GatewayConfig{}, errors.New("WAL_PERSIST_EVERY must be a positive integer")
-		}
-		walPersistEvery = parsed
+	sessionStorePath := os.Getenv("SESSION_STORE_PATH")
+	if sessionStorePath == "" {
+		sessionStorePath = "/data/gateway_sessions.bin"
 	}
 
 	return gateway.GatewayConfig{
@@ -118,8 +109,7 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		MomPort:              momPort,
 		MaxBatchSize:         maxBatchSize,
 		QueryEOFsExpected:    queryEOFsExpected,
-		WALPath:              walPath,
-		WALPersistEvery:      walPersistEvery,
+		SessionStorePath:     sessionStorePath,
 	}, nil
 }
 
