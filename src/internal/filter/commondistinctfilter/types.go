@@ -5,14 +5,15 @@ import (
 	"tp-grupal-distribuidos/internal/common/middleware"
 )
 
-type DistinctFilter[T comparable, S comparable] struct {
+type DistinctFilter[T comparable] struct {
 	id            uint32
 	inputQueue    middleware.Middleware
 	outputQueues  []middleware.Middleware
-	alreadySeen   map[int]map[S]bool
+	alreadySeen   map[int]map[string]bool
 	compareFunc   func(T, T) bool
-	keyFunc       func(T) S
+	keyFunc       func(T) string
 	shardCriteria func(T) string
 	codec         wire.Codec[T]
 	queryId       uint8
+	stateFilePath string
 }
