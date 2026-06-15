@@ -13,7 +13,9 @@ const (
 	Ping byte = 1
 	Pong byte = 2
 
-	DefaultPort = "8001"
+	DefaultHealthPort = "8001"
+	DefaultBullyPort  = "8002"
+	DefaultPort       = DefaultHealthPort
 )
 
 type Pinger struct {
@@ -63,7 +65,11 @@ func Check(addr string, timeout time.Duration) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			slog.Error("While closing connection", "err", err)
+		}
+	}()
 
 	if _, err := conn.Write([]byte{Ping}); err != nil {
 		return err

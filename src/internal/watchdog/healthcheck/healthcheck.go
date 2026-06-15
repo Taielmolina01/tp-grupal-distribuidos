@@ -1,52 +1,35 @@
 package healthcheck
 
 import (
+	"fmt"
 	"log/slog"
 	"net"
 	"os/exec"
-	"sync"
 	"time"
 
+	"tp-grupal-distribuidos/internal/common/bully"
 	"tp-grupal-distribuidos/internal/common/pinger"
 )
-
-type Restarter func(node string) error
 
 func DockerRestart(node string) error {
 	return exec.Command("docker", "restart", node).Run()
 }
 
-type Config struct {
-	Nodes []string
-	Port string
-	Interval time.Duration
-	Timeout time.Duration
-	MaxRetries int
-	Startup time.Duration
-}
-
-type HealthChecker struct {
-	config  Config
-	restart Restarter
-	stop    chan struct{}
-	wg      sync.WaitGroup
-}
-
-func New(config Config) *HealthChecker {
+func New(config Config, bully bully.Bully) *HealthChecker {
 	return &HealthChecker{
 		config:  config,
 		restart: DockerRestart,
 		stop:    make(chan struct{}),
+		bully:   bully,
 	}
-}
-
-func (h *HealthChecker) SetRestarter(r Restarter) {
-	h.restart = r
 }
 
 func (h *HealthChecker) Start() {
 	slog.Info("Health checker started", "nodes", len(h.config.Nodes), "interval", h.config.Interval)
 	for _, node := range h.config.Nodes {
+		if node == fmt.Sprintf("watchdog_%d", h.config.Id) {
+			continue
+		}
 		h.wg.Add(1)
 		go h.monitor(node)
 	}
@@ -61,7 +44,7 @@ func (h *HealthChecker) Stop() {
 func (h *HealthChecker) monitor(node string) {
 	defer h.wg.Done()
 
-	addr := net.JoinHostPort(node, h.config.Port)
+	addr := net.JoinHostPort(node, h.config.HealthPort)
 	ticker := time.NewTicker(h.config.Interval)
 	defer ticker.Stop()
 
@@ -90,8 +73,23 @@ func (h *HealthChecker) monitor(node string) {
 }
 
 func (h *HealthChecker) handleDeadNode(node string, lastRestart *time.Time) {
+	h.mu.RLock()
+	leaderId := h.bullyInfo.LeaderId
+	h.mu.RUnlock()
+	slog.Info("node info", "node", node)
+
 	if time.Since(*lastRestart) < h.config.Startup {
 		slog.Info("Node unresponsive but still within startup grace, not restarting", "node", node)
+		return
+	}
+
+	if len(node) >= 8 && node[:8] == _WATCHDOG_PREFIX && len(node) >= 10 && node[9:] == fmt.Sprintf("%d", leaderId) {
+		h.bully.StartElection()
+		slog.Info("Leader is down, not restarting.", "leaderId", leaderId)
+	}
+
+	if leaderId != h.config.Id {
+		slog.Info("Skipping restarting node, I'm not the leader", "node", h.config.Id)
 		return
 	}
 
@@ -102,4 +100,12 @@ func (h *HealthChecker) handleDeadNode(node string, lastRestart *time.Time) {
 	}
 	*lastRestart = time.Now()
 	slog.Info("Node restarted", "node", node)
+}
+
+func (h *HealthChecker) UpdateBullyInfo(info BullyInfo) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.bullyInfo = info
+	slog.Info("Bully info updated", "leaderId", info.LeaderId)
 }

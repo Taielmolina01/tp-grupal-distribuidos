@@ -832,12 +832,66 @@ services:
         condition: service_healthy
     environment:
       - ID=0
-      - PEERS=1
-      - NODES=gateway q1234_filter_currency_0 q1234_filter_currency_1 q1_filter_amount_0 q1_filter_amount_1 q2_reducer_0 q2_reducer_1 q2_filter_bank_distinct_0 q2_filter_bank_distinct_1 q2_join_0 q2_join_1 q4_filter_and_splitter_0 q4_filter_and_splitter_1 q4_join_accounts_0 q4_join_accounts_1 q4_acum_accounts_0 q4_acum_accounts_1 q4_filter_account_seen_0 q4_filter_account_seen_1 q3_filter_range_0 q3_filter_range_1 q3_sum_0 q3_sum_1 q3_aggregate_0 q3_aggregate_1 q3_average_filter_0 q3_average_filter_1 q5_filter_date_and_payment_0 q5_filter_date_and_payment_1 q5_filter_amount_0 q5_filter_amount_1 q5_fetcher q5_count_reducer
+      - AMOUNT=3
+      - NODES=gateway q1234_filter_currency_0 q1234_filter_currency_1 q1_filter_amount_0 q1_filter_amount_1 q2_reducer_0 q2_reducer_1 q2_filter_bank_distinct_0 q2_filter_bank_distinct_1 q2_join_0 q2_join_1 q4_filter_and_splitter_0 q4_filter_and_splitter_1 q4_join_accounts_0 q4_join_accounts_1 q4_acum_accounts_0 q4_acum_accounts_1 q4_filter_account_seen_0 q4_filter_account_seen_1 q3_filter_range_0 q3_filter_range_1 q3_sum_0 q3_sum_1 q3_aggregate_0 q3_aggregate_1 q3_average_filter_0 q3_average_filter_1 q5_filter_date_and_payment_0 q5_filter_date_and_payment_1 q5_filter_amount_0 q5_filter_amount_1 watchdog_0 watchdog_1 watchdog_2 q5_fetcher q5_count_reducer
       - INTERVAL=1s
       - TIMEOUT=1s
       - MAX_RETRIES=3
-      - STARTUP=30s
+      - STARTUP=5s
+      - HEALTH_PORT=8001
+      - BULLY_PORT=8002
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  watchdog_1:
+    build:
+      context: ./src/
+      dockerfile: cmd/watchdog/Dockerfile
+    container_name: watchdog_1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=1
+      - AMOUNT=3
+      - NODES=gateway q1234_filter_currency_0 q1234_filter_currency_1 q1_filter_amount_0 q1_filter_amount_1 q2_reducer_0 q2_reducer_1 q2_filter_bank_distinct_0 q2_filter_bank_distinct_1 q2_join_0 q2_join_1 q4_filter_and_splitter_0 q4_filter_and_splitter_1 q4_join_accounts_0 q4_join_accounts_1 q4_acum_accounts_0 q4_acum_accounts_1 q4_filter_account_seen_0 q4_filter_account_seen_1 q3_filter_range_0 q3_filter_range_1 q3_sum_0 q3_sum_1 q3_aggregate_0 q3_aggregate_1 q3_average_filter_0 q3_average_filter_1 q5_filter_date_and_payment_0 q5_filter_date_and_payment_1 q5_filter_amount_0 q5_filter_amount_1 watchdog_0 watchdog_1 watchdog_2 q5_fetcher q5_count_reducer
+      - INTERVAL=1s
+      - TIMEOUT=1s
+      - MAX_RETRIES=3
+      - STARTUP=5s
+      - HEALTH_PORT=8001
+      - BULLY_PORT=8002
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  watchdog_2:
+    build:
+      context: ./src/
+      dockerfile: cmd/watchdog/Dockerfile
+    container_name: watchdog_2
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=2
+      - AMOUNT=3
+      - NODES=gateway q1234_filter_currency_0 q1234_filter_currency_1 q1_filter_amount_0 q1_filter_amount_1 q2_reducer_0 q2_reducer_1 q2_filter_bank_distinct_0 q2_filter_bank_distinct_1 q2_join_0 q2_join_1 q4_filter_and_splitter_0 q4_filter_and_splitter_1 q4_join_accounts_0 q4_join_accounts_1 q4_acum_accounts_0 q4_acum_accounts_1 q4_filter_account_seen_0 q4_filter_account_seen_1 q3_filter_range_0 q3_filter_range_1 q3_sum_0 q3_sum_1 q3_aggregate_0 q3_aggregate_1 q3_average_filter_0 q3_average_filter_1 q5_filter_date_and_payment_0 q5_filter_date_and_payment_1 q5_filter_amount_0 q5_filter_amount_1 watchdog_0 watchdog_1 watchdog_2 q5_fetcher q5_count_reducer
+      - INTERVAL=1s
+      - TIMEOUT=1s
+      - MAX_RETRIES=3
+      - STARTUP=5s
+      - HEALTH_PORT=8001
+      - BULLY_PORT=8002
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     logging:

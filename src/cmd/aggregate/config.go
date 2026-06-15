@@ -45,9 +45,15 @@ func loadConfig() (aggregate.AggregateConfig, error) {
 		return aggregate.AggregateConfig{}, errors.New("OUTPUT_QUEUES environment variable is required")
 	}
 
+	sumAmount, err := strconv.Atoi(os.Getenv("SUM_AMOUNT"))
+	if err != nil {
+		return aggregate.AggregateConfig{}, errors.New("SUM_AMOUNT environment variable is required and must be a number")
+	}
+
 	return aggregate.AggregateConfig{
 		Id:              id,
 		AggregateAmount: aggregateAmount,
+		SumAmount:       sumAmount,
 		MomHost:         momHost,
 		MomPort:         momPort,
 		QueryID:         uint8(queryID),
