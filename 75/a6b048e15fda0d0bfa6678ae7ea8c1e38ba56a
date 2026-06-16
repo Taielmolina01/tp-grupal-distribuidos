@@ -1,0 +1,69 @@
+src/internal/filter/filteraccountseen2/apply.go
+  s_908cde5c779836::t_1347280e6e9ed6 1-54
+src/cmd/filteraccountseen/config.go
+  s_908cde5c779836::t_b1547108a49a86 8,11,14,19,24,27,29,34,39,44,49,54,57-64,66,74-75
+src/internal/common/msghandler/handler.go
+  s_908cde5c779836::t_69140e1c80b34e 5,13,16,18-24,30-32,42-44,53-54,77-94,98-103
+  s_908cde5c779836::t_c9aa8a505411c6 1-4,6-12,14-15,17,25-29,33-41,45-52,55-76,95-97,104-115
+src/internal/joinaccounts2/types.go
+  s_908cde5c779836::t_9c400b7be26842 89-91
+  s_908cde5c779836::t_89a8dce02dac84 10,13
+src/internal/joinaccounts2/joinaccounts2.go
+  s_908cde5c779836::t_82caf94366a068 110-111,122-123
+  s_908cde5c779836::t_6de7b42102260f 202,205,208,211
+  s_908cde5c779836::t_2432db70ed5828 15,17,105-109,112-121,124-128,136,142,176-181
+src/internal/acumaccounts2/acumaccounts2.go
+  s_908cde5c779836::t_2fe345966ddc6f 1-136
+src/internal/acumaccounts2/types.go
+  s_908cde5c779836::t_1d1d9ea38bea90 1-64
+src/cmd/filteraccountseen/main.go
+  s_908cde5c779836::t_1ecb5b0066b6d7 8,18
+src/internal/acumaccounts2/apply.go
+  s_908cde5c779836::t_1e40d946d197dc 1-68
+src/internal/acumaccounts2/persist.go
+  s_908cde5c779836::t_c1feb6cb33680c 1-94
+src/internal/filter/filteraccountseen2/persist.go
+  s_908cde5c779836::t_4b32c8b6cc56e7 1-111
+src/cmd/acumaccounts/Dockerfile
+  s_908cde5c779836::t_32444663e4227e 8
+src/cmd/filteraccountseen/Dockerfile
+  s_908cde5c779836::t_f60e01ad77ef85 8
+src/cmd/acumaccounts/config.go
+  s_908cde5c779836::t_94945d28eed25f 8,11,14,19,24,29,34,37,39,44,49,54,57-64,70,74-75
+docker-compose.yaml
+  s_908cde5c779836::t_4b4da0b2616b30 59,174,319,414,419-420,444,449-450,472,475-476,498,501-502,523,527-528,549,553-554,561,652,670,710,836,850,854,876,880,902,906,916
+src/cmd/joinaccounts/Dockerfile
+  s_908cde5c779836::t_93c01e5036da27 8
+src/internal/joinaccounts2/apply.go
+  s_908cde5c779836::t_253691d78e789b 1-14,16,23-24,26-27,29,35-37,39-40,42,44-47,51-53,55,57-58,60,64-66,68,70-71,73-91,95-102,106-110,112-124,126-129,131,133,135-136,138-153,155,157-158,160-175,189,191
+  s_908cde5c779836::t_caeafbceb26ea3 15,17-22,25,28,30-34,38,41,43,48-50,54,56,59,61-63,67,69,72,92-94,103-105,111,125,130,132,134,137,154,156,159,176-188,190
+scripts/compose-gen/generator.go
+  s_908cde5c779836::t_03686e071e1b28 428,433-434
+  s_908cde5c779836::t_314926687cc7fe 479,483-484
+  s_908cde5c779836::t_5b4d987dc126a0 455,458-459
+src/internal/common/diskstore/diskstore.go
+  s_908cde5c779836::t_c8fae74f31f10f 31-33
+  s_908cde5c779836::t_2582349e1d76ab 8
+src/internal/filter/filteraccountseen2/filteraccountseen2.go
+  s_908cde5c779836::t_ba5e1420e9deea 1-145
+src/internal/filter/filteraccountseen2/types.go
+  s_908cde5c779836::t_e486f359149c13 1-67
+src/cmd/acumaccounts/main.go
+  s_908cde5c779836::t_881d367d91cfc5 7,18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "75a6b048e15fda0d0bfa6678ae7ea8c1e38ba56a",
+  "prompts": {},
+  "sessions": {
+    "s_908cde5c779836": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0ed4e5ee-2877-477c-aaf9-2372b31f2457",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
