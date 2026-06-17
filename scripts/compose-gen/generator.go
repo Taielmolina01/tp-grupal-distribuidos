@@ -538,6 +538,7 @@ func writeAggregateQ3(b *strings.Builder, cfg *Config) {
 		rabbitmqDepends(b)
 		b.WriteString("    environment:\n")
 		fmt.Fprintf(b, "      - ID=%d\n", i)
+		fmt.Fprintf(b, "      - SUM_AMOUNT=%d\n", cfg.SumQ3)
 		fmt.Fprintf(b, "      - AGGREGATE_AMOUNT=%d\n", cfg.AggregateQ3)
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")

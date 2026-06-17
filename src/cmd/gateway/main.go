@@ -98,6 +98,15 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		sessionStorePath = "/data/gateway_sessions.bin"
 	}
 
+	var seqCheckpointEvery uint64 = 1
+	if v := os.Getenv("SEQ_CHECKPOINT_EVERY"); v != "" {
+		parsed, err := strconv.ParseUint(v, 10, 64)
+		if err != nil || parsed == 0 {
+			return gateway.GatewayConfig{}, errors.New("SEQ_CHECKPOINT_EVERY must be a positive integer")
+		}
+		seqCheckpointEvery = parsed
+	}
+
 	return gateway.GatewayConfig{
 		AccountQueues:        accountQueueList,
 		TransfersExchange:    transfersExchange,
@@ -110,6 +119,7 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		MaxBatchSize:         maxBatchSize,
 		QueryEOFsExpected:    queryEOFsExpected,
 		SessionStorePath:     sessionStorePath,
+		SeqCheckpointEvery:   seqCheckpointEvery,
 	}, nil
 }
 

@@ -36,6 +36,7 @@ type GatewayConfig struct {
 	MaxBatchSize         int
 	QueryEOFsExpected    map[uint8]int
 	SessionStorePath     string
+	SeqCheckpointEvery   uint64
 }
 
 const gatewaySenderID uint8 = 0
@@ -48,9 +49,10 @@ type Gateway struct {
 	transfersExchange middleware.Middleware
 	resultsQueue      middleware.Middleware
 	listener          net.Listener
-	running           atomic.Bool
-	sessions          *sessionStore
-	queryEOFsExpected map[uint8]int
+	running            atomic.Bool
+	sessions           *sessionStore
+	queryEOFsExpected  map[uint8]int
+	seqCheckpointEvery uint64
 }
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
@@ -132,13 +134,19 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		return nil, err
 	}
 
+	checkpointEvery := config.SeqCheckpointEvery
+	if checkpointEvery == 0 {
+		checkpointEvery = 1
+	}
+
 	gateway := &Gateway{
-		accountQueues:     accountQueues,
-		transfersExchange: transfersExchange,
-		resultsQueue:      resultsQueue,
-		listener:          listener,
-		sessions:          sessions,
-		queryEOFsExpected: config.QueryEOFsExpected,
+		accountQueues:      accountQueues,
+		transfersExchange:  transfersExchange,
+		resultsQueue:       resultsQueue,
+		listener:           listener,
+		sessions:           sessions,
+		queryEOFsExpected:  config.QueryEOFsExpected,
+		seqCheckpointEvery: checkpointEvery,
 	}
 	gateway.running.Store(true)
 	return gateway, nil
@@ -228,11 +236,13 @@ func (gateway *Gateway) handshake(conn net.Conn, r io.Reader) (clientregistry.Cl
 
 	clientID := int(sessionID)
 	phase := tcpproto.PhaseAccounts
+	var resumeSeq uint64
 
 	if session, ok := gateway.sessions.session(clientID); sessionID != 0 && ok {
 		phase = session.phase
+		resumeSeq = session.confirmedSeq[phase]
 		gateway.registry.RemoveByID(clientID)
-		slog.Info("Client resuming session", "client_id", clientID, "phase", phase)
+		slog.Info("Client resuming session", "client_id", clientID, "phase", phase, "resume_seq", resumeSeq)
 	} else {
 		if sessionID != 0 {
 			slog.Warn("Unknown session, assigning new one", "requested_session_id", sessionID)
@@ -244,7 +254,7 @@ func (gateway *Gateway) handshake(conn net.Conn, r io.Reader) (clientregistry.Cl
 		slog.Info("Client connected", "client_id", clientID)
 	}
 
-	if err := tcpproto.WriteWelcome(conn, uint32(clientID), phase, 0); err != nil {
+	if err := tcpproto.WriteWelcome(conn, uint32(clientID), phase, resumeSeq); err != nil {
 		return clientregistry.ClientState{}, 0, err
 	}
 
@@ -292,6 +302,7 @@ func (gateway *Gateway) handleClientRequest(conn net.Conn) {
 }
 
 func (gateway *Gateway) runAccountsPhase(client clientregistry.ClientState, r io.Reader) bool {
+	var lastCheckpoint uint64
 	for {
 		msgType, err := tcpproto.ReadMsgType(r)
 		if err != nil {
@@ -301,10 +312,12 @@ func (gateway *Gateway) runAccountsPhase(client clientregistry.ClientState, r io
 
 		switch msgType {
 		case tcpproto.AccountBatch:
-			if err := gateway.handleAccountBatch(client, r); err != nil {
+			seq, err := gateway.handleAccountBatch(client, r)
+			if err != nil {
 				slog.Debug("While handling account batch", "err", err)
 				return false
 			}
+			gateway.maybeCheckpoint(client.ID, tcpproto.PhaseAccounts, seq, &lastCheckpoint)
 
 		case tcpproto.EndOfRecords:
 			if err := gateway.handleEndOfAccounts(client, r); err != nil {
@@ -321,6 +334,7 @@ func (gateway *Gateway) runAccountsPhase(client clientregistry.ClientState, r io
 }
 
 func (gateway *Gateway) runTransfersPhase(client clientregistry.ClientState, r io.Reader) bool {
+	var lastCheckpoint uint64
 	for {
 		msgType, err := tcpproto.ReadMsgType(r)
 		if err != nil {
@@ -330,10 +344,12 @@ func (gateway *Gateway) runTransfersPhase(client clientregistry.ClientState, r i
 
 		switch msgType {
 		case tcpproto.TransBatch:
-			if err := gateway.handleTransBatch(client, r); err != nil {
+			seq, err := gateway.handleTransBatch(client, r)
+			if err != nil {
 				slog.Debug("While handling trans batch", "err", err)
 				return false
 			}
+			gateway.maybeCheckpoint(client.ID, tcpproto.PhaseTransfers, seq, &lastCheckpoint)
 
 		case tcpproto.EndOfRecords:
 			if err := gateway.handleEndOfTransfers(client, r); err != nil {
@@ -511,11 +527,22 @@ func (gateway *Gateway) sendEOF(clientID int, seq uint64, total uint32, targets 
 	return errors.Join(errs...)
 }
 
-func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState, r io.Reader) error {
+func (gateway *Gateway) maybeCheckpoint(clientID int, phase tcpproto.Phase, seq uint64, lastCheckpoint *uint64) {
+	if seq-*lastCheckpoint < gateway.seqCheckpointEvery {
+		return
+	}
+	if err := gateway.sessions.advanceConfirmedSeq(clientID, phase, seq); err != nil {
+		slog.Error("While checkpointing confirmed seq", "client_id", clientID, "phase", phase, "err", err)
+		return
+	}
+	*lastCheckpoint = seq
+}
+
+func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState, r io.Reader) (uint64, error) {
 	seq, accounts, err := tcpproto.ReadAccountBatch(r)
 	if err != nil {
 		slog.Debug("While reading ACCOUNT_BATCH", "err", err)
-		return err
+		return 0, err
 	}
 
 	byShard := make(map[int][]account.Account)
@@ -531,24 +558,24 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState, r 
 		body := batch.Write(client.ID, 0, gatewaySenderID, seq, group, records.AccountCodec)
 		if err := gateway.accountQueues[idx].Send(middleware.Message{Body: body}); err != nil {
 			slog.Debug("While sending accounts batch", "err", err)
-			return err
+			return 0, err
 		}
 	}
-	return nil
+	return seq, nil
 }
 
-func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io.Reader) error {
+func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io.Reader) (uint64, error) {
 	seq, count, payload, err := tcpproto.ReadRawTransBatch(r)
 	if err != nil {
 		slog.Debug("While reading TRANS_BATCH", "err", err)
-		return err
+		return 0, err
 	}
 	body := batch.WriteRaw(client.ID, 0, gatewaySenderID, seq, count, payload)
 	if err := gateway.transfersExchange.Send(middleware.Message{Body: body}); err != nil {
 		slog.Debug("While sending transfers batch", "err", err)
-		return err
+		return 0, err
 	}
-	return nil
+	return seq, nil
 }
 
 func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState, r io.Reader) error {

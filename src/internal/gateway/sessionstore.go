@@ -15,8 +15,9 @@ import (
 const nextClientIDKey = "next"
 
 type sessionState struct {
-	phase     tcpproto.Phase
-	eofCounts map[uint8]int
+	phase        tcpproto.Phase
+	eofCounts    map[uint8]int
+	confirmedSeq map[tcpproto.Phase]uint64
 }
 
 type sessionStore struct {
@@ -47,7 +48,11 @@ func (s *sessionStore) allocateClient() (int, error) {
 	defer s.mu.Unlock()
 	s.nextClientID++
 	clientID := int(s.nextClientID)
-	s.sessions[clientID] = &sessionState{phase: tcpproto.PhaseAccounts, eofCounts: map[uint8]int{}}
+	s.sessions[clientID] = &sessionState{
+		phase:        tcpproto.PhaseAccounts,
+		eofCounts:    map[uint8]int{},
+		confirmedSeq: map[tcpproto.Phase]uint64{},
+	}
 	return clientID, s.persist()
 }
 
@@ -69,6 +74,20 @@ func (s *sessionStore) setPhase(clientID int, phase tcpproto.Phase) error {
 		return nil
 	}
 	state.phase = phase
+	return s.persist()
+}
+
+func (s *sessionStore) advanceConfirmedSeq(clientID int, phase tcpproto.Phase, seq uint64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[clientID]
+	if !ok {
+		return nil
+	}
+	if seq <= state.confirmedSeq[phase] {
+		return nil
+	}
+	state.confirmedSeq[phase] = seq
 	return s.persist()
 }
 
@@ -109,6 +128,11 @@ func (s *sessionStore) persist() error {
 		for queryID, count := range state.eofCounts {
 			w.Uint8(queryID)
 			w.Uint32(uint32(count))
+		}
+		w.Uint32(uint32(len(state.confirmedSeq)))
+		for phase, seq := range state.confirmedSeq {
+			w.Uint8(uint8(phase))
+			w.Uint64(seq)
 		}
 		data[strconv.Itoa(clientID)] = w.Bytes()
 	}
@@ -156,7 +180,24 @@ func (s *sessionStore) load() error {
 		if r.Err() != nil {
 			return r.Err()
 		}
-		s.sessions[clientID] = &sessionState{phase: phase, eofCounts: eofCounts}
+
+		confirmedSeq := map[tcpproto.Phase]uint64{}
+		if r.Remaining() > 0 {
+			seqLen := r.Uint32()
+			if r.Err() != nil {
+				return r.Err()
+			}
+			for range seqLen {
+				p := tcpproto.Phase(r.Uint8())
+				seq := r.Uint64()
+				confirmedSeq[p] = seq
+			}
+			if r.Err() != nil {
+				return r.Err()
+			}
+		}
+
+		s.sessions[clientID] = &sessionState{phase: phase, eofCounts: eofCounts, confirmedSeq: confirmedSeq}
 	}
 	return nil
 }

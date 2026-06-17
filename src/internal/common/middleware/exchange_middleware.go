@@ -55,6 +55,13 @@ func CreateExchangeMiddlewareHelper(
 		return nil, ErrMessageMiddlewareDisconnected
 	}
 
+	if err := ch.Confirm(false); err != nil {
+		if err := middleware.Close(); err != nil {
+			slog.Error("While closing middleware", "err", err)
+		}
+		return nil, ErrMessageMiddlewareDisconnected
+	}
+
 	err = ch.ExchangeDeclare(
 		exchange,            // name
 		amqp.ExchangeDirect, // type
@@ -233,8 +240,9 @@ func (e *exchangeMiddleware) Send(msg Message) (err error) {
 		return ErrMessageMiddlewareDisconnected
 	}
 
+	confirmations := make([]*amqp.DeferredConfirmation, 0, len(e.publishKeys))
 	for _, key := range e.publishKeys {
-		err = e.channel.Publish(
+		confirmation, err := e.channel.PublishWithDeferredConfirm(
 			e.exchange,
 			key,
 			true,
@@ -245,6 +253,13 @@ func (e *exchangeMiddleware) Send(msg Message) (err error) {
 			})
 
 		if err != nil {
+			return ErrMessageMiddlewareMessage
+		}
+		confirmations = append(confirmations, confirmation)
+	}
+
+	for _, confirmation := range confirmations {
+		if !confirmation.Wait() {
 			return ErrMessageMiddlewareMessage
 		}
 	}
