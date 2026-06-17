@@ -575,12 +575,42 @@ func (gateway *Gateway) reapDeadClients() {
 		for _, clientID := range gateway.deadClients() {
 			gateway.abortClient(clientID)
 		}
+		for _, clientID := range gateway.sessions.pendingAbortIDs() {
+			gateway.dispatchAbort(clientID)
+		}
 	}
 }
 
 func (gateway *Gateway) abortClient(clientID int) {
 	slog.Info("Client declared dead (no reconnect within timeout)", "client_id", clientID)
 	gateway.clearDisconnected(clientID)
+	if err := gateway.sessions.moveToPendingAbort(clientID); err != nil {
+		slog.Error("While moving client to pending abort", "client_id", clientID, "err", err)
+	}
+}
+
+func (gateway *Gateway) dispatchAbort(clientID int) {
+	if err := gateway.sendAbort(clientID); err != nil {
+		slog.Error("While sending abort, will retry", "client_id", clientID, "err", err)
+		return
+	}
+	if err := gateway.sessions.clearPendingAbort(clientID); err != nil {
+		slog.Error("While clearing pending abort", "client_id", clientID, "err", err)
+		return
+	}
+	slog.Info("Client aborted, notified pipeline", "client_id", clientID)
+}
+
+func (gateway *Gateway) sendAbort(clientID int) error {
+	body := batch.WriteAbort(clientID, gatewaySenderID, 0)
+	targets := append([]middleware.Middleware{gateway.transfersExchange}, gateway.accountQueues...)
+	var errs []error
+	for _, t := range targets {
+		if err := t.Send(middleware.Message{Body: body}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bool) {
