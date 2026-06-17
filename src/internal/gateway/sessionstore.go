@@ -13,6 +13,7 @@ import (
 )
 
 const nextClientIDKey = "next"
+const pendingAbortsKey = "aborts"
 
 type sessionState struct {
 	phase        tcpproto.Phase
@@ -21,16 +22,18 @@ type sessionState struct {
 }
 
 type sessionStore struct {
-	mu           sync.Mutex
-	path         string
-	nextClientID int32
-	sessions     map[int]*sessionState
+	mu            sync.Mutex
+	path          string
+	nextClientID  int32
+	sessions      map[int]*sessionState
+	pendingAborts map[int]struct{}
 }
 
 func newSessionStore(path string) (*sessionStore, error) {
 	s := &sessionStore{
-		path:     path,
-		sessions: map[int]*sessionState{},
+		path:          path,
+		sessions:      map[int]*sessionState{},
+		pendingAborts: map[int]struct{}{},
 	}
 	if path != "" {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -113,13 +116,55 @@ func (s *sessionStore) removeClient(clientID int) error {
 	return s.persist()
 }
 
+func (s *sessionStore) moveToPendingAbort(clientID int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.sessions, clientID)
+	s.pendingAborts[clientID] = struct{}{}
+	return s.persist()
+}
+
+func (s *sessionStore) clearPendingAbort(clientID int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.pendingAborts, clientID)
+	return s.persist()
+}
+
+func (s *sessionStore) sessionIDs() []int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ids := make([]int, 0, len(s.sessions))
+	for id := range s.sessions {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func (s *sessionStore) pendingAbortIDs() []int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ids := make([]int, 0, len(s.pendingAborts))
+	for id := range s.pendingAborts {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 func (s *sessionStore) persist() error {
 	if s.path == "" {
 		return nil
 	}
 
-	data := make(map[string][]byte, len(s.sessions)+1)
+	data := make(map[string][]byte, len(s.sessions)+2)
 	data[nextClientIDKey] = wire.AppendUint32(nil, uint32(s.nextClientID))
+
+	var aborts wire.Writer
+	aborts.Uint32(uint32(len(s.pendingAborts)))
+	for clientID := range s.pendingAborts {
+		aborts.Uint32(uint32(clientID))
+	}
+	data[pendingAbortsKey] = aborts.Bytes()
 
 	for clientID, state := range s.sessions {
 		var w wire.Writer
@@ -156,8 +201,22 @@ func (s *sessionStore) load() error {
 		s.nextClientID = int32(wire.NewReader(raw).Uint32())
 	}
 
+	if raw, ok := data[pendingAbortsKey]; ok {
+		r := wire.NewReader(raw)
+		n := r.Uint32()
+		if r.Err() != nil {
+			return r.Err()
+		}
+		for range n {
+			s.pendingAborts[int(r.Uint32())] = struct{}{}
+		}
+		if r.Err() != nil {
+			return r.Err()
+		}
+	}
+
 	for key, raw := range data {
-		if key == nextClientIDKey {
+		if key == nextClientIDKey || key == pendingAbortsKey {
 			continue
 		}
 		clientID, err := strconv.Atoi(key)

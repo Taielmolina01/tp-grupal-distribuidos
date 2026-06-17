@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"tp-grupal-distribuidos/internal/common/pinger"
 	"tp-grupal-distribuidos/internal/common/splitter"
@@ -107,6 +108,24 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		seqCheckpointEvery = parsed
 	}
 
+	clientTimeout := 30 * time.Second
+	if v := os.Getenv("CLIENT_TIMEOUT_MS"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed <= 0 {
+			return gateway.GatewayConfig{}, errors.New("CLIENT_TIMEOUT_MS must be a positive integer")
+		}
+		clientTimeout = time.Duration(parsed) * time.Millisecond
+	}
+
+	reaperInterval := 5 * time.Second
+	if v := os.Getenv("REAPER_INTERVAL_MS"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed <= 0 {
+			return gateway.GatewayConfig{}, errors.New("REAPER_INTERVAL_MS must be a positive integer")
+		}
+		reaperInterval = time.Duration(parsed) * time.Millisecond
+	}
+
 	return gateway.GatewayConfig{
 		AccountQueues:        accountQueueList,
 		TransfersExchange:    transfersExchange,
@@ -120,6 +139,8 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		QueryEOFsExpected:    queryEOFsExpected,
 		SessionStorePath:     sessionStorePath,
 		SeqCheckpointEvery:   seqCheckpointEvery,
+		ClientTimeout:        clientTimeout,
+		ReaperInterval:       reaperInterval,
 	}, nil
 }
 

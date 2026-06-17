@@ -9,8 +9,10 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"tp-grupal-distribuidos/internal/clientregistry"
 	"tp-grupal-distribuidos/internal/common/account"
@@ -37,6 +39,8 @@ type GatewayConfig struct {
 	QueryEOFsExpected    map[uint8]int
 	SessionStorePath     string
 	SeqCheckpointEvery   uint64
+	ClientTimeout        time.Duration
+	ReaperInterval       time.Duration
 }
 
 const gatewaySenderID uint8 = 0
@@ -53,6 +57,10 @@ type Gateway struct {
 	sessions           *sessionStore
 	queryEOFsExpected  map[uint8]int
 	seqCheckpointEvery uint64
+	clientTimeout      time.Duration
+	reaperInterval     time.Duration
+	disconnectMu       sync.Mutex
+	disconnectedAt     map[int]time.Time
 }
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
@@ -147,7 +155,16 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		sessions:           sessions,
 		queryEOFsExpected:  config.QueryEOFsExpected,
 		seqCheckpointEvery: checkpointEvery,
+		clientTimeout:      config.ClientTimeout,
+		reaperInterval:     config.ReaperInterval,
+		disconnectedAt:     map[int]time.Time{},
 	}
+
+	now := time.Now()
+	for _, clientID := range sessions.sessionIDs() {
+		gateway.disconnectedAt[clientID] = now
+	}
+
 	gateway.running.Store(true)
 	return gateway, nil
 }
@@ -163,6 +180,7 @@ func (gateway *Gateway) Run() error {
 		}
 	}()
 	go gateway.handleSignals()
+	go gateway.reapDeadClients()
 
 	slog.Info("Accepting connections...")
 
@@ -178,6 +196,7 @@ func (gateway *Gateway) Run() error {
 			return err
 		}
 
+		enableKeepAlive(conn)
 		go gateway.handleClientRequest(conn)
 	}
 
@@ -242,6 +261,7 @@ func (gateway *Gateway) handshake(conn net.Conn, r io.Reader) (clientregistry.Cl
 		phase = session.phase
 		resumeSeq = session.confirmedSeq[phase]
 		gateway.registry.RemoveByID(clientID)
+		gateway.clearDisconnected(clientID)
 		slog.Info("Client resuming session", "client_id", clientID, "phase", phase, "resume_seq", resumeSeq)
 	} else {
 		if sessionID != 0 {
@@ -279,7 +299,7 @@ func (gateway *Gateway) handleClientRequest(conn net.Conn) {
 	defer func() {
 		if !completed {
 			slog.Info("Client disconnected before completing ingest", "client_id", client.ID)
-			gateway.closeClient(client.ID)
+			gateway.markDisconnected(client)
 		}
 	}()
 
@@ -498,6 +518,69 @@ func (gateway *Gateway) closeClient(clientID int) {
 	}
 
 	slog.Info("Client closed", "client_id", clientID)
+}
+
+func enableKeepAlive(conn net.Conn) {
+	tcpConn, ok := conn.(*net.TCPConn)
+	if !ok {
+		return
+	}
+	if err := tcpConn.SetKeepAliveConfig(net.KeepAliveConfig{
+		Enable:   true,
+		Idle:     5 * time.Second,
+		Interval: 3 * time.Second,
+		Count:    3,
+	}); err != nil {
+		slog.Error("While enabling TCP keepalive", "err", err)
+	}
+}
+
+func (gateway *Gateway) markDisconnected(client clientregistry.ClientState) {
+	if err := client.Conn.Close(); err != nil {
+		slog.Debug("While closing disconnected client connection", "client_id", client.ID, "err", err)
+	}
+	if !gateway.registry.RemoveByConn(client.ID, client.Conn) {
+		return
+	}
+	gateway.disconnectMu.Lock()
+	gateway.disconnectedAt[client.ID] = time.Now()
+	gateway.disconnectMu.Unlock()
+	slog.Info("Client disconnected, starting death timer", "client_id", client.ID)
+}
+
+func (gateway *Gateway) clearDisconnected(clientID int) {
+	gateway.disconnectMu.Lock()
+	delete(gateway.disconnectedAt, clientID)
+	gateway.disconnectMu.Unlock()
+}
+
+func (gateway *Gateway) deadClients() []int {
+	gateway.disconnectMu.Lock()
+	defer gateway.disconnectMu.Unlock()
+	now := time.Now()
+	var dead []int
+	for clientID, since := range gateway.disconnectedAt {
+		if now.Sub(since) >= gateway.clientTimeout {
+			dead = append(dead, clientID)
+		}
+	}
+	return dead
+}
+
+func (gateway *Gateway) reapDeadClients() {
+	ticker := time.NewTicker(gateway.reaperInterval)
+	defer ticker.Stop()
+	for gateway.running.Load() {
+		<-ticker.C
+		for _, clientID := range gateway.deadClients() {
+			gateway.abortClient(clientID)
+		}
+	}
+}
+
+func (gateway *Gateway) abortClient(clientID int) {
+	slog.Info("Client declared dead (no reconnect within timeout)", "client_id", clientID)
+	gateway.clearDisconnected(clientID)
 }
 
 func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bool) {
