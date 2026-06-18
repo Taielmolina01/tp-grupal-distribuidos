@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -16,9 +17,9 @@ import (
 
 	"tp-grupal-distribuidos/internal/clientregistry"
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/normalizer"
@@ -55,6 +56,7 @@ type Gateway struct {
 	listener          net.Listener
 	running            atomic.Bool
 	sessions           *sessionStore
+	buffer             *resultBuffer
 	queryEOFsExpected  map[uint8]int
 	seqCheckpointEvery uint64
 	clientTimeout      time.Duration
@@ -142,6 +144,25 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		return nil, err
 	}
 
+	buffer, err := newResultBuffer(filepath.Join(filepath.Dir(config.SessionStorePath), "result_buffers"))
+	if err != nil {
+		for _, q := range accountQueues {
+			if err := q.Close(); err != nil {
+				slog.Error("While closing accounts queue", "err", err)
+			}
+		}
+		if err := transfersExchange.Close(); err != nil {
+			slog.Error("While closing transfers exchange", "err", err)
+		}
+		if err := resultsQueue.Close(); err != nil {
+			slog.Error("While closing results queue", "err", err)
+		}
+		if err := listener.Close(); err != nil {
+			slog.Error("While closing acceptor socket", "err", err)
+		}
+		return nil, err
+	}
+
 	checkpointEvery := config.SeqCheckpointEvery
 	if checkpointEvery == 0 {
 		checkpointEvery = 1
@@ -153,6 +174,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		resultsQueue:       resultsQueue,
 		listener:           listener,
 		sessions:           sessions,
+		buffer:             buffer,
 		queryEOFsExpected:  config.QueryEOFsExpected,
 		seqCheckpointEvery: checkpointEvery,
 		clientTimeout:      config.ClientTimeout,
@@ -279,6 +301,15 @@ func (gateway *Gateway) handshake(conn net.Conn, r io.Reader) (clientregistry.Cl
 	}
 
 	client := clientregistry.ClientState{ID: clientID, Conn: conn}
+
+	lock := gateway.buffer.lock(clientID)
+	lock.Lock()
+	defer lock.Unlock()
+	if err := gateway.buffer.flush(clientID, func(body []byte) error {
+		return gateway.deliverResult(client, body)
+	}); err != nil {
+		return clientregistry.ClientState{}, 0, err
+	}
 	gateway.registry.Add(client)
 	return client, phase, nil
 }
@@ -386,51 +417,65 @@ func (gateway *Gateway) runTransfersPhase(client clientregistry.ClientState, r i
 }
 
 func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
-	reader, info, err := batch.ReadHeader(msg.Body)
+	_, info, err := batch.ReadHeader(msg.Body)
 	if err != nil {
 		slog.Error("While deserializing result header", "err", err)
 		nack()
 		return
 	}
 
+	lock := gateway.buffer.lock(info.ClientID)
+	lock.Lock()
+	defer lock.Unlock()
+
 	client, ok := gateway.findClient(info.ClientID)
 	if !ok {
-		slog.Warn("Result for unknown client", "client_id", info.ClientID)
-		ack()
+		if _, alive := gateway.sessions.session(info.ClientID); alive {
+			if err := gateway.buffer.append(info.ClientID, msg.Body); err != nil {
+				slog.Error("While buffering result for disconnected client", "client_id", info.ClientID, "err", err)
+				nack() //fallo la escritura, le aviso a rabbit que no descarte
+				return
+			}
+			ack() //efectivamente se escribio, le aviso a rabbit que descarte
+			return
+		}
+		slog.Warn("Result for dead or unknown client, dropping", "client_id", info.ClientID)
+		ack() //estado muerto o desconocido, no tiene sentido guardar esto, le aviso a rabbit que descarte
 		return
+	}
+
+	if err := gateway.deliverResult(client, msg.Body); err != nil {
+		slog.Error("While delivering result batch", "client_id", info.ClientID, "err", err)
+		nack() //fallo la entrega, le aviso a rabbit que no descarte
+		return
+	}
+	ack() //efectivamente se entrego, le aviso a rabbit que descarte
+}
+
+func (gateway *Gateway) deliverResult(client clientregistry.ClientState, body []byte) error {
+	reader, info, err := batch.ReadHeader(body)
+	if err != nil {
+		return err
 	}
 
 	if info.EOF {
 		shouldWrite, shouldClose, err := gateway.markQueryEOF(info.ClientID, info.QueryID)
 		if err != nil {
-			slog.Error("While marking QueryEOF", "client_id", info.ClientID, "query_id", info.QueryID, "err", err)
-			nack()
-			return
+			return err
 		}
-
 		if !shouldWrite {
-			ack()
-			return
+			return nil
 		}
-
 		if err := tcpproto.WriteQueryEOF(client.Conn, info.QueryID); err != nil {
-			slog.Error("While writing QueryEOF", "client_id", info.ClientID, "query_id", info.QueryID, "err", err)
-			nack()
-			return
+			return err
 		}
 		if shouldClose {
 			gateway.closeClient(info.ClientID)
 		}
-		ack()
-		return
+		return nil
 	}
 
-	if err := gateway.forwardResult(client, info, reader); err != nil {
-		slog.Error("While forwarding result batch", "client_id", info.ClientID, "query_id", info.QueryID, "err", err)
-		nack()
-		return
-	}
-	ack()
+	return gateway.forwardResult(client, info, reader)
 }
 
 func (gateway *Gateway) forwardResult(client clientregistry.ClientState, info batch.Info, r *wire.Reader) error {
@@ -516,6 +561,9 @@ func (gateway *Gateway) closeClient(clientID int) {
 	if err := gateway.sessions.removeClient(clientID); err != nil {
 		slog.Error("While removing client from session store", "client_id", clientID, "err", err)
 	}
+	if err := gateway.buffer.remove(clientID); err != nil {
+		slog.Error("While removing client result buffer", "client_id", clientID, "err", err)
+	}
 
 	slog.Info("Client closed", "client_id", clientID)
 }
@@ -586,6 +634,9 @@ func (gateway *Gateway) abortClient(clientID int) {
 	gateway.clearDisconnected(clientID)
 	if err := gateway.sessions.moveToPendingAbort(clientID); err != nil {
 		slog.Error("While moving client to pending abort", "client_id", clientID, "err", err)
+	}
+	if err := gateway.buffer.remove(clientID); err != nil {
+		slog.Error("While removing client result buffer", "client_id", clientID, "err", err)
 	}
 }
 
