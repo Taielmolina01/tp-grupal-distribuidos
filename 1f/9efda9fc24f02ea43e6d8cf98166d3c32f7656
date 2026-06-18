@@ -1,0 +1,22 @@
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 270-287,292-296,304-307
+src/internal/joinaccounts/types.go
+  h_3c9b41718876fe 9,11,31-32,44-46,55,65
+src/internal/common/sendertracker/sendertracker.go
+  h_3c9b41718876fe 11,20,26-29,51-52,56-70,131,133-134
+src/internal/joinaccounts/joinaccounts.go
+  h_3c9b41718876fe 17,19,96-107,115-116,139,163-164,167-168,172-173,177-178,180-182,187-197,202-207,211-220,223-230,232-233,236,254,258,276,280,282,284-290,293-295,298,300-301,304-308,312-323,326-336,339-346,348,350-357,360,362,389-392,401-404,408-410,421,427,439-441
+src/internal/common/messageprotocol/rabbit/batch/batch.go
+  h_3c9b41718876fe 32-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "1f9efda9fc24f02ea43e6d8cf98166d3c32f7656",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
