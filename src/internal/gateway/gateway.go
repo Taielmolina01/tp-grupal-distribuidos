@@ -428,28 +428,28 @@ func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(),
 	lock.Lock()
 	defer lock.Unlock()
 
-	client, ok := gateway.findClient(info.ClientID)
-	if !ok {
-		if _, alive := gateway.sessions.session(info.ClientID); alive {
-			if err := gateway.buffer.append(info.ClientID, msg.Body); err != nil {
-				slog.Error("While buffering result for disconnected client", "client_id", info.ClientID, "err", err)
-				nack() //fallo la escritura, le aviso a rabbit que no descarte
-				return
-			}
-			ack() //efectivamente se escribio, le aviso a rabbit que descarte
+	if client, ok := gateway.findClient(info.ClientID); ok {
+		err := gateway.deliverResult(client, msg.Body)
+		if err == nil {
+			ack() //efectivamente se entrego, le aviso a rabbit que descarte
 			return
 		}
-		slog.Warn("Result for dead or unknown client, dropping", "client_id", info.ClientID)
-		ack() //estado muerto o desconocido, no tiene sentido guardar esto, le aviso a rabbit que descarte
+		slog.Debug("Delivery failed, treating client as disconnected", "client_id", info.ClientID, "err", err)
+		gateway.markDisconnected(client)
+	}
+
+	if _, alive := gateway.sessions.session(info.ClientID); alive {
+		if err := gateway.buffer.append(info.ClientID, msg.Body); err != nil {
+			slog.Error("While buffering result for disconnected client", "client_id", info.ClientID, "err", err)
+			nack() //fallo la escritura, le aviso a rabbit que no descarte
+			return
+		}
+		ack() //efectivamente se escribio, le aviso a rabbit que descarte
 		return
 	}
 
-	if err := gateway.deliverResult(client, msg.Body); err != nil {
-		slog.Error("While delivering result batch", "client_id", info.ClientID, "err", err)
-		nack() //fallo la entrega, le aviso a rabbit que no descarte
-		return
-	}
-	ack() //efectivamente se entrego, le aviso a rabbit que descarte
+	slog.Warn("Result for dead or unknown client, dropping", "client_id", info.ClientID)
+	ack() //estado muerto o desconocido, no tiene sentido guardar esto, le aviso a rabbit que descarte
 }
 
 func (gateway *Gateway) deliverResult(client clientregistry.ClientState, body []byte) error {
@@ -521,11 +521,11 @@ func (gateway *Gateway) forwardResult(client clientregistry.ClientState, info ba
 }
 
 func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8, senderID uint8) (shouldWrite bool, shouldClose bool, err error) {
-	counts, changed, err := gateway.sessions.incEOF(clientID, queryID, senderID)
+	counts, err := gateway.sessions.incEOF(clientID, queryID, senderID)
 	if err != nil {
 		return false, false, err
 	}
-	if !changed {
+	if counts == nil {
 		return false, false, nil
 	}
 

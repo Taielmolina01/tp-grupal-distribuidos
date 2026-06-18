@@ -94,27 +94,30 @@ func (s *sessionStore) advanceConfirmedSeq(clientID int, phase tcpproto.Phase, s
 	return s.persist()
 }
 
-func (s *sessionStore) incEOF(clientID int, queryID uint8, senderID uint8) (map[uint8]int, bool, error) {
+func (s *sessionStore) incEOF(clientID int, queryID uint8, senderID uint8) (map[uint8]int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state, ok := s.sessions[clientID]
 	if !ok {
-		return nil, false, nil
+		return nil, nil
 	}
 	senders, ok := state.eofSenders[queryID]
 	if !ok {
 		senders = map[uint8]struct{}{}
 		state.eofSenders[queryID] = senders
 	}
-	if _, already := senders[senderID]; already {
-		return nil, false, nil
+	_, already := senders[senderID]
+	if !already {
+		senders[senderID] = struct{}{}
 	}
-	senders[senderID] = struct{}{}
 	snapshot := make(map[uint8]int, len(state.eofSenders))
 	for q, set := range state.eofSenders {
 		snapshot[q] = len(set)
 	}
-	return snapshot, true, s.persist()
+	if already {
+		return snapshot, nil
+	}
+	return snapshot, s.persist()
 }
 
 func (s *sessionStore) removeClient(clientID int) error {
