@@ -184,7 +184,7 @@ func (r *Reader) Time() time.Time {
 	return time.Unix(int64(binary.BigEndian.Uint64(b)), 0).UTC()
 }
 
-func (r *Reader) ReadRaw(n uint32) []byte {
+func (r *Reader) ReadRaw(n uint64) []byte {
 	return r.read(int(n))
 }
 

@@ -6,8 +6,8 @@ import (
 )
 
 type SenderTracker struct {
-	msgCount  map[int]uint32
-	expected  map[int]uint32
+	msgCount  map[int]uint64
+	expected  map[int]uint64
 	eofSet    map[int]struct{}
 	seqStores map[int]*seqstore.SeqStore
 	capacity  uint64
@@ -15,8 +15,8 @@ type SenderTracker struct {
 
 func New(seqCapacity uint64) *SenderTracker {
 	return &SenderTracker{
-		msgCount:  map[int]uint32{},
-		expected:  map[int]uint32{},
+		msgCount:  map[int]uint64{},
+		expected:  map[int]uint64{},
 		eofSet:    map[int]struct{}{},
 		seqStores: map[int]*seqstore.SeqStore{},
 		capacity:  seqCapacity,
@@ -40,11 +40,11 @@ func (t *SenderTracker) Claim(senderID int, seq uint64) {
 	store.Claim(seq)
 }
 
-func (t *SenderTracker) RegisterBatch(senderID int, count uint32) {
+func (t *SenderTracker) RegisterBatch(senderID int, count uint64) {
 	t.msgCount[senderID] += count
 }
 
-func (t *SenderTracker) RegisterEOF(senderID int, total uint32) {
+func (t *SenderTracker) RegisterEOF(senderID int, total uint64) {
 	t.eofSet[senderID] = struct{}{}
 	t.expected[senderID] = total
 }
@@ -61,8 +61,8 @@ func (t *SenderTracker) IsComplete(expectedSenders int) bool {
 	return true
 }
 
-func (t *SenderTracker) TotalInput() uint32 {
-	var total uint32
+func (t *SenderTracker) TotalInput() uint64 {
+	var total uint64
 	for _, n := range t.expected {
 		total += n
 	}
@@ -72,25 +72,25 @@ func (t *SenderTracker) TotalInput() uint32 {
 func (t *SenderTracker) Marshal(w *wire.Writer) {
 	w.Uint64(t.capacity)
 
-	w.Uint32(uint32(len(t.msgCount)))
+	w.Uint64(uint64(len(t.msgCount)))
 	for senderID, count := range t.msgCount {
 		w.Int32(int32(senderID))
-		w.Uint32(count)
+		w.Uint64(count)
 	}
-	w.Uint32(uint32(len(t.expected)))
+	w.Uint64(uint64(len(t.expected)))
 	for senderID, exp := range t.expected {
 		w.Int32(int32(senderID))
-		w.Uint32(exp)
+		w.Uint64(exp)
 	}
-	w.Uint32(uint32(len(t.eofSet)))
+	w.Uint64(uint64(len(t.eofSet)))
 	for senderID := range t.eofSet {
 		w.Int32(int32(senderID))
 	}
-	w.Uint32(uint32(len(t.seqStores)))
+	w.Uint64(uint64(len(t.seqStores)))
 	for senderID, store := range t.seqStores {
 		w.Int32(int32(senderID))
 		data := store.Marshal()
-		w.Uint32(uint32(len(data)))
+		w.Uint64(uint64(len(data)))
 		w.WriteRaw(data)
 	}
 }
@@ -98,26 +98,26 @@ func (t *SenderTracker) Marshal(w *wire.Writer) {
 func Unmarshal(r *wire.Reader) (*SenderTracker, error) {
 	capacity := r.Uint64()
 
-	n := r.Uint32()
-	msgCount := make(map[int]uint32, n)
+	n := r.Uint64()
+	msgCount := make(map[int]uint64, n)
 	for range n {
-		msgCount[int(r.Int32())] = r.Uint32()
+		msgCount[int(r.Int32())] = r.Uint64()
 	}
-	n = r.Uint32()
-	expected := make(map[int]uint32, n)
+	n = r.Uint64()
+	expected := make(map[int]uint64, n)
 	for range n {
-		expected[int(r.Int32())] = r.Uint32()
+		expected[int(r.Int32())] = r.Uint64()
 	}
-	n = r.Uint32()
+	n = r.Uint64()
 	eofSet := make(map[int]struct{}, n)
 	for range n {
 		eofSet[int(r.Int32())] = struct{}{}
 	}
-	n = r.Uint32()
+	n = r.Uint64()
 	seqStores := make(map[int]*seqstore.SeqStore, n)
 	for range n {
 		senderID := int(r.Int32())
-		dataLen := r.Uint32()
+		dataLen := r.Uint64()
 		data := r.ReadRaw(dataLen)
 		if r.Err() != nil {
 			return nil, r.Err()
