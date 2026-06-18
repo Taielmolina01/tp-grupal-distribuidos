@@ -1,0 +1,16 @@
+src/internal/common/sendertracker/sendertracker.go
+  h_3c9b41718876fe 9-10,18-19,43,47,64-65,75,78,80,83,85,89,93,101-102,104,106-107,109,111,116,120
+src/internal/common/messageprotocol/wire/wire.go
+  h_3c9b41718876fe 187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "1248a7e928f8e4b979269d6dd72f08464036a37a",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
