@@ -357,6 +357,7 @@ func (f *FilterAndSplitter) commitState() error {
 }
 
 func (f *FilterAndSplitter) startupRecovery() error {
+	return nil
 	if err := f.loadState(); err != nil {
 		return fmt.Errorf("startup recovery: load state: %w", err)
 	}
