@@ -101,8 +101,8 @@ func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
 				qualifyingLeft:   map[account.AccountIdentifier]struct{}{},
 				qualifyingRight:  map[account.AccountIdentifier]struct{}{},
 				qualifiedBatch:   qualifiedaccount.NewBatchBuilder(config.MaxBatchSize, config.MaxBatchBytes),
-				transferTracker:  sendertracker.New(0),
-				qualifiedTracker: sendertracker.New(0),
+				transferTracker:  sendertracker.New(10_000_000),
+				qualifiedTracker: sendertracker.New(10_000_000),
 			}
 		}),
 	}, nil
@@ -223,17 +223,17 @@ func (j *JoinAccounts) handleTransferInput(msg newmiddleware.Message, ack func()
 func (j *JoinAccounts) processTransferBatch(input splittransfer.Msg, state *clientState) error {
 	for _, record := range input.Records {
 		if record.IsLeftPart {
-			j.accumulateLeft(input.ClientID, record, state)
+			j.accumulateLeft(record, state)
 		} else {
-			j.accumulateRight(input.ClientID, record, state)
+			j.accumulateRight(record, state)
 		}
 
 	}
 
-	return j.flushQualifiedBatch(input.ClientID, input.SenderID, input.Seq, state.qualifiedBatch)
+	return j.flushQualifiedBatch(input.ClientID, input.Seq, state.qualifiedBatch)
 }
 
-func (j *JoinAccounts) accumulateLeft(clientID int, record transfer.SplittedTransfer, state *clientState) {
+func (j *JoinAccounts) accumulateLeft(record transfer.SplittedTransfer, state *clientState) {
 	identifier := account.AccountIdentifier{
 		BankID:        record.Transfer.FromBank,
 		AccountNumber: record.Transfer.FromBankAccount,
@@ -251,11 +251,11 @@ func (j *JoinAccounts) accumulateLeft(clientID int, record transfer.SplittedTran
 	accMap[rightIdentifier] = struct{}{}
 
 	if len(accMap) == j.threshold {
-		j.prepareQuallified(clientID, identifier, true, state)
+		j.prepareQuallified(identifier, true, state)
 	}
 }
 
-func (j *JoinAccounts) accumulateRight(clientID int, record transfer.SplittedTransfer, state *clientState) {
+func (j *JoinAccounts) accumulateRight(record transfer.SplittedTransfer, state *clientState) {
 	identifier := account.AccountIdentifier{
 		BankID:        record.Transfer.ToBank,
 		AccountNumber: record.Transfer.ToBankAccount,
@@ -273,16 +273,16 @@ func (j *JoinAccounts) accumulateRight(clientID int, record transfer.SplittedTra
 	accMap[leftIdentifier] = struct{}{}
 
 	if len(accMap) == j.threshold {
-		j.prepareQuallified(clientID, identifier, false, state)
+		j.prepareQuallified(identifier, false, state)
 	}
 }
 
-func (j *JoinAccounts) prepareQuallified(clientID int, acc account.AccountIdentifier, isLeft bool, state *clientState) {
+func (j *JoinAccounts) prepareQuallified(acc account.AccountIdentifier, isLeft bool, state *clientState) {
 	qa := qualifiedaccount.QualifiedAccount{Account: acc, IsLeft: isLeft}
 	state.qualifiedBatch.Add(&qa)
 }
 
-func (j *JoinAccounts) flushQualifiedBatch(clientID int, senderID uint8, seqNumber uint64, b *batch.Builder[qualifiedaccount.QualifiedAccount]) error {
+func (j *JoinAccounts) flushQualifiedBatch(clientID int, seqNumber uint64, b *batch.Builder[qualifiedaccount.QualifiedAccount]) error {
 	// Acá funciona medio de suerte
 	// Si tengo 3 origenes con secuencias independientes no puedo garantizar que usandoel seqNumber todas sean diferentes.
 	// Si llega origen 1 seq 1, y luego origen 2 seq 1 me arruina
@@ -318,7 +318,7 @@ func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(
 	tracker := state.qualifiedTracker
 
 	if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
-		slog.Warn("duplicate", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
+		// slog.Warn("quailified duplicate", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq, "EOF", input.EOF)
 		ack()
 		return
 	}
