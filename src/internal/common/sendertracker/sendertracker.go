@@ -8,7 +8,7 @@ import (
 type SenderTracker struct {
 	msgCount  map[int]uint64
 	expected  map[int]uint64
-	eofSet    map[int]struct{}
+	eofSet    map[int]uint64
 	seqStores map[int]*seqstore.SeqStore
 	capacity  uint64
 }
@@ -17,10 +17,14 @@ func New(seqCapacity uint64) *SenderTracker {
 	return &SenderTracker{
 		msgCount:  map[int]uint64{},
 		expected:  map[int]uint64{},
-		eofSet:    map[int]struct{}{},
+		eofSet:    map[int]uint64{},
 		seqStores: map[int]*seqstore.SeqStore{},
 		capacity:  seqCapacity,
 	}
+}
+
+func (t *SenderTracker) Clear() {
+
 }
 
 func (t *SenderTracker) IsDuplicate(senderID int, seq uint64) bool {
@@ -44,9 +48,24 @@ func (t *SenderTracker) RegisterBatch(senderID int, count uint64) {
 	t.msgCount[senderID] += count
 }
 
-func (t *SenderTracker) RegisterEOF(senderID int, total uint64) {
-	t.eofSet[senderID] = struct{}{}
+func (t *SenderTracker) RegisterEOF(senderID int, total uint64, seq uint64) {
+	t.eofSet[senderID] = seq
 	t.expected[senderID] = total
+}
+
+func (t *SenderTracker) GetEOFSeq() uint64 {
+	for _, v := range t.eofSet {
+		return v
+	}
+	return 0
+}
+
+func (t *SenderTracker) GetMsgCount() uint32 {
+	var acum uint32
+	for _, v := range t.msgCount {
+		acum += uint32(int(v)) //ARREGLAR ESTO ACTUALIZANDO EL WIRE
+	}
+	return acum
 }
 
 func (t *SenderTracker) IsComplete(expectedSenders int) bool {
@@ -109,9 +128,10 @@ func Unmarshal(r *wire.Reader) (*SenderTracker, error) {
 		expected[int(r.Int32())] = r.Uint64()
 	}
 	n = r.Uint64()
-	eofSet := make(map[int]struct{}, n)
+	eofSet := make(map[int]uint64, n)
 	for range n {
-		eofSet[int(r.Int32())] = struct{}{}
+		// TODO: SERIALIZAR Y DESERIALIZAR USANDO ESTE VALOR
+		eofSet[int(r.Int32())] = 0
 	}
 	n = r.Uint64()
 	seqStores := make(map[int]*seqstore.SeqStore, n)

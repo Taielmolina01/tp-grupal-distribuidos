@@ -6,7 +6,9 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
+	"tp-grupal-distribuidos/internal/common/statemap"
 )
 
 type JoinAccountsConfig struct {
@@ -26,6 +28,8 @@ type JoinAccountsConfig struct {
 	QueryID       int
 	MaxBatchSize  int
 	MaxBatchBytes int
+
+	InputMiddlewareAmt uint8 //AGREGAR LA CFG DE ESTO ANTES D COLGARME jejox
 }
 
 type clientState struct {
@@ -37,40 +41,9 @@ type clientState struct {
 
 	qualifiedBatch *batch.Builder[qualifiedaccount.QualifiedAccount]
 
-	transferEOFReceived bool
-	transferEOFTotal    uint32
-	qualifiedEOFCount   int
-
-	seqSent              uint64
-	transferSeqReceived  map[int]uint64
-	qualifiedSeqReceived map[int]uint64
-}
-
-func (s *clientState) nextSeq() uint64 {
-	s.seqSent++
-	return s.seqSent
-}
-
-func (s *clientState) isDuplicateTransfer(senderID int, seq uint64) bool {
-	if seq == 0 {
-		return false
-	}
-	if seq <= s.transferSeqReceived[senderID] {
-		return true
-	}
-	s.transferSeqReceived[senderID] = seq
-	return false
-}
-
-func (s *clientState) isDuplicateQualified(senderID int, seq uint64) bool {
-	if seq == 0 {
-		return false
-	}
-	if seq <= s.qualifiedSeqReceived[senderID] {
-		return true
-	}
-	s.qualifiedSeqReceived[senderID] = seq
-	return false
+	transferTracker  *sendertracker.SenderTracker
+	qualifiedTracker *sendertracker.SenderTracker
+	transfersDone    bool
 }
 
 type JoinAccounts struct {
@@ -79,6 +52,7 @@ type JoinAccounts struct {
 	hasher shard.Hasher
 
 	inputMiddleware           newmiddleware.Middleware
+	inputMiddlewareAmt        uint8
 	qualifiedInputMiddleware  newmiddleware.Middleware
 	qualifiedOutputMiddleware newmiddleware.Middleware
 	outputMiddleware          newmiddleware.Middleware
@@ -88,7 +62,8 @@ type JoinAccounts struct {
 	maxBatchSize  int
 	maxBatchBytes int
 
-	mu           sync.Mutex
-	clientsState map[int]*clientState
-	queryID      int
+	states statemap.StateMap[clientState]
+
+	mu      sync.Mutex
+	queryID int
 }

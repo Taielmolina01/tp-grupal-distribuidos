@@ -29,6 +29,11 @@ func NewBuilder[T any](maxCount, maxBytes int, codec wire.Codec[T]) *Builder[T] 
 	}
 }
 
+func (b *Builder[T]) Add(record *T) {
+	b.codec.Marshal(b.w, record)
+	b.count++
+}
+
 func (b *Builder[T]) TryAdd(record *T) bool {
 	start := b.w.Len()
 	b.codec.Marshal(b.w, record)

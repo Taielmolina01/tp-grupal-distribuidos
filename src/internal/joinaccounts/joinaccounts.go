@@ -14,7 +14,9 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/splittransfer"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
+	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -91,7 +93,18 @@ func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
 		threshold:                 config.Threshold,
 		maxBatchSize:              config.MaxBatchSize,
 		maxBatchBytes:             config.MaxBatchBytes,
-		clientsState:              map[int]*clientState{},
+
+		states: statemap.New(func() *clientState {
+			return &clientState{
+				left:             map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
+				right:            map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
+				qualifyingLeft:   map[account.AccountIdentifier]struct{}{},
+				qualifyingRight:  map[account.AccountIdentifier]struct{}{},
+				qualifiedBatch:   qualifiedaccount.NewBatchBuilder(config.MaxBatchSize, config.MaxBatchBytes),
+				transferTracker:  sendertracker.New(0),
+				qualifiedTracker: sendertracker.New(0),
+			}
+		}),
 	}, nil
 }
 
@@ -99,8 +112,8 @@ func (j *JoinAccounts) Run() {
 	defer j.close()
 	go j.consumeQualified()
 
-	if err := j.inputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
-		j.handleInput(msg, ack)
+	if err := j.inputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
+		j.handleTransferInput(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
 	}
@@ -120,6 +133,10 @@ func (j *JoinAccounts) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
+	j.StopConsuming()
+}
+
+func (j *JoinAccounts) StopConsuming() {
 	if err := j.qualifiedInputMiddleware.StopConsuming(); err != nil {
 		slog.Error("While stopping qualified input consumer", "join_id", j.id, "err", err)
 	}
@@ -143,66 +160,80 @@ func (j *JoinAccounts) close() {
 	}
 }
 
-func (j *JoinAccounts) handleInput(msg newmiddleware.Message, ack func()) {
-	defer ack()
+func (j *JoinAccounts) handleTransferInput(msg newmiddleware.Message, ack func(), nack func()) {
+	//Podría usar el ProjectForQ4 creo
 	input, err := splittransfer.Read(msg.Body)
 	if err != nil {
-		slog.Error("While deserializing input batch", "err", err)
+		slog.Error("decode failed", "err", err)
+		ack()
 		return
 	}
+
+	clientID := input.ClientID
 
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
-	if input.EOF {
-		j.handleTransferEOF(input.ClientID, input.SenderID, input.Seq, input.Total)
+	state := j.states.For(clientID)
+	tracker := state.transferTracker
+
+	if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+		slog.Warn("duplicate", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
+		ack()
 		return
 	}
 
-	for i := range input.Records {
-		j.accumulate(input.ClientID, input.Records[i])
-	}
-}
-
-func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func()) {
-	defer ack()
-	input, err := qualifiedaccount.Read(msg.Body)
-	if err != nil {
-		slog.Error("While deserializing qualified accounts batch", "err", err)
-		return
-	}
-
-	j.mu.Lock()
-	defer j.mu.Unlock()
-
 	if input.EOF {
-		if j.stateFor(input.ClientID).isDuplicateQualified(int(input.SenderID), input.Seq) {
-			slog.Warn("Discarding duplicate qualified EOF", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
+		tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+	} else {
+		// SI O SI TENGO QUE VERIF DUPLICADOS, SINO ACÁ SUMO CUALQUIER COSA
+		// Por ende no puedo mandar los outputs hasta terminar
+		// O puedo mandar el output con el mismo seqNumber que recibí, pero tengo q garantizar que el output de todo input entra en un solo batch
+		// Las quallifiedaccounts que mando al siguiente step son más chicas que el input recibido ais que puedo
+		tracker.RegisterBatch(int(input.SenderID), uint64(len(input.Records)))
+		if err := j.processTransferBatch(input, state); err != nil {
+			slog.Error("process batch failed", "err", err)
+			nack()
+			j.StopConsuming()
 			return
 		}
-		j.handleQualifiedEOF(input.ClientID)
-		return
 	}
 
-	state := j.stateFor(input.ClientID)
-	for _, rec := range input.Records {
-		if rec.IsLeft {
-			state.qualifyingLeft[rec.Account] = struct{}{}
-		} else {
-			state.qualifyingRight[rec.Account] = struct{}{}
+	if tracker.IsComplete(int(j.inputMiddlewareAmt)) {
+		if err := j.finishTransfersStep(clientID, state); err != nil {
+			slog.Error("finishing transfers step failed", "err", err)
+			nack()
+			j.StopConsuming()
+			return
 		}
 	}
+
+	tracker.Claim(int(input.SenderID), input.Seq)
+
+	// if err := h.persist(); err != nil {
+	// 	slog.Error("persist failed, stopping", "err", err)
+	// 	nack()
+	//	j.StopConsuming()
+	// 	return
+	// }
+
+	ack()
 }
 
-func (j *JoinAccounts) accumulate(clientID int, record transfer.SplittedTransfer) {
-	if record.IsLeftPart {
-		j.accumulateLeft(clientID, record)
-	} else {
-		j.accumulateRight(clientID, record)
+func (j *JoinAccounts) processTransferBatch(input splittransfer.Msg, state *clientState) error {
+	for _, record := range input.Records {
+		if record.IsLeftPart {
+			j.accumulateLeft(input.ClientID, record, state)
+		} else {
+			j.accumulateRight(input.ClientID, record, state)
+		}
+
 	}
+
+	return j.flushQualifiedBatch(input.ClientID, input.SenderID, input.Seq, state.qualifiedBatch)
 }
 
-func (j *JoinAccounts) accumulateLeft(clientID int, record transfer.SplittedTransfer) {
+func (j *JoinAccounts) accumulateLeft(clientID int, record transfer.SplittedTransfer, state *clientState) {
 	identifier := account.AccountIdentifier{
 		BankID:        record.Transfer.FromBank,
 		AccountNumber: record.Transfer.FromBankAccount,
@@ -212,7 +243,6 @@ func (j *JoinAccounts) accumulateLeft(clientID int, record transfer.SplittedTran
 		AccountNumber: record.Transfer.ToBankAccount,
 	}
 
-	state := j.stateFor(clientID)
 	accMap, ok := state.left[identifier]
 	if !ok {
 		accMap = map[account.AccountIdentifier]struct{}{}
@@ -221,11 +251,11 @@ func (j *JoinAccounts) accumulateLeft(clientID int, record transfer.SplittedTran
 	accMap[rightIdentifier] = struct{}{}
 
 	if len(accMap) == j.threshold {
-		j.broadcastQualified(clientID, identifier, true)
+		j.prepareQuallified(clientID, identifier, true, state)
 	}
 }
 
-func (j *JoinAccounts) accumulateRight(clientID int, record transfer.SplittedTransfer) {
+func (j *JoinAccounts) accumulateRight(clientID int, record transfer.SplittedTransfer, state *clientState) {
 	identifier := account.AccountIdentifier{
 		BankID:        record.Transfer.ToBank,
 		AccountNumber: record.Transfer.ToBankAccount,
@@ -235,7 +265,6 @@ func (j *JoinAccounts) accumulateRight(clientID int, record transfer.SplittedTra
 		AccountNumber: record.Transfer.FromBankAccount,
 	}
 
-	state := j.stateFor(clientID)
 	accMap, ok := state.right[identifier]
 	if !ok {
 		accMap = map[account.AccountIdentifier]struct{}{}
@@ -244,64 +273,93 @@ func (j *JoinAccounts) accumulateRight(clientID int, record transfer.SplittedTra
 	accMap[leftIdentifier] = struct{}{}
 
 	if len(accMap) == j.threshold {
-		j.broadcastQualified(clientID, identifier, false)
+		j.prepareQuallified(clientID, identifier, false, state)
 	}
 }
 
-func (j *JoinAccounts) broadcastQualified(clientID int, acc account.AccountIdentifier, isLeft bool) {
-	state := j.stateFor(clientID)
+func (j *JoinAccounts) prepareQuallified(clientID int, acc account.AccountIdentifier, isLeft bool, state *clientState) {
 	qa := qualifiedaccount.QualifiedAccount{Account: acc, IsLeft: isLeft}
-	if !state.qualifiedBatch.TryAdd(&qa) {
-		j.flushQualifiedBatch(clientID, state.qualifiedBatch)
-		state.qualifiedBatch.TryAdd(&qa)
-	}
+	state.qualifiedBatch.Add(&qa)
 }
 
-func (j *JoinAccounts) flushQualifiedBatch(clientID int, b *batch.Builder[qualifiedaccount.QualifiedAccount]) {
-	seq := j.stateFor(clientID).nextSeq()
-	body := b.Flush(clientID, uint8(j.queryID), uint8(j.id), seq)
-	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
-		slog.Error("While flushing qualified batch", "err", err)
-	}
+func (j *JoinAccounts) flushQualifiedBatch(clientID int, senderID uint8, seqNumber uint64, b *batch.Builder[qualifiedaccount.QualifiedAccount]) error {
+	// Acá funciona medio de suerte
+	// Si tengo 3 origenes con secuencias independientes no puedo garantizar que usandoel seqNumber todas sean diferentes.
+	// Si llega origen 1 seq 1, y luego origen 2 seq 1 me arruina
+	body := b.Flush(clientID, uint8(j.queryID), uint8(j.id), seqNumber)
+	return j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: body})
 }
 
-func (j *JoinAccounts) handleTransferEOF(clientID int, senderID uint8, seq uint64, total uint32) {
-	if j.stateFor(clientID).isDuplicateTransfer(int(senderID), seq) {
-		slog.Warn("Discarding duplicate EOF", "clientID", clientID, "senderID", senderID, "seq", seq)
-		return
-	}
-	state := j.stateFor(clientID)
-	state.transferEOFReceived = true
-	state.transferEOFTotal = total
-
-	if !state.qualifiedBatch.IsEmpty() {
-		j.flushQualifiedBatch(clientID, state.qualifiedBatch)
-	}
-
-	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), j.stateFor(clientID).nextSeq(), 0)
+func (j *JoinAccounts) finishTransfersStep(clientID int, state *clientState) error {
+	// Reutilizamos el seqnum de cualquiera de los EOFs
+	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), state.transferTracker.GetEOFSeq(), state.transferTracker.GetMsgCount())
 	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
 		slog.Error("While sending qualified EOF", "err", err)
+		return err
 	}
 
-	j.tryFinalize(clientID)
+	return nil
 }
 
-func (j *JoinAccounts) handleQualifiedEOF(clientID int) {
-	state := j.stateFor(clientID)
-	state.qualifiedEOFCount++
-	j.tryFinalize(clientID)
-}
-
-func (j *JoinAccounts) tryFinalize(clientID int) {
-	state := j.stateFor(clientID)
-	if !state.transferEOFReceived || state.qualifiedEOFCount < j.peerAmount {
+func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(), nack func()) {
+	input, err := qualifiedaccount.Read(msg.Body)
+	if err != nil {
+		slog.Error("qualified decode failed", "err", err)
+		ack()
 		return
 	}
-	j.finalize(clientID, state)
+
+	clientID := input.ClientID
+
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	state := j.states.For(clientID)
+	tracker := state.qualifiedTracker
+
+	if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+		slog.Warn("duplicate", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
+		ack()
+		return
+	}
+
+	if input.EOF {
+		tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+	} else {
+		tracker.RegisterBatch(int(input.SenderID), uint64(len(input.Records)))
+		for _, rec := range input.Records {
+			if rec.IsLeft {
+				state.qualifyingLeft[rec.Account] = struct{}{}
+			} else {
+				state.qualifyingRight[rec.Account] = struct{}{}
+			}
+		}
+	}
+
+	if tracker.IsComplete(int(j.peerAmount)) {
+		if err := j.finishQualifiedStep(clientID, state); err != nil {
+			slog.Error("finishing transfers step failed", "err", err)
+			nack()
+			j.StopConsuming()
+			return
+		}
+	}
+
+	tracker.Claim(int(input.SenderID), input.Seq)
+
+	// // if err := h.persist(); err != nil {
+	// // 	slog.Error("persist failed, stopping", "err", err)
+	// // 	nack()
+	// //	j.StopConsuming()
+	// // 	return
+	// // }
+
+	// ack()
 }
 
-func (j *JoinAccounts) finalize(clientID int, state *clientState) {
+func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) error {
 	batches := make(map[string]*batch.Builder[account.AccountChain])
+	seq := uint64(0)
 
 	for protagonistKey, rightMap := range state.right {
 		leftMap, ok := state.left[protagonistKey]
@@ -328,7 +386,10 @@ func (j *JoinAccounts) finalize(clientID int, state *clientState) {
 				rk := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, chain.Left.GetKey(), chain.Right.GetKey()))
 				b := j.builderFor(batches, rk)
 				if !b.TryAdd(&chain) {
-					j.flushChainBatch(clientID, rk, b)
+					seq++
+					if err := j.flushChainBatch(clientID, rk, seq, b); err != nil {
+						return err
+					}
 					b.TryAdd(&chain)
 				}
 			}
@@ -337,11 +398,16 @@ func (j *JoinAccounts) finalize(clientID int, state *clientState) {
 
 	for rk, b := range batches {
 		if !b.IsEmpty() {
-			j.flushChainBatch(clientID, rk, b)
+			seq++
+			if err := j.flushChainBatch(clientID, rk, seq, b); err != nil {
+				return err
+			}
 		}
 	}
 
-	eofBody := accountchain.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), state.nextSeq(), state.transferEOFTotal)
+	seq++
+	// Acá al final el seq number coincide con el total de batches envíados dado que los genearmos a la vez
+	eofBody := accountchain.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), seq, uint32(seq))
 	if err := j.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
@@ -352,11 +418,13 @@ func (j *JoinAccounts) finalize(clientID int, state *clientState) {
 	for _, inner := range state.right {
 		clear(inner)
 	}
+
 	clear(state.left)
 	clear(state.right)
 	clear(state.qualifyingLeft)
 	clear(state.qualifyingRight)
 	delete(j.clientsState, clientID)
+	return nil
 }
 
 func (j *JoinAccounts) builderFor(batches map[string]*batch.Builder[account.AccountChain], rk string) *batch.Builder[account.AccountChain] {
@@ -368,27 +436,7 @@ func (j *JoinAccounts) builderFor(batches map[string]*batch.Builder[account.Acco
 	return b
 }
 
-func (j *JoinAccounts) flushChainBatch(clientID int, rk string, b *batch.Builder[account.AccountChain]) {
-	seq := j.stateFor(clientID).nextSeq()
-	body := b.Flush(clientID, uint8(j.queryID), uint8(j.id), seq)
-	if err := j.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
-		slog.Error("While sending chain batch", "err", err)
-	}
-}
-
-func (j *JoinAccounts) stateFor(clientID int) *clientState {
-	st, ok := j.clientsState[clientID]
-	if !ok {
-		st = &clientState{
-			left:                 map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
-			right:                map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
-			qualifyingLeft:       map[account.AccountIdentifier]struct{}{},
-			qualifyingRight:      map[account.AccountIdentifier]struct{}{},
-			qualifiedBatch:       qualifiedaccount.NewBatchBuilder(j.maxBatchSize, j.maxBatchBytes),
-			transferSeqReceived:  map[int]uint64{},
-			qualifiedSeqReceived: map[int]uint64{},
-		}
-		j.clientsState[clientID] = st
-	}
-	return st
+func (j *JoinAccounts) flushChainBatch(clientID int, rk string, seqNumber uint64, b *batch.Builder[account.AccountChain]) error {
+	body := b.Flush(clientID, uint8(j.queryID), uint8(j.id), seqNumber)
+	return j.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk})
 }

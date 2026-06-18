@@ -267,33 +267,33 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 		return
 	}
 
-	if err = f.writeTemp(); err != nil {
-		slog.Error("While writing temp", "err", err)
-		nack()
-		return
-	}
+	// if err = f.writeTemp(); err != nil {
+	// 	slog.Error("While writing temp", "err", err)
+	// 	nack()
+	// 	return
+	// }
 
-	if err = f.writeOutput(byShard); err != nil {
-		slog.Error("While writing ouput", "err", err)
-		nack()
-		return
-	}
+	// if err = f.writeOutput(byShard); err != nil {
+	// 	slog.Error("While writing ouput", "err", err)
+	// 	nack()
+	// 	return
+	// }
 
-	accept, err := f.tryCommit(input.ClientID, input.Seq)
-	if err != nil {
-		slog.Error("While trying to commit", "err", err)
-		nack()
-		return
-	}
+	// accept, err := f.tryCommit(input.ClientID, input.Seq)
+	// if err != nil {
+	// 	slog.Error("While trying to commit", "err", err)
+	// 	nack()
+	// 	return
+	// }
 
 	// A partir de acá damos el ack y trabajamos con lo que tenemos en disco ante caidas
 	ack()
 
-	if !accept {
-		slog.Warn("Seq rejected, rolling back", "seq", input.Seq)
-		f.recoverState()
-		return
-	}
+	// if !accept {
+	// 	slog.Warn("Seq rejected, rolling back", "seq", input.Seq)
+	// 	f.recoverState()
+	// 	return
+	// }
 
 	if err = f.sendOutputs(byShard); err != nil {
 		slog.Error("sendOutputs failed, killing process", "err", err)
@@ -301,10 +301,10 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 		return
 	}
 
-	if err = f.commitState(); err != nil {
-		slog.Error("commitState failed, killing process", "err", err)
-		f.kill()
-	}
+	// if err = f.commitState(); err != nil {
+	// 	slog.Error("commitState failed, killing process", "err", err)
+	// 	f.kill()
+	// }
 }
 
 func (f *FilterAndSplitter) recoverState() {
