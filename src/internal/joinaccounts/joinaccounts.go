@@ -120,8 +120,8 @@ func (j *JoinAccounts) Run() {
 }
 
 func (j *JoinAccounts) consumeQualified() {
-	if err := j.qualifiedInputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
-		j.handleQualifiedInput(msg, ack)
+	if err := j.qualifiedInputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
+		j.handleQualifiedInput(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from qualified middleware", "err", err)
 	}
@@ -199,6 +199,8 @@ func (j *JoinAccounts) handleTransferInput(msg newmiddleware.Message, ack func()
 		}
 	}
 
+	tracker.Claim(int(input.SenderID), input.Seq)
+
 	if tracker.IsComplete(int(j.inputMiddlewareAmt)) {
 		if err := j.finishTransfersStep(clientID, state); err != nil {
 			slog.Error("finishing transfers step failed", "err", err)
@@ -207,8 +209,6 @@ func (j *JoinAccounts) handleTransferInput(msg newmiddleware.Message, ack func()
 			return
 		}
 	}
-
-	tracker.Claim(int(input.SenderID), input.Seq)
 
 	// if err := h.persist(); err != nil {
 	// 	slog.Error("persist failed, stopping", "err", err)
@@ -336,6 +336,8 @@ func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(
 		}
 	}
 
+	tracker.Claim(int(input.SenderID), input.Seq)
+
 	if tracker.IsComplete(int(j.peerAmount)) {
 		if err := j.finishQualifiedStep(clientID, state); err != nil {
 			slog.Error("finishing transfers step failed", "err", err)
@@ -345,8 +347,6 @@ func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(
 		}
 	}
 
-	tracker.Claim(int(input.SenderID), input.Seq)
-
 	// // if err := h.persist(); err != nil {
 	// // 	slog.Error("persist failed, stopping", "err", err)
 	// // 	nack()
@@ -354,7 +354,7 @@ func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(
 	// // 	return
 	// // }
 
-	// ack()
+	ack()
 }
 
 func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) error {
@@ -411,19 +411,8 @@ func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) err
 	if err := j.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
 		slog.Error("While sending EOF message", "err", err)
 	}
+	j.states.Delete(clientID)
 
-	for _, inner := range state.left {
-		clear(inner)
-	}
-	for _, inner := range state.right {
-		clear(inner)
-	}
-
-	clear(state.left)
-	clear(state.right)
-	clear(state.qualifyingLeft)
-	clear(state.qualifyingRight)
-	delete(j.clientsState, clientID)
 	return nil
 }
 
