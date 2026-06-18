@@ -1,0 +1,78 @@
+src/internal/joinaccounts2/types.go
+  s_7ac51fcf0ac190::t_0f6d6ee316f880 13
+  s_7ac51fcf0ac190::t_111a2ce259e7c5 103-104,106
+src/internal/common/msghandler/handler.go
+  s_7ac51fcf0ac190::t_8bc0c4cd69c21d 15-16,18-19,22
+  s_7ac51fcf0ac190::t_41824679447ecb 12-13,20-21,23
+  h_3c9b41718876fe 82,87
+src/internal/joinaccounts2/apply.go
+  s_7ac51fcf0ac190::t_da3a5b0971808b 124
+  s_7ac51fcf0ac190::t_ea4e23d0531e69 29,44,146,168,182
+src/internal/filter/filteraccountseen2/apply.go
+  s_7ac51fcf0ac190::t_b878338fe8d7fa 14,36
+  s_7ac51fcf0ac190::t_5a658c2d2bcdad 52
+scripts/compose-gen/generator.go
+  s_908cde5c779836::t_39ea06557ac7ac 428
+src/internal/common/sendertracker/sendertracker.go
+  h_3c9b41718876fe 9-11,18-20,46-47,50-51,56,59-60
+src/internal/filter/filteraccountseen2/types.go
+  s_7ac51fcf0ac190::t_e4bd6fc7dbfe4d 13
+  s_7ac51fcf0ac190::t_706eadd3f7b571 64
+src/internal/acumaccounts2/acumaccounts2.go
+  s_7ac51fcf0ac190::t_27c169c8a9f0a8 17,68-73
+  s_7ac51fcf0ac190::t_209dd78a301dbd 84
+src/internal/acumaccounts2/apply.go
+  s_7ac51fcf0ac190::t_346148774771a1 24,35,55
+  s_7ac51fcf0ac190::t_1837d684c7010a 66
+src/internal/joinaccounts2/persist.go
+  s_7ac51fcf0ac190::t_6b0bf1fc84a8ad 23-24
+  s_7ac51fcf0ac190::t_a65f1dce738c0d 54
+src/internal/filter/filteraccountseen2/filteraccountseen2.go
+  s_7ac51fcf0ac190::t_e8b917a8b9d121 87,137,139
+  s_7ac51fcf0ac190::t_0b1f571651a53c 19,70-76
+src/internal/common/statemap/statemap.go
+  s_7ac51fcf0ac190::t_96db06e5d2eac9 1-33
+src/internal/acumaccounts2/persist.go
+  s_7ac51fcf0ac190::t_b8b1f224104892 20-21
+  s_7ac51fcf0ac190::t_47e2ed8a8ba917 49
+src/internal/common/messageprotocol/rabbit/batch/batch.go
+  h_3c9b41718876fe 76
+src/internal/acumaccounts2/types.go
+  s_7ac51fcf0ac190::t_5414e72e92dbad 60-61
+  s_7ac51fcf0ac190::t_e1c399e09a88ee 12
+src/internal/filter/filteraccountseen2/persist.go
+  s_7ac51fcf0ac190::t_28d6c4fd9287e4 23-24
+  s_7ac51fcf0ac190::t_d1ea9b1a1a21e5 52
+src/internal/joinaccounts2/joinaccounts2.go
+  s_7ac51fcf0ac190::t_8a320301335ae9 20,99-109,197,203
+  s_7ac51fcf0ac190::t_9d7e70eb708d1d 120,122,132,134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "71f012ef26d76b4f92ed6aa7062afd457d72f955",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_7ac51fcf0ac190": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c00094a0-0402-4704-84ad-96ffef64379a",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    },
+    "s_908cde5c779836": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0ed4e5ee-2877-477c-aaf9-2372b31f2457",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
