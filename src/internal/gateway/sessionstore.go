@@ -17,7 +17,7 @@ const pendingAbortsKey = "aborts"
 
 type sessionState struct {
 	phase        tcpproto.Phase
-	eofCounts    map[uint8]int
+	eofSenders   map[uint8]map[uint8]struct{}
 	confirmedSeq map[tcpproto.Phase]uint64
 }
 
@@ -53,7 +53,7 @@ func (s *sessionStore) allocateClient() (int, error) {
 	clientID := int(s.nextClientID)
 	s.sessions[clientID] = &sessionState{
 		phase:        tcpproto.PhaseAccounts,
-		eofCounts:    map[uint8]int{},
+		eofSenders:   map[uint8]map[uint8]struct{}{},
 		confirmedSeq: map[tcpproto.Phase]uint64{},
 	}
 	return clientID, s.persist()
@@ -94,19 +94,27 @@ func (s *sessionStore) advanceConfirmedSeq(clientID int, phase tcpproto.Phase, s
 	return s.persist()
 }
 
-func (s *sessionStore) incEOF(clientID int, queryID uint8) (map[uint8]int, error) {
+func (s *sessionStore) incEOF(clientID int, queryID uint8, senderID uint8) (map[uint8]int, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state, ok := s.sessions[clientID]
 	if !ok {
-		return nil, nil
+		return nil, false, nil
 	}
-	state.eofCounts[queryID]++
-	snapshot := make(map[uint8]int, len(state.eofCounts))
-	for q, c := range state.eofCounts {
-		snapshot[q] = c
+	senders, ok := state.eofSenders[queryID]
+	if !ok {
+		senders = map[uint8]struct{}{}
+		state.eofSenders[queryID] = senders
 	}
-	return snapshot, s.persist()
+	if _, already := senders[senderID]; already {
+		return nil, false, nil
+	}
+	senders[senderID] = struct{}{}
+	snapshot := make(map[uint8]int, len(state.eofSenders))
+	for q, set := range state.eofSenders {
+		snapshot[q] = len(set)
+	}
+	return snapshot, true, s.persist()
 }
 
 func (s *sessionStore) removeClient(clientID int) error {
@@ -169,10 +177,13 @@ func (s *sessionStore) persist() error {
 	for clientID, state := range s.sessions {
 		var w wire.Writer
 		w.Uint8(uint8(state.phase))
-		w.Uint32(uint32(len(state.eofCounts)))
-		for queryID, count := range state.eofCounts {
+		w.Uint32(uint32(len(state.eofSenders)))
+		for queryID, senders := range state.eofSenders {
 			w.Uint8(queryID)
-			w.Uint32(uint32(count))
+			w.Uint32(uint32(len(senders)))
+			for senderID := range senders {
+				w.Uint8(senderID)
+			}
 		}
 		w.Uint32(uint32(len(state.confirmedSeq)))
 		for phase, seq := range state.confirmedSeq {
@@ -230,11 +241,15 @@ func (s *sessionStore) load() error {
 		if r.Err() != nil {
 			return r.Err()
 		}
-		eofCounts := make(map[uint8]int, eofLen)
+		eofSenders := make(map[uint8]map[uint8]struct{}, eofLen)
 		for range eofLen {
 			queryID := r.Uint8()
-			count := int(r.Uint32())
-			eofCounts[queryID] = count
+			nSenders := r.Uint32()
+			set := make(map[uint8]struct{}, nSenders)
+			for range nSenders {
+				set[r.Uint8()] = struct{}{}
+			}
+			eofSenders[queryID] = set
 		}
 		if r.Err() != nil {
 			return r.Err()
@@ -256,7 +271,7 @@ func (s *sessionStore) load() error {
 			}
 		}
 
-		s.sessions[clientID] = &sessionState{phase: phase, eofCounts: eofCounts, confirmedSeq: confirmedSeq}
+		s.sessions[clientID] = &sessionState{phase: phase, eofSenders: eofSenders, confirmedSeq: confirmedSeq}
 	}
 	return nil
 }

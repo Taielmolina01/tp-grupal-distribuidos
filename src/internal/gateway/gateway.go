@@ -459,7 +459,7 @@ func (gateway *Gateway) deliverResult(client clientregistry.ClientState, body []
 	}
 
 	if info.EOF {
-		shouldWrite, shouldClose, err := gateway.markQueryEOF(info.ClientID, info.QueryID)
+		shouldWrite, shouldClose, err := gateway.markQueryEOF(info.ClientID, info.QueryID, info.SenderID)
 		if err != nil {
 			return err
 		}
@@ -520,10 +520,13 @@ func (gateway *Gateway) forwardResult(client clientregistry.ClientState, info ba
 	return tcpproto.WriteResultBatch(client.Conn, info.QueryID, info.SenderID, info.Seq, uint16(count), payload)
 }
 
-func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8) (shouldWrite bool, shouldClose bool, err error) {
-	counts, err := gateway.sessions.incEOF(clientID, queryID)
+func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8, senderID uint8) (shouldWrite bool, shouldClose bool, err error) {
+	counts, changed, err := gateway.sessions.incEOF(clientID, queryID, senderID)
 	if err != nil {
 		return false, false, err
+	}
+	if !changed {
+		return false, false, nil
 	}
 
 	expected := gateway.queryEOFsExpected[queryID]
