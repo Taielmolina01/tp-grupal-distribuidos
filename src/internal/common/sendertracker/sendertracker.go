@@ -1,4 +1,4 @@
-package seq
+package sendertracker
 
 import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
