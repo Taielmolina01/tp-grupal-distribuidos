@@ -1,0 +1,33 @@
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 102,136,140,154,170
+src/internal/filter/commonfilter/types.go
+  s_4ac499d9302c7e::t_7b2d6b80c9ee65 7-9,13-17,22-31
+src/internal/filter/commonfilter/filter.go
+  s_4ac499d9302c7e::t_a99987b7d5c1c6 13-15,52-53,55,59-60,62-67,71-72,74-75,81-85,87,90-91,93,95-97,99-100,102,104-108,112,114-115,117-120,123-129,131-132,135,137-140,142-144,147-151,155,158-159,161-163,166,169-173
+  h_3c9b41718876fe 61,86,89,130,141,152-154
+src/internal/joinaccounts/joinaccounts.go
+  h_3c9b41718876fe 139,142,200,211,219,338,354,362
+src/internal/common/sendertracker/sendertracker.go
+  h_3c9b41718876fe 47-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "0a23b657b76c68c8699cf35ccbe069f823b569be",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_4ac499d9302c7e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1b4a2fa-4219-41eb-8cf4-07a716b6c906",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
