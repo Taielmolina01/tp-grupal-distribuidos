@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"syscall"
 
+	"strconv"
 	"tp-grupal-distribuidos/internal/clientregistry"
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
@@ -20,35 +21,39 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
+
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/normalizer"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/shard"
 )
 
 type GatewayConfig struct {
-	AccountQueues        []string
-	TransfersExchange    string
-	TransfersRoutingKeys []string
-	ResultsQueue         string
-	ServerHost           string
-	ServerPort           string
-	MomHost              string
-	MomPort              int
-	MaxBatchSize         int
-	QueryEOFsExpected    map[uint8]int
+	AccountQueues     []string
+	TransfersExchange string
+	TransfersClusters []shard.ClusterConfig
+	ResultsQueue      string
+	ServerHost        string
+	ServerPort        string
+	MomHost           string
+	MomPort           int
+	MaxBatchSize      int
+	QueryEOFsExpected map[uint8]int
 }
 
 type Gateway struct {
 	registry          clientregistry.ClientRegistry
 	accountQueues     []middleware.Middleware
-	transfersExchange middleware.Middleware
+	transfersExchange newmiddleware.Middleware
+	multiHasher       shard.MultiClusterHasher
 	resultsQueue      middleware.Middleware
 	listener          net.Listener
 	running           atomic.Bool
 	nextClientID      atomic.Int32
 	countsMu          sync.Mutex
 	accountsCount     map[int]uint32
-	transfersCount    map[int]uint32
+	transfersTrackers map[int]*outputtracker.OutputTracker
 	seqByClient       map[int]uint64
 	queryEOFsByClient map[int]map[uint8]int
 	buildersMu        sync.Mutex
@@ -70,15 +75,8 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		accountQueues = append(accountQueues, accountQueue)
 	}
 
-	// Las keys acá vienen x config xq son dinámicas
-	// Se requiere sharding
-
-	transfersExchange, err := middleware.CreateExchangeMiddleware(
-		config.TransfersExchange,
-		"",
-		config.TransfersRoutingKeys,
-		connSettings,
-	)
+	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	transfersExchange, err := newmiddleware.NewShardedMiddleware(newConnSettings, config.TransfersExchange, "", "")
 	if err != nil {
 		for _, q := range accountQueues {
 			if err := q.Close(); err != nil {
@@ -120,10 +118,11 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 	gateway := &Gateway{
 		accountQueues:     accountQueues,
 		transfersExchange: transfersExchange,
+		multiHasher:       shard.NewMultiCluster(config.TransfersClusters),
 		resultsQueue:      resultsQueue,
 		listener:          listener,
 		accountsCount:     map[int]uint32{},
-		transfersCount:    map[int]uint32{},
+		transfersTrackers: map[int]*outputtracker.OutputTracker{},
 		seqByClient:       map[int]uint64{},
 		queryEOFsByClient: map[int]map[uint8]int{},
 		resultBuilders:    map[int]*tcpproto.ResultBatchBuilder{},
@@ -428,7 +427,7 @@ func (gateway *Gateway) closeClient(clientID int) {
 
 	gateway.countsMu.Lock()
 	delete(gateway.accountsCount, clientID)
-	delete(gateway.transfersCount, clientID)
+	delete(gateway.transfersTrackers, clientID)
 	delete(gateway.seqByClient, clientID)
 	delete(gateway.queryEOFsByClient, clientID)
 	gateway.countsMu.Unlock()
@@ -453,6 +452,15 @@ func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bo
 		}
 	})
 	return found, ok
+}
+
+func (gateway *Gateway) transfersTrackerFor(clientID int) *outputtracker.OutputTracker {
+	t, ok := gateway.transfersTrackers[clientID]
+	if !ok {
+		t = outputtracker.New()
+		gateway.transfersTrackers[clientID] = t
+	}
+	return t
 }
 
 func (gateway *Gateway) addCount(counts map[int]uint32, clientID int, n uint32) uint32 {
@@ -521,17 +529,25 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 		slog.Debug("While reading TRANS_BATCH", "err", err)
 		return err
 	}
+
 	gateway.countsMu.Lock()
 	seq := gateway.seqByClient[client.ID]
 	gateway.seqByClient[client.ID]++
+	tracker := gateway.transfersTrackerFor(client.ID)
 	gateway.countsMu.Unlock()
 
+	keys := gateway.multiHasher.RoutingKeysFor(client.ID, strconv.FormatUint(seq, 10))
 	body := batch.WriteRaw(client.ID, 0, 0, seq, count, payload)
-	if err := gateway.transfersExchange.Send(middleware.Message{Body: body}); err != nil {
+	if err := gateway.transfersExchange.Send(newmiddleware.Message{Body: body, RoutingKeys: keys}); err != nil {
 		slog.Debug("While sending transfers batch", "err", err)
 		return err
 	}
-	gateway.addCount(gateway.transfersCount, client.ID, uint32(count))
+
+	gateway.countsMu.Lock()
+	for _, k := range keys {
+		tracker.RegisterBatch(k)
+	}
+	gateway.countsMu.Unlock()
 
 	return nil
 }
@@ -549,12 +565,26 @@ func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState) e
 }
 
 func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState) error {
-	total := gateway.takeCount(gateway.transfersCount, client.ID)
-	slog.Info("Received EOF message", "kind", "transfers", "client_id", client.ID, "total", total)
+	slog.Info("Received EOF message", "kind", "transfers", "client_id", client.ID)
 
 	gateway.countsMu.Lock()
 	seq := gateway.seqByClient[client.ID]
+	tracker := gateway.transfersTrackerFor(client.ID)
 	gateway.countsMu.Unlock()
 
-	return gateway.sendEOF(client.ID, seq, total, gateway.transfersExchange)
+	var errs []error
+	for _, rk := range gateway.multiHasher.AllRoutingKeys() {
+		total := tracker.CountFor(rk)
+		eofBody := batch.WriteEOF(client.ID, 0, 0, seq, uint32(total))
+		if err := gateway.transfersExchange.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+			slog.Error("While sending transfers EOF", "routingKey", rk, "total", total, "err", err)
+			errs = append(errs, err)
+		}
+	}
+
+	gateway.countsMu.Lock()
+	delete(gateway.transfersTrackers, client.ID)
+	gateway.countsMu.Unlock()
+
+	return errors.Join(errs...)
 }

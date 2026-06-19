@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/splitter"
 	"tp-grupal-distribuidos/internal/gateway"
 )
@@ -27,10 +28,9 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		return gateway.GatewayConfig{}, errors.New("TRANSFERS_EXCHANGE environment variable is required")
 	}
 
-	transfersRoutingKeysStr := os.Getenv("TRANSFERS_ROUTING_KEYS")
-	transfersRoutingKeys := []string{}
-	if transfersRoutingKeysStr != "" {
-		transfersRoutingKeys = splitter.Split(transfersRoutingKeysStr, QUEUES_SEPARATOR)
+	transfersClusters, err := loadTransfersClusters()
+	if err != nil {
+		return gateway.GatewayConfig{}, err
 	}
 
 	resultsQueue := os.Getenv("RESULTS_QUEUE")
@@ -93,10 +93,10 @@ func loadConfig() (gateway.GatewayConfig, error) {
 	}
 
 	return gateway.GatewayConfig{
-		AccountQueues:        accountQueueList,
-		TransfersExchange:    transfersExchange,
-		TransfersRoutingKeys: transfersRoutingKeys,
-		ResultsQueue:         resultsQueue,
+		AccountQueues:     accountQueueList,
+		TransfersExchange: transfersExchange,
+		TransfersClusters: transfersClusters,
+		ResultsQueue:      resultsQueue,
 		ServerHost:           serverHost,
 		ServerPort:           serverPort,
 		MomHost:              momHost,
@@ -104,6 +104,30 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		MaxBatchSize:         maxBatchSize,
 		QueryEOFsExpected:    queryEOFsExpected,
 	}, nil
+}
+
+func loadTransfersClusters() ([]shard.ClusterConfig, error) {
+	clustersStr := os.Getenv("TRANSFERS_CLUSTERS")
+	if clustersStr == "" {
+		return nil, errors.New("TRANSFERS_CLUSTERS environment variable is required")
+	}
+	parts := splitter.Split(clustersStr, QUEUES_SEPARATOR)
+	clusters := make([]shard.ClusterConfig, 0, len(parts))
+	for _, part := range parts {
+		kv := strings.SplitN(part, ":", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid TRANSFERS_CLUSTERS entry %q (expected prefix:N)", part)
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(kv[1]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid node count in TRANSFERS_CLUSTERS entry %q: %w", part, err)
+		}
+		clusters = append(clusters, shard.ClusterConfig{
+			Prefix:    strings.TrimSpace(kv[0]),
+			NodeCount: n,
+		})
+	}
+	return clusters, nil
 }
 
 func run() int {

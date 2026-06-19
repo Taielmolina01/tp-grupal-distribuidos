@@ -31,9 +31,10 @@ type FilterAndSplitterConfig struct {
 }
 
 type FilterAndSplitter struct {
-	id        int
-	startDate time.Time
-	endDate   time.Time
+	id           int
+	startDate    time.Time
+	endDate      time.Time
+	outputAmount int
 
 	hasher shard.Hasher
 

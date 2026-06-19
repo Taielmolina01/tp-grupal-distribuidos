@@ -68,6 +68,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		id:               config.Id,
 		startDate:        config.StartDate,
 		endDate:          config.EndDate,
+		outputAmount:     config.OutputMiddlewareAmount,
 		hasher:           shard.New(config.OutputMiddlewareAmount),
 		queryID:          config.QueryID,
 		inputMiddleware:  inputMiddleware,
@@ -156,6 +157,8 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 			f.stopConsuming()
 			return
 		}
+
+		slog.Info("Liberando cliente")
 		f.states.Delete(clientID)
 	}
 
@@ -213,15 +216,17 @@ func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterC
 func (f *FilterAndSplitter) finishTransfersStep(clientID int, state *clientState) error {
 	eofSeq := state.transferTracker.GetEOFSeq()
 	var sendErr error
-	state.outputTracker.ForEach(func(routingKey string, total uint64) {
+	for i := range f.outputAmount {
 		if sendErr != nil {
-			return
+			break
 		}
+		rk := fmt.Sprintf("shard-%d", i)
+		total := state.outputTracker.CountFor(rk)
 		eofBody := splittransfer.WriteEOF(clientID, f.queryID, uint8(f.id), eofSeq, uint32(total))
-		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: routingKey}); err != nil {
-			slog.Error("While sending EOF", "routingKey", routingKey, "err", err)
+		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+			slog.Error("While sending EOF", "routingKey", rk, "err", err)
 			sendErr = err
 		}
-	})
+	}
 	return sendErr
 }

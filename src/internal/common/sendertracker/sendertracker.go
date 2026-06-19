@@ -1,6 +1,7 @@
 package sendertracker
 
 import (
+	"log/slog"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/seqstore"
 )
@@ -70,14 +71,18 @@ func (t *SenderTracker) GetMsgCount() uint32 {
 }
 
 func (t *SenderTracker) IsComplete(expectedSenders int) bool {
+	slog.Info("Is Complete?", "len(t.eofSet)", len(t.eofSet), "expectedSenders", expectedSenders)
 	if len(t.eofSet) < expectedSenders {
+		slog.Info("Is Complete? FALSE")
 		return false
 	}
 	for senderID, exp := range t.expected {
 		if t.msgCount[senderID] < exp {
+			slog.Info("Is Complete? FALSE 2")
 			return false
 		}
 	}
+	slog.Info("Is Complete? TRUE")
 	return true
 }
 

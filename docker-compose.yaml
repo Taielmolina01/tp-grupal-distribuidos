@@ -30,7 +30,7 @@ services:
     environment:
       - ACCOUNT_QUEUES=Q2_accounts_0,Q2_accounts_1
       - TRANSFERS_EXCHANGE=transfers_exchange
-      - TRANSFERS_ROUTING_KEYS=Q5_TRANSFERS_KEY,Q1234_TRANSFERS_KEY
+      - TRANSFERS_CLUSTERS=Q1234_filter_currency:2,Q5_filter:2
       - RESULTS_QUEUE=results_queue
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
@@ -72,13 +72,13 @@ services:
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
       - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_QUEUE=Q1234_transfers_queue
-      - INPUT_ROUTING_KEYS=Q1234_TRANSFERS_KEY
+      - INPUT_QUEUE=Q1234_transfers_queue_0
+      - INPUT_ROUTING_KEYS=Q1234_filter_currency_shard-0
       - OUTPUT_EXCHANGE=Q1234_filtered_exchange
       - OUTPUT_CLUSTERS=Q1_filtered:2,Q2_filtered:2,Q3_filtered:2,Q4_filtered:2
       - CURRENCIES=US Dollar
       - FILTER_TYPE=CURRENCY
-      - FILTER_AMOUNT=2
+      - FILTER_AMOUNT=1
       - QUERY_ID=1
     logging:
       driver: json-file
@@ -99,13 +99,13 @@ services:
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
       - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_QUEUE=Q1234_transfers_queue
-      - INPUT_ROUTING_KEYS=Q1234_TRANSFERS_KEY
+      - INPUT_QUEUE=Q1234_transfers_queue_1
+      - INPUT_ROUTING_KEYS=Q1234_filter_currency_shard-1
       - OUTPUT_EXCHANGE=Q1234_filtered_exchange
       - OUTPUT_CLUSTERS=Q1_filtered:2,Q2_filtered:2,Q3_filtered:2,Q4_filtered:2
       - CURRENCIES=US Dollar
       - FILTER_TYPE=CURRENCY
-      - FILTER_AMOUNT=2
+      - FILTER_AMOUNT=1
       - QUERY_ID=1
     logging:
       driver: json-file
@@ -705,11 +705,11 @@ services:
       - MOM_PORT=5672
       - ID=0
       - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
-      - INPUT_QUEUE=Q5_transfers_queue
+      - INPUT_ROUTING_KEYS=Q5_filter_shard-0
+      - INPUT_QUEUE=Q5_transfers_queue_0
       - OUTPUT_EXCHANGE=Q5_filtered_exchange
       - OUTPUT_CLUSTERS=Q5_filtered:1
-      - FILTER_AMOUNT=2
+      - FILTER_AMOUNT=1
       - FILTER_TYPE=DATE_RANGE_AND_PAYMENT
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - PAYMENT_FORMATS=ACH,Wire
@@ -728,11 +728,11 @@ services:
       - MOM_PORT=5672
       - ID=1
       - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
-      - INPUT_QUEUE=Q5_transfers_queue
+      - INPUT_ROUTING_KEYS=Q5_filter_shard-1
+      - INPUT_QUEUE=Q5_transfers_queue_1
       - OUTPUT_EXCHANGE=Q5_filtered_exchange
       - OUTPUT_CLUSTERS=Q5_filtered:1
-      - FILTER_AMOUNT=2
+      - FILTER_AMOUNT=1
       - FILTER_TYPE=DATE_RANGE_AND_PAYMENT
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - PAYMENT_FORMATS=ACH,Wire

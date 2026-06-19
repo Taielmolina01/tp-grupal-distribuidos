@@ -12,19 +12,31 @@ type MultiClusterHasher struct {
 }
 
 type clusterEntry struct {
-	prefix string
-	hasher Hasher
+	prefix    string
+	nodeCount int
+	hasher    Hasher
 }
 
 func NewMultiCluster(clusters []ClusterConfig) MultiClusterHasher {
 	entries := make([]clusterEntry, len(clusters))
 	for i, c := range clusters {
 		entries[i] = clusterEntry{
-			prefix: c.Prefix,
-			hasher: New(c.NodeCount),
+			prefix:    c.Prefix,
+			nodeCount: c.NodeCount,
+			hasher:    New(c.NodeCount),
 		}
 	}
 	return MultiClusterHasher{clusters: entries}
+}
+
+func (m MultiClusterHasher) AllRoutingKeys() []string {
+	var keys []string
+	for _, c := range m.clusters {
+		for i := range c.nodeCount {
+			keys = append(keys, fmt.Sprintf("%s_shard-%d", c.prefix, i))
+		}
+	}
+	return keys
 }
 
 func (m MultiClusterHasher) RoutingKeysFor(clientID int, keys ...string) []string {

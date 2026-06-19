@@ -19,6 +19,10 @@ func (t *OutputTracker) RegisterBatch(routingKey string) uint64 {
 	return t.sent[routingKey]
 }
 
+func (t *OutputTracker) CountFor(routingKey string) uint64 {
+	return t.sent[routingKey]
+}
+
 func (t *OutputTracker) ForEach(fn func(routingKey string, total uint64)) {
 	for rk, total := range t.sent {
 		fn(rk, total)

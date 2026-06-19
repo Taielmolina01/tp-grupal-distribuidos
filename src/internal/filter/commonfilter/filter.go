@@ -192,15 +192,16 @@ func (f *Filter[T, O]) processBatch(input batch.Msg[T], state *clientState) erro
 func (f *Filter[T, O]) finishStep(clientID int, state *clientState) error {
 	eofSeq := state.tracker.GetEOFSeq()
 	var sendErr error
-	state.outputTracker.ForEach(func(rk string, total uint64) {
+	for _, rk := range f.multiHasher.AllRoutingKeys() {
 		if sendErr != nil {
-			return
+			break
 		}
+		total := state.outputTracker.CountFor(rk)
 		eofBody := batch.WriteEOF(clientID, f.queryId, uint8(f.id), eofSeq, uint32(total))
 		if err := f.outputExchange.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			slog.Error("finish step: send EOF failed", "routingKey", rk, "err", err)
 			sendErr = err
 		}
-	})
+	}
 	return sendErr
 }
