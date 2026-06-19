@@ -1,0 +1,69 @@
+src/internal/filter/commonfilter/filter.go
+  s_4ac499d9302c7e::t_c8f63cadf83d87 195,197,199,205
+src/internal/filter/filterandsplitter/types.go
+  s_4ac499d9302c7e::t_71337ff44cf632 34-37
+src/cmd/gateway/main.go
+  s_4ac499d9302c7e::t_f4baa3fe70c1dd 31-33
+  s_4ac499d9302c7e::t_52a43f0d20d15d 109-132
+  s_4ac499d9302c7e::t_e888f2df27c0e5 11
+  s_4ac499d9302c7e::t_17a2e764192ab0 96-99
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_4ac499d9302c7e::t_069d6569e7c765 71
+  h_3c9b41718876fe 160-161
+  s_4ac499d9302c7e::t_ee1ab8e51059d3 219,221,223-224,226-227,230
+src/internal/gateway/gateway.go
+  s_4ac499d9302c7e::t_a285e6ed9249b3 78-79
+  s_4ac499d9302c7e::t_cfd2229effd8c8 121
+  s_4ac499d9302c7e::t_8e19b5a057acd0 532,536,539,545-550
+  s_4ac499d9302c7e::t_bb4035d506a1cb 430
+  s_4ac499d9302c7e::t_3aad28440bb8d6 568,572,578-579,584-586
+  s_4ac499d9302c7e::t_1e42cab80636f3 25
+  s_4ac499d9302c7e::t_deee52933812a0 33-42
+  s_4ac499d9302c7e::t_59d9157ac90838 575,581-582,589
+  s_4ac499d9302c7e::t_5753e9b32ebb2e 125
+  h_3c9b41718876fe 16
+  s_4ac499d9302c7e::t_8f5a6501fc8742 56
+  s_4ac499d9302c7e::t_fb7608bf43d78a 576-577,580,583
+  s_4ac499d9302c7e::t_28b01a72d5154e 48-49
+  s_4ac499d9302c7e::t_c6097ce09b1abd 24,27
+  s_4ac499d9302c7e::t_5204658c95a489 457-465
+  s_4ac499d9302c7e::t_4e776d379c99f7 541
+src/internal/common/sendertracker/sendertracker.go
+  h_3c9b41718876fe 4,74,76,81,85
+docker-compose.yaml
+  h_3c9b41718876fe 33,75-76,81,102-103,108,708-709,712,731-732,735
+src/internal/common/shard/multicluster.go
+  s_4ac499d9302c7e::t_3b6a96b449aba1 15-17,24-26,32-39
+src/internal/common/outputtracker/outputtracker.go
+  s_4ac499d9302c7e::t_0c20934a8b5aa8 22-25
+scripts/compose-gen/generator.go
+  s_4ac499d9302c7e::t_5d47b2f6b38da3 256
+  s_4ac499d9302c7e::t_1430d65d336ccf 588
+  s_4ac499d9302c7e::t_33d9522f430d00 257
+  s_4ac499d9302c7e::t_de41c9ab24a159 592
+  s_4ac499d9302c7e::t_78990c7aa9e4e3 262
+  s_4ac499d9302c7e::t_7340bf2342eb55 164-165,167
+  s_4ac499d9302c7e::t_813e7312dbf2b5 589
+  s_4ac499d9302c7e::t_68cd47c070b784 399
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "29eff989f8184366027adf0fa871606d6dbc6231",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_4ac499d9302c7e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1b4a2fa-4219-41eb-8cf4-07a716b6c906",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
