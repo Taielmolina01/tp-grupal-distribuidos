@@ -145,6 +145,10 @@ func (b *BullyImpl) handleClient(node NodeInfo) {
 }
 
 func (b *BullyImpl) reconnectPeer(nodeId byte) {
+	if nodeId < byte(b.id) {
+		return
+	}
+
 	slog.Info("Reconnecting peer", "peerId", nodeId)
 
 	peerPort := int(nodeId) + b.basePort
