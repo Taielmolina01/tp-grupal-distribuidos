@@ -14,6 +14,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/splittransfer"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -96,13 +97,15 @@ func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
 
 		states: statemap.New(func() *clientState {
 			return &clientState{
-				left:             map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
-				right:            map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
-				qualifyingLeft:   map[account.AccountIdentifier]struct{}{},
-				qualifyingRight:  map[account.AccountIdentifier]struct{}{},
-				qualifiedBatch:   qualifiedaccount.NewBatchBuilder(config.MaxBatchSize, config.MaxBatchBytes),
-				transferTracker:  sendertracker.New(10_000_000),
-				qualifiedTracker: sendertracker.New(10_000_000),
+				left:                   map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
+				right:                  map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
+				qualifyingLeft:         map[account.AccountIdentifier]struct{}{},
+				qualifyingRight:        map[account.AccountIdentifier]struct{}{},
+				qualifiedBatch:         qualifiedaccount.NewBatchBuilder(config.MaxBatchSize, config.MaxBatchBytes),
+				transferTracker:        sendertracker.New(10_000_000),
+				qualifiedTracker:       sendertracker.New(10_000_000),
+				qualifiedOutputTracker: outputtracker.New(),
+				chainOutputTracker:     outputtracker.New(),
 			}
 		}),
 	}, nil
@@ -230,7 +233,14 @@ func (j *JoinAccounts) processTransferBatch(input splittransfer.Msg, state *clie
 
 	}
 
-	return j.flushQualifiedBatch(input.ClientID, input.Seq, state.qualifiedBatch)
+	if state.qualifiedBatch.IsEmpty() {
+		return nil
+	}
+	if err := j.flushQualifiedBatch(input.ClientID, input.Seq, state.qualifiedBatch); err != nil {
+		return err
+	}
+	state.qualifiedOutputTracker.RegisterBatch("")
+	return nil
 }
 
 func (j *JoinAccounts) accumulateLeft(record transfer.SplittedTransfer, state *clientState) {
@@ -291,8 +301,7 @@ func (j *JoinAccounts) flushQualifiedBatch(clientID int, seqNumber uint64, b *ba
 }
 
 func (j *JoinAccounts) finishTransfersStep(clientID int, state *clientState) error {
-	// Reutilizamos el seqnum de cualquiera de los EOFs
-	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), state.transferTracker.GetEOFSeq(), state.transferTracker.GetMsgCount())
+	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), state.transferTracker.GetEOFSeq(), uint32(state.qualifiedOutputTracker.Total()))
 	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
 		slog.Error("While sending qualified EOF", "err", err)
 		return err
@@ -359,7 +368,6 @@ func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(
 
 func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) error {
 	batches := make(map[string]*batch.Builder[account.AccountChain])
-	seq := uint64(0)
 
 	for protagonistKey, rightMap := range state.right {
 		leftMap, ok := state.left[protagonistKey]
@@ -386,7 +394,7 @@ func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) err
 				rk := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, chain.Left.GetKey(), chain.Right.GetKey()))
 				b := j.builderFor(batches, rk)
 				if !b.TryAdd(&chain) {
-					seq++
+					seq := state.chainOutputTracker.RegisterBatch(rk)
 					if err := j.flushChainBatch(clientID, rk, seq, b); err != nil {
 						return err
 					}
@@ -398,22 +406,28 @@ func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) err
 
 	for rk, b := range batches {
 		if !b.IsEmpty() {
-			seq++
+			seq := state.chainOutputTracker.RegisterBatch(rk)
+
 			if err := j.flushChainBatch(clientID, rk, seq, b); err != nil {
 				return err
 			}
 		}
 	}
 
-	seq++
-	// Acá al final el seq number coincide con el total de batches envíados dado que los genearmos a la vez
-	eofBody := accountchain.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), seq, uint32(seq))
-	if err := j.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
-		slog.Error("While sending EOF message", "err", err)
-	}
+	var sendErr error
+	state.chainOutputTracker.ForEach(func(rk string, total uint64) {
+		if sendErr != nil {
+			return
+		}
+		seq := state.chainOutputTracker.RegisterBatch(rk)
+		eofBody := accountchain.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), seq, uint32(total))
+		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+			slog.Error("While sending EOF message", "routingKey", rk, "err", err)
+			sendErr = err
+		}
+	})
 	j.states.Delete(clientID)
-
-	return nil
+	return sendErr
 }
 
 func (j *JoinAccounts) builderFor(batches map[string]*batch.Builder[account.AccountChain], rk string) *batch.Builder[account.AccountChain] {

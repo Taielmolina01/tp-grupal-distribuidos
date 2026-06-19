@@ -7,11 +7,11 @@ import (
 	"os/signal"
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/splittransfer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -75,6 +75,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		states: statemap.New(func() *clientState {
 			return &clientState{
 				transferTracker: sendertracker.New(10_000_000),
+				outputTracker:   outputtracker.New(),
 			}
 		}),
 	}
@@ -147,14 +148,13 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 
 	var prevNodeAmt = 2
 	if tracker.IsComplete(prevNodeAmt) {
-		// El finish es simplemente mandar el EOF en estos casos
-
-		// 	if err := j.finishTransfersStep(clientID, state); err != nil {
-		// 		slog.Error("finishing transfers step failed", "err", err)
-		// 		nack()
-		// 		j.StopConsuming()
-		// 		return
-		// 	}
+		if err := f.finishTransfersStep(clientID, state); err != nil {
+			slog.Error("finishing transfers step failed", "err", err)
+			nack()
+			f.StopConsuming()
+			return
+		}
+		f.states.Delete(clientID)
 	}
 
 	// // if err := h.persist(); err != nil {
@@ -203,17 +203,23 @@ func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterC
 		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
 			return err
 		}
+		state.outputTracker.RegisterBatch(routingKey)
 	}
 	return nil
 }
 
 func (f *FilterAndSplitter) finishTransfersStep(clientID int, state *clientState) error {
-	// Reutilizamos el seqnum de cualquiera de los EOFs
-	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), state.transferTracker.GetEOFSeq(), state.transferTracker.GetMsgCount())
-	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
-		slog.Error("While sending qualified EOF", "err", err)
-		return err
-	}
-
-	return nil
+	eofSeq := state.transferTracker.GetEOFSeq()
+	var sendErr error
+	state.outputTracker.ForEach(func(routingKey string, total uint64) {
+		if sendErr != nil {
+			return
+		}
+		eofBody := splittransfer.WriteEOF(clientID, f.queryID, uint8(f.id), eofSeq, uint32(total))
+		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: routingKey}); err != nil {
+			slog.Error("While sending EOF", "routingKey", routingKey, "err", err)
+			sendErr = err
+		}
+	})
+	return sendErr
 }

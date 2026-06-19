@@ -4,6 +4,7 @@ import (
 	"time"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -46,4 +47,5 @@ type FilterAndSplitter struct {
 
 type clientState struct {
 	transferTracker *sendertracker.SenderTracker
+	outputTracker   *outputtracker.OutputTracker
 }

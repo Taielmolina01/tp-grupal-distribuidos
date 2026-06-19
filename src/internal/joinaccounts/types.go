@@ -6,6 +6,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -43,6 +44,9 @@ type clientState struct {
 
 	transferTracker  *sendertracker.SenderTracker
 	qualifiedTracker *sendertracker.SenderTracker
+
+	qualifiedOutputTracker *outputtracker.OutputTracker
+	chainOutputTracker     *outputtracker.OutputTracker
 }
 
 type JoinAccounts struct {
