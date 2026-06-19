@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"sync"
+	"tp-grupal-distribuidos/internal/common/socket"
 )
 
 type bullyStatus int
@@ -17,6 +18,7 @@ const (
 	electionMsg bullyMessage = iota
 	answerMsg
 	coordinatorMsg
+	nodeIsAliveMsg
 )
 
 type Bully interface {
@@ -25,6 +27,7 @@ type Bully interface {
 	StartElection()
 	GetLeaderId() (int, error)
 	SetLeaderChangeCallback(cb LeaderChangeCallback)
+	SendNodeIsAliveMessage(int)
 }
 
 type lastElection struct {
@@ -40,9 +43,15 @@ type BullyImpl struct {
 	id             int
 	status         bullyStatus
 	leaderId       int
-	socket         *UDPSocket
-	address        net.UDPAddr
-	peers          []net.UDPAddr
+	socket         net.Listener
+	address        net.TCPAddr
 	lastElection   lastElection
 	onLeaderChange LeaderChangeCallback
+	peersMonitor   PeersMonitor
+	basePort       int
+}
+
+type NodeInfo struct {
+	conn socket.TCPSocket
+	id   int
 }

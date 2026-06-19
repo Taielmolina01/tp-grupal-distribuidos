@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"os/exec"
+	"strconv"
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/bully"
@@ -100,6 +101,14 @@ func (h *HealthChecker) handleDeadNode(node string, lastRestart *time.Time) {
 	}
 	*lastRestart = time.Now()
 	slog.Info("Node restarted", "node", node)
+	if len(node) >= 8 && node[:8] == _WATCHDOG_PREFIX && len(node) >= 10 {
+		id, err := strconv.Atoi(node[9:])
+		if err != nil {
+			slog.Error("Failed to parse node ID", "node", node, "err", err)
+			return
+		}
+		h.bully.SendNodeIsAliveMessage(id)
+	}
 }
 
 func (h *HealthChecker) UpdateBullyInfo(info BullyInfo) {
