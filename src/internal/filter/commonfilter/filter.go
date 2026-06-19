@@ -6,12 +6,16 @@ import (
 	"os/signal"
 	"syscall"
 
+	"strings"
+
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -20,10 +24,12 @@ func NewFilter[T any, O any](
 	config filter.FilterConfig,
 	filterFunction func(T) bool,
 	inputToOutput func(T) O,
+	shardKeys func(O) []string,
 	inputCodec wire.Codec[T],
 	outputCodec wire.Codec[O],
 ) (worker.Worker, error) {
 	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	inputExchange, err := middleware.CreateExchangeMiddleware(
 		config.InputExchange,
@@ -35,12 +41,7 @@ func NewFilter[T any, O any](
 		return nil, err
 	}
 
-	outputExchange, err := middleware.CreateExchangeMiddleware(
-		config.OutputExchange,
-		config.OutputQueue,
-		config.OutputRoutingKeys,
-		connSettings,
-	)
+	outputExchange, err := newmiddleware.NewShardedMiddleware(newConnSettings, config.OutputExchange, "", "")
 	if err != nil {
 		if err := inputExchange.Close(); err != nil {
 			slog.Error("While closing input exchange after output exchange creation failure", "err", err)
@@ -54,10 +55,12 @@ func NewFilter[T any, O any](
 		filterType:      config.Type,
 		filterFunction:  filterFunction,
 		outputTransform: inputToOutput,
+		shardKeys:       shardKeys,
 		inputCodec:      inputCodec,
 		outputCodec:     outputCodec,
 		inputExchange:   inputExchange,
 		outputExchange:  outputExchange,
+		multiHasher:     shard.NewMultiCluster(config.OutputClusters),
 		inputAmount:     config.FilterAmount, // Igual que en el otro, reempalzar por el N de nodos de la etapa anterior
 		states: statemap.New(func() *clientState {
 			return &clientState{
@@ -159,16 +162,43 @@ func (f *Filter[T, O]) processBatch(input batch.Msg[T], state *clientState) erro
 		return nil
 	}
 
-	body := batch.Write(input.ClientID, f.queryId, uint8(f.id), input.Seq, outputs, f.outputCodec)
-	if err := f.outputExchange.Send(middleware.Message{Body: body}); err != nil {
-		return err
+	byKeys := make(map[string]struct {
+		keys    []string
+		outputs []O
+	})
+	for _, o := range outputs {
+		keys := f.multiHasher.RoutingKeysFor(input.ClientID, f.shardKeys(o)...)
+		mapKey := strings.Join(keys, "|")
+		entry := byKeys[mapKey]
+		entry.keys = keys
+		entry.outputs = append(entry.outputs, o)
+		byKeys[mapKey] = entry
 	}
-	state.outputTracker.RegisterBatch("")
+
+	for _, entry := range byKeys {
+		body := batch.Write(input.ClientID, f.queryId, uint8(f.id), input.Seq, entry.outputs, f.outputCodec)
+		if err := f.outputExchange.Send(newmiddleware.Message{Body: body, RoutingKeys: entry.keys}); err != nil {
+			return err
+		}
+		for _, k := range entry.keys {
+			state.outputTracker.RegisterBatch(k)
+		}
+	}
 	return nil
 }
 
 func (f *Filter[T, O]) finishStep(clientID int, state *clientState) error {
 	eofSeq := state.tracker.GetEOFSeq()
-	eofBody := batch.WriteEOF(clientID, f.queryId, uint8(f.id), eofSeq, uint32(state.outputTracker.Total()))
-	return f.outputExchange.Send(middleware.Message{Body: eofBody})
+	var sendErr error
+	state.outputTracker.ForEach(func(rk string, total uint64) {
+		if sendErr != nil {
+			return
+		}
+		eofBody := batch.WriteEOF(clientID, f.queryId, uint8(f.id), eofSeq, uint32(total))
+		if err := f.outputExchange.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+			slog.Error("finish step: send EOF failed", "routingKey", rk, "err", err)
+			sendErr = err
+		}
+	})
+	return sendErr
 }

@@ -1,6 +1,10 @@
 package filter
 
-import "time"
+import (
+	"time"
+
+	"tp-grupal-distribuidos/internal/common/shard"
+)
 
 type FilterType string
 
@@ -42,6 +46,7 @@ type FilterConfig struct {
 	QueryId               uint8
 	PaymentFormats        []string
 	Quote                 string
+	OutputClusters        []shard.ClusterConfig
 }
 
 type FilterAndSplitter struct {
