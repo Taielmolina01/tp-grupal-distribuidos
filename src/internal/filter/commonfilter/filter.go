@@ -1,23 +1,20 @@
 package commonfilter
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
-	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
-
-const _EOF_RING_QUEUE_PREFIX = "FILTER_%s_"
 
 func NewFilter[T any, O any](
 	config filter.FilterConfig,
@@ -51,170 +48,127 @@ func NewFilter[T any, O any](
 		return nil, err
 	}
 
-	eofInputQueueName, eofOutputQueueName := eofring.GetInputAndOutputQueueNames(
-		config.Id,
-		config.FilterAmount,
-		fmt.Sprintf(_EOF_RING_QUEUE_PREFIX, config.Type),
-		fmt.Sprintf(_EOF_RING_QUEUE_PREFIX, config.Type),
-	)
-
-	eofInput, err := middleware.CreateQueueMiddleware(
-		eofInputQueueName,
-		connSettings,
-	)
-
-	if err != nil {
-		if err := inputExchange.Close(); err != nil {
-			slog.Error("While closing input exchange after EOF input queue creation failure", "err", err)
-		}
-		if err := outputExchange.Close(); err != nil {
-			slog.Error("While closing output exchange after EOF input queue creation failure", "err", err)
-		}
-		return nil, err
-	}
-
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		eofOutputQueueName,
-		connSettings,
-	)
-
-	if err != nil {
-		if err := inputExchange.Close(); err != nil {
-			slog.Error("While closing input exchange after EOF input queue creation failure", "err", err)
-		}
-		if err := outputExchange.Close(); err != nil {
-			slog.Error("While closing output exchange after EOF input queue creation failure", "err", err)
-		}
-		if err := eofInput.Close(); err != nil {
-			slog.Error("While closing EOF input queue after EOF output queue creation failure", "err", err)
-		}
-		return nil, err
-	}
-
-	handlerMessages := msgmonitor.NewMessageMonitor()
-
 	return &Filter[T, O]{
-		id:             uint32(config.Id),
-		inputExchange:  inputExchange,
-		outputExchange: outputExchange,
-		filterFunction: filterFunction,
-		eofHandler: eofring.CreateEofRingAlgorithm(
-			eofInput,
-			eofOutput,
-			config.FilterAmount,
-			uint32(config.Id),
-			handlerMessages,
-			func(clientID int, seq uint64, total uint32, isCoordinator bool) error {
-				if isCoordinator {
-					return outputExchange.Send(middleware.Message{Body: batch.WriteEOF(clientID, config.QueryId, 0, seq, total)})
-				}
-				return nil
-			},
-			config.QueryId,
-		),
-		handlerMessages: handlerMessages,
-		outputQueueEof:  eofOutput,
-		filterType:      config.Type,
-		outputTransform: inputToOutput,
+		id:              uint32(config.Id),
 		queryId:         config.QueryId,
+		filterType:      config.Type,
+		filterFunction:  filterFunction,
+		outputTransform: inputToOutput,
 		inputCodec:      inputCodec,
 		outputCodec:     outputCodec,
+		inputExchange:   inputExchange,
+		outputExchange:  outputExchange,
+		inputAmount:     config.FilterAmount, // Igual que en el otro, reempalzar por el N de nodos de la etapa anterior
+		states: statemap.New(func() *clientState {
+			return &clientState{
+				tracker:       sendertracker.New(10_000_000),
+				outputTracker: outputtracker.New(),
+			}
+		}),
 	}, nil
 }
 
-func (filter *Filter[T, O]) Run() {
-	defer func() {
-		if err := filter.close(); err != nil {
-			slog.Error("While closing filter", "err", err)
-		}
-	}()
+func (f *Filter[T, O]) Run() {
+	defer f.close()
 
-	go filter.eofHandler.Run()
-	if err := filter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		filter.handleMessage(msg, ack, nack)
+	if err := f.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+		f.handleInput(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
 	}
 }
 
-func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, _ func()) {
-	ack()
-
-	input, err := batch.Read(msg.Body, filter.inputCodec)
-	if err != nil {
-		slog.Error("While deserializing input batch", "err", err)
-		return
-	}
-
-	if input.EOF {
-		filter.handleEOF(input.ClientID, input.Total, input.Seq)
-		return
-	}
-
-	outputs := make([]O, 0, len(input.Records))
-	filter.handlerMessages.AddProcessedMessagesAmountByClientId(input.ClientID, uint32(len(input.Records)))
-	for i := range input.Records {
-		if filter.filterFunction(input.Records[i]) {
-			filter.handlerMessages.AddForwardedMessagesAmountByClientId(input.ClientID, 1)
-			outputs = append(outputs, filter.outputTransform(input.Records[i]))
-		}
-	}
-
-	if len(outputs) == 0 {
-		return
-	}
-
-	body := batch.Write(input.ClientID, filter.queryId, uint8(filter.id), input.Seq, outputs, filter.outputCodec)
-	if err := filter.outputExchange.Send(middleware.Message{Body: body}); err != nil {
-		slog.Error("While sending batch to output exchange", "err", err)
-	}
-}
-
-func (filter *Filter[T, O]) handleEOF(clientID int, total uint32, seq uint64) {
-	eofRingMessage := eofmessagetypes.EofRingMessage{
-		RealAmount:     total,
-		ActualAmount:   filter.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
-		ClientId:       clientID,
-		CoordinatorId:  uint32(filter.id),
-		FilteredAmount: filter.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
-		Seq:            seq,
-	}
-
-	if err := filter.outputQueueEof.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)}); err != nil {
-		slog.Error("While sending EOF message to EOF ring", "err", err)
-	}
-}
-
-func (filter *Filter[T, O]) HandleSignals() {
+func (f *Filter[T, O]) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	if err := filter.inputExchange.StopConsuming(); err != nil {
-		slog.Error("while stop consuming from input exchange", "err", err)
+	f.stopConsuming()
+}
+
+func (f *Filter[T, O]) stopConsuming() {
+	if err := f.inputExchange.StopConsuming(); err != nil {
+		slog.Error("While stopping input consumer", "err", err)
 	}
 }
 
-func (filter *Filter[T, O]) close() error {
+func (f *Filter[T, O]) close() {
+	if err := f.inputExchange.Close(); err != nil {
+		slog.Error("While closing input exchange", "err", err)
+	}
+	if err := f.outputExchange.Close(); err != nil {
+		slog.Error("While closing output exchange", "err", err)
+	}
+}
 
-	if err := filter.inputExchange.Close(); err != nil {
-		slog.Error("while closing input exchange", "err", err)
-		return err
+func (f *Filter[T, O]) handleInput(msg middleware.Message, ack func(), nack func()) {
+	input, err := batch.Read(msg.Body, f.inputCodec)
+	if err != nil {
+		slog.Error("decode failed", "err", err)
+		ack()
+		return
 	}
 
-	if err := filter.eofHandler.Close(); err != nil {
-		slog.Error("while closing EOF handler", "err", err)
-		return err
+	clientID := input.ClientID
+
+	state := f.states.For(clientID)
+	tracker := state.tracker
+
+	if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+		slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
+		ack()
+		return
 	}
 
-	// no estoy seguro si aca deberia closear siendo que no es ni mi exchange ni mi queue
-	if err := filter.outputExchange.Close(); err != nil {
-		slog.Error("while closing output exchange", "err", err)
+	if input.EOF {
+		tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+	} else {
+		tracker.RegisterBatch(int(input.SenderID))
+		if err := f.processBatch(input, state); err != nil {
+			slog.Error("process batch failed", "err", err)
+			nack()
+			f.stopConsuming()
+			return
+		}
+	}
+
+	tracker.Claim(int(input.SenderID), input.Seq)
+
+	if tracker.IsComplete(f.inputAmount) {
+		if err := f.finishStep(clientID, state); err != nil {
+			slog.Error("finish step failed", "err", err)
+			nack()
+			f.stopConsuming()
+			return
+		}
+		f.states.Delete(clientID)
+	}
+
+	ack()
+}
+
+func (f *Filter[T, O]) processBatch(input batch.Msg[T], state *clientState) error {
+	outputs := make([]O, 0)
+	for _, record := range input.Records {
+		if f.filterFunction(record) {
+			outputs = append(outputs, f.outputTransform(record))
+		}
+	}
+
+	if len(outputs) == 0 {
+		return nil
+	}
+
+	body := batch.Write(input.ClientID, f.queryId, uint8(f.id), input.Seq, outputs, f.outputCodec)
+	if err := f.outputExchange.Send(middleware.Message{Body: body}); err != nil {
 		return err
 	}
-	if err := filter.outputQueueEof.Close(); err != nil {
-		slog.Error("while closing EOF output queue", "err", err)
-		return err
-	}
+	state.outputTracker.RegisterBatch("")
 	return nil
+}
+
+func (f *Filter[T, O]) finishStep(clientID int, state *clientState) error {
+	eofSeq := state.tracker.GetEOFSeq()
+	eofBody := batch.WriteEOF(clientID, f.queryId, uint8(f.id), eofSeq, uint32(state.outputTracker.Total()))
+	return f.outputExchange.Send(middleware.Message{Body: eofBody})
 }

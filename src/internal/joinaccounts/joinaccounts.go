@@ -136,10 +136,10 @@ func (j *JoinAccounts) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	j.StopConsuming()
+	j.stopConsuming()
 }
 
-func (j *JoinAccounts) StopConsuming() {
+func (j *JoinAccounts) stopConsuming() {
 	if err := j.qualifiedInputMiddleware.StopConsuming(); err != nil {
 		slog.Error("While stopping qualified input consumer", "join_id", j.id, "err", err)
 	}
@@ -193,11 +193,11 @@ func (j *JoinAccounts) handleTransferInput(msg newmiddleware.Message, ack func()
 		// Por ende no puedo mandar los outputs hasta terminar
 		// O puedo mandar el output con el mismo seqNumber que recibí, pero tengo q garantizar que el output de todo input entra en un solo batch
 		// Las quallifiedaccounts que mando al siguiente step son más chicas que el input recibido ais que puedo
-		tracker.RegisterBatch(int(input.SenderID), uint64(len(input.Records)))
+		tracker.RegisterBatch(int(input.SenderID))
 		if err := j.processTransferBatch(input, state); err != nil {
 			slog.Error("process batch failed", "err", err)
 			nack()
-			j.StopConsuming()
+			j.stopConsuming()
 			return
 		}
 	}
@@ -208,7 +208,7 @@ func (j *JoinAccounts) handleTransferInput(msg newmiddleware.Message, ack func()
 		if err := j.finishTransfersStep(clientID, state); err != nil {
 			slog.Error("finishing transfers step failed", "err", err)
 			nack()
-			j.StopConsuming()
+			j.stopConsuming()
 			return
 		}
 	}
@@ -216,7 +216,7 @@ func (j *JoinAccounts) handleTransferInput(msg newmiddleware.Message, ack func()
 	// if err := h.persist(); err != nil {
 	// 	slog.Error("persist failed, stopping", "err", err)
 	// 	nack()
-	//	j.StopConsuming()
+	//	j.stopConsuming()
 	// 	return
 	// }
 
@@ -335,7 +335,7 @@ func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(
 	if input.EOF {
 		tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
 	} else {
-		tracker.RegisterBatch(int(input.SenderID), uint64(len(input.Records)))
+		tracker.RegisterBatch(int(input.SenderID))
 		for _, rec := range input.Records {
 			if rec.IsLeft {
 				state.qualifyingLeft[rec.Account] = struct{}{}
@@ -351,7 +351,7 @@ func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(
 		if err := j.finishQualifiedStep(clientID, state); err != nil {
 			slog.Error("finishing transfers step failed", "err", err)
 			nack()
-			j.StopConsuming()
+			j.stopConsuming()
 			return
 		}
 	}
@@ -359,7 +359,7 @@ func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(
 	// // if err := h.persist(); err != nil {
 	// // 	slog.Error("persist failed, stopping", "err", err)
 	// // 	nack()
-	// //	j.StopConsuming()
+	// //	j.stopConsuming()
 	// // 	return
 	// // }
 

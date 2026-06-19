@@ -1,24 +1,32 @@
 package commonfilter
 
 import (
-	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
 )
 
 type Filter[T any, O any] struct {
-	filterType      filter.FilterType
-	id              uint32
-	inputExchange   middleware.Middleware
-	outputExchange  middleware.Middleware
+	id          uint32
+	queryId     uint8
+	filterType  filter.FilterType
+	inputAmount int
+
 	filterFunction  func(T) bool
-	eofHandler      eofring.EofRingAlgorithm
-	handlerMessages msgmonitor.MessageMonitor
-	outputQueueEof  middleware.Middleware
 	outputTransform func(T) O
-	queryId         uint8
 	inputCodec      wire.Codec[T]
 	outputCodec     wire.Codec[O]
+
+	inputExchange  middleware.Middleware
+	outputExchange middleware.Middleware
+
+	states statemap.StateMap[clientState]
+}
+
+type clientState struct {
+	tracker       *sendertracker.SenderTracker
+	outputTracker *outputtracker.OutputTracker
 }

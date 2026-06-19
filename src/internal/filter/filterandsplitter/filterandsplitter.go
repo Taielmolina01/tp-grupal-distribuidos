@@ -99,7 +99,7 @@ func (f *FilterAndSplitter) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
-	f.StopConsuming()
+	f.stopConsuming()
 }
 
 func (f *FilterAndSplitter) close() {
@@ -133,11 +133,11 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 	if input.EOF {
 		tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
 	} else {
-		tracker.RegisterBatch(int(input.SenderID), uint64(len(input.Records)))
+		tracker.RegisterBatch(int(input.SenderID))
 		if err := f.processBatch(input, state); err != nil {
 			slog.Error("process batch failed", "err", err)
 			nack()
-			f.StopConsuming()
+			f.stopConsuming()
 			return
 		}
 	}
@@ -151,7 +151,7 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 		if err := f.finishTransfersStep(clientID, state); err != nil {
 			slog.Error("finishing transfers step failed", "err", err)
 			nack()
-			f.StopConsuming()
+			f.stopConsuming()
 			return
 		}
 		f.states.Delete(clientID)
@@ -167,7 +167,7 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 	ack()
 }
 
-func (f *FilterAndSplitter) StopConsuming() {
+func (f *FilterAndSplitter) stopConsuming() {
 	if err := f.inputMiddleware.StopConsuming(); err != nil {
 		slog.Error("While stopping input consumer", "err", err)
 	}

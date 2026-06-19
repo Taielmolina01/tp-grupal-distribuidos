@@ -44,8 +44,9 @@ func (t *SenderTracker) Claim(senderID int, seq uint64) {
 	store.Claim(seq)
 }
 
-func (t *SenderTracker) RegisterBatch(senderID int, count uint64) {
-	t.msgCount[senderID] += count
+func (t *SenderTracker) RegisterBatch(senderID int) uint64 {
+	t.msgCount[senderID]++
+	return t.msgCount[senderID]
 }
 
 func (t *SenderTracker) RegisterEOF(senderID int, total uint64, seq uint64) {
