@@ -1,0 +1,37 @@
+src/cmd/joinaccounts/config.go
+  s_4ac499d9302c7e::t_82578cc5e0a5cf 72-76,90
+src/internal/joinaccounts/types.go
+  s_4ac499d9302c7e::t_4162884582b8e3 54-55,58
+  s_4ac499d9302c7e::t_c00bb90b54a833 28-32
+src/internal/common/middleware/newmiddleware/base.go
+  h_3c9b41718876fe 131
+src/internal/joinaccounts/joinaccounts.go
+  s_4ac499d9302c7e::t_b1e3a4138d1b57 420,422,424-425,432
+  s_4ac499d9302c7e::t_333668c5558407 209
+  s_4ac499d9302c7e::t_3243cee025355d 88,91
+scripts/compose-gen/generator.go
+  s_4ac499d9302c7e::t_0c02fa6af98e6a 429
+docker-compose.yaml
+  h_3c9b41718876fe 408,436
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "45ac23edd95eaa663b5e91bf017613b396035661",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_4ac499d9302c7e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1b4a2fa-4219-41eb-8cf4-07a716b6c906",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
