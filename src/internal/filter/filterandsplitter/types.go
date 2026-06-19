@@ -2,11 +2,11 @@ package filterandsplitter
 
 import (
 	"time"
-	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
+	"tp-grupal-distribuidos/internal/common/statemap"
 )
 
 type FilterAndSplitterConfig struct {
@@ -27,10 +27,6 @@ type FilterAndSplitterConfig struct {
 	InputRoutingKeys     []string
 
 	QueryID uint8
-
-	MonitorPersistPath string
-
-	SeqStoreQueue string
 }
 
 type FilterAndSplitter struct {
@@ -42,16 +38,12 @@ type FilterAndSplitter struct {
 
 	inputMiddleware  middleware.Middleware
 	outputMiddleware newmiddleware.Middleware
-	eofInput         middleware.Middleware
-	eofOutput        middleware.Middleware
-	eofHandler       eofring.EofRingAlgorithm
-
-	handlerMessages    msgmonitor.MessageMonitor
-	monitorPersistPath string
-	tempMonitorPath    string
-	outputPersistPath  string
-
-	seqStore newmiddleware.RPCClient
 
 	queryID uint8
+
+	states statemap.StateMap[clientState]
+}
+
+type clientState struct {
+	transferTracker *sendertracker.SenderTracker
 }

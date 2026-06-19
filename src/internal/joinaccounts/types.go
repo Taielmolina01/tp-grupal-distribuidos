@@ -43,7 +43,6 @@ type clientState struct {
 
 	transferTracker  *sendertracker.SenderTracker
 	qualifiedTracker *sendertracker.SenderTracker
-	transfersDone    bool
 }
 
 type JoinAccounts struct {
