@@ -1,0 +1,56 @@
+src/cmd/daterangeandpaymentfilter/config.go
+  s_4ac499d9302c7e::t_74a2a3ae3aab6a 12,47,49,52,57-59,63-72,82-104,157
+src/internal/filter/commonfilter/filter.go
+  h_3c9b41718876fe 155,157
+src/internal/filter/currencyfilter/currencyfilter.go
+  s_4ac499d9302c7e::t_02ee020356310f 5-6
+  s_4ac499d9302c7e::t_e413e84d9742c5 25,27
+  s_4ac499d9302c7e::t_7ca9ba21f34bae 26
+src/internal/filter/amountfilter/amountfilter.go
+  s_4ac499d9302c7e::t_2f1125dd8ac3a4 4-5
+  s_4ac499d9302c7e::t_a6e838e7d26289 29,31
+  s_4ac499d9302c7e::t_970e5e16fc7612 30
+src/internal/filter/daterangeandpaymentfilter/daterangeandpaymentfilter.go
+  s_4ac499d9302c7e::t_c364188ff8cae0 26
+  s_4ac499d9302c7e::t_b9737ce0f8ae14 25,27
+  s_4ac499d9302c7e::t_ca71e542cdd293 5-6
+docker-compose.yaml
+  h_3c9b41718876fe 59,78,105,129-132,156-159,170,187-188,213-214,315,353-354,381-382,543,559-560,578-579,629,647,692,711,734,821-845,847-871,873-897
+src/cmd/currencyfilter/config.go
+  s_4ac499d9302c7e::t_d3ec58e199c341 5,11,41,43,46,51-53,57-66,76-98,115
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  h_3c9b41718876fe 123-124
+src/internal/gateway/gateway.go
+  h_3c9b41718876fe 476
+scripts/compose-gen/generator.go
+  s_4ac499d9302c7e::t_fac06daf60c030 280-283
+  s_4ac499d9302c7e::t_1d58ee880268ca 589
+  s_4ac499d9302c7e::t_b2f316e41dedb5 309-310
+  s_4ac499d9302c7e::t_47f978da463d5e 401-402
+  s_4ac499d9302c7e::t_5242ba403e09f8 497-498
+  s_4ac499d9302c7e::t_8c272a2be36aac 541
+  s_4ac499d9302c7e::t_63305c77af24aa 239-241,257
+src/cmd/amountfilter/config.go
+  s_4ac499d9302c7e::t_cc17edc32ec7e4 5,11,41,43,46,51-53,57-66,76-98,101,103,105,115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "3c53c17d3cdd0b8362f1c5f972a628f11676a1f3",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_4ac499d9302c7e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1b4a2fa-4219-41eb-8cf4-07a716b6c906",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
