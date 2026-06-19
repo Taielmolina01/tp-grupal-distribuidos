@@ -1,6 +1,7 @@
 package healthcheck
 
 import (
+	"context"
 	"sync"
 	"time"
 	"tp-grupal-distribuidos/internal/common/bully"
@@ -27,11 +28,17 @@ type BullyInfo struct {
 type Restarter func(node string) error
 
 type HealthChecker struct {
-	config    Config
-	restart   Restarter
-	stop      chan struct{}
-	wg        sync.WaitGroup
-	bullyInfo BullyInfo
-	mu        sync.RWMutex
-	bully     bully.Bully
+	config             Config
+	restart            Restarter
+	leaderWaitGroup    sync.WaitGroup
+	watchdogsWaitGroup sync.WaitGroup
+	bullyInfo          BullyInfo
+	mu                 sync.RWMutex
+	bully              bully.Bully
+	condvarMutex       *sync.Mutex
+	condvar            *sync.Cond
+	amLeader           bool
+	leaderCancel       context.CancelFunc
+	watchdogsCancel    context.CancelFunc
+	stopped            bool
 }
