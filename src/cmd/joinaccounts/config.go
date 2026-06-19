@@ -69,6 +69,11 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		return joinaccounts.JoinAccountsConfig{}, errors.New("MAX_BATCH_BYTES environment variable is required and must be a number")
 	}
 
+	inputMiddlewareAmt, err := strconv.Atoi(os.Getenv("INPUT_MIDDLEWARE_AMT"))
+	if err != nil {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("INPUT_MIDDLEWARE_AMT environment variable is required and must be a number")
+	}
+
 	return joinaccounts.JoinAccountsConfig{
 		Id:                     id,
 		OutputMiddlewareAmount: outputAmount,
@@ -82,5 +87,6 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		QueryID:                queryID,
 		MaxBatchSize:           maxBatchSize,
 		MaxBatchBytes:          maxBatchBytes,
+		InputMiddlewareAmt:     inputMiddlewareAmt,
 	}, nil
 }

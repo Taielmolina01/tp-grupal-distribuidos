@@ -426,6 +426,7 @@ func writeJoinAccountsQ4(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.AcumAccountsQ4)
 		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts\n")
 		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter\n")
+		fmt.Fprintf(b, "      - INPUT_MIDDLEWARE_AMT=%d\n", cfg.FilterAndSplitterQ4)
 		b.WriteString("      - QUALIFIED_EXCHANGE=Q4_qualified_accounts\n")
 		fmt.Fprintf(b, "      - PEER_AMOUNT=%d\n", cfg.JoinAccountsQ4)
 		b.WriteString("      - THRESHOLD=5\n")

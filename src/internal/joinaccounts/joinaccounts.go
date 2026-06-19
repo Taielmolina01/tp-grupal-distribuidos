@@ -85,8 +85,10 @@ func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
 	return &JoinAccounts{
 		id:                        config.Id,
 		hasher:                    shard.New(config.OutputMiddlewareAmount),
+		outputAmount:              config.OutputMiddlewareAmount,
 		queryID:                   config.QueryID,
 		inputMiddleware:           inputMiddleware,
+		inputMiddlewareAmt:        config.InputMiddlewareAmt,
 		qualifiedInputMiddleware:  qualifiedInputMiddleware,
 		qualifiedOutputMiddleware: qualifiedOutputMiddleware,
 		outputMiddleware:          outputMiddleware,
@@ -204,7 +206,7 @@ func (j *JoinAccounts) handleTransferInput(msg newmiddleware.Message, ack func()
 
 	tracker.Claim(int(input.SenderID), input.Seq)
 
-	if tracker.IsComplete(int(j.inputMiddlewareAmt)) {
+	if tracker.IsComplete(j.inputMiddlewareAmt) {
 		if err := j.finishTransfersStep(clientID, state); err != nil {
 			slog.Error("finishing transfers step failed", "err", err)
 			nack()
@@ -415,17 +417,19 @@ func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) err
 	}
 
 	var sendErr error
-	state.chainOutputTracker.ForEach(func(rk string, total uint64) {
+	for i := range j.outputAmount {
 		if sendErr != nil {
-			return
+			break
 		}
+		rk := fmt.Sprintf("shard-%d", i)
+		total := state.chainOutputTracker.CountFor(rk)
 		seq := state.chainOutputTracker.RegisterBatch(rk)
 		eofBody := accountchain.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), seq, uint32(total))
 		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			slog.Error("While sending EOF message", "routingKey", rk, "err", err)
 			sendErr = err
 		}
-	})
+	}
 	j.states.Delete(clientID)
 	return sendErr
 }

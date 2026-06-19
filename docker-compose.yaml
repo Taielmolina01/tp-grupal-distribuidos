@@ -405,6 +405,7 @@ services:
       - OUTPUT_AMOUNT=2
       - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
       - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - INPUT_MIDDLEWARE_AMT=2
       - QUALIFIED_EXCHANGE=Q4_qualified_accounts
       - PEER_AMOUNT=2
       - THRESHOLD=5
@@ -432,6 +433,7 @@ services:
       - OUTPUT_AMOUNT=2
       - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
       - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - INPUT_MIDDLEWARE_AMT=2
       - QUALIFIED_EXCHANGE=Q4_qualified_accounts
       - PEER_AMOUNT=2
       - THRESHOLD=5

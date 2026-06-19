@@ -25,12 +25,11 @@ type JoinAccountsConfig struct {
 	QualifiedExchange     string
 	PeerAmount            int
 
-	Threshold     int
-	QueryID       int
-	MaxBatchSize  int
-	MaxBatchBytes int
-
-	InputMiddlewareAmt uint8 //AGREGAR LA CFG DE ESTO ANTES D COLGARME jejox
+	Threshold          int
+	QueryID            int
+	MaxBatchSize       int
+	MaxBatchBytes      int
+	InputMiddlewareAmt int
 }
 
 type clientState struct {
@@ -52,10 +51,11 @@ type clientState struct {
 type JoinAccounts struct {
 	id int
 
-	hasher shard.Hasher
+	hasher       shard.Hasher
+	outputAmount int
 
 	inputMiddleware           newmiddleware.Middleware
-	inputMiddlewareAmt        uint8
+	inputMiddlewareAmt        int
 	qualifiedInputMiddleware  newmiddleware.Middleware
 	qualifiedOutputMiddleware newmiddleware.Middleware
 	outputMiddleware          newmiddleware.Middleware
