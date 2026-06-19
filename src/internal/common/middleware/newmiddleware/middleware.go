@@ -11,8 +11,9 @@ var (
 )
 
 type Message struct {
-	Body       []byte
-	RoutingKey string
+	Body        []byte
+	RoutingKey  string
+	RoutingKeys []string
 }
 
 type ConnSettings struct {
