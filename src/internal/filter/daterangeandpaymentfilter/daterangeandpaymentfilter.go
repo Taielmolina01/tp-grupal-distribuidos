@@ -2,6 +2,8 @@ package daterangeandpaymentfilter
 
 import (
 	"slices"
+	"strconv"
+
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -20,6 +22,9 @@ func CreateDateRangeAndPaymentMethod(config filter.FilterConfig) (worker.Worker,
 			return isValidPaymentMethod(t, config) && !t.Timestamp.Before(config.StartDateRange) && t.Timestamp.Before(config.EndDateRange)
 		},
 		transfer.ProjectForQ5Filter,
+		func(t transfer.TransferForQ5Filter) []string {
+			return []string{strconv.FormatFloat(t.AmountPaid, 'f', -1, 64)}
+		},
 		records.TransferCodec,
 		records.TransferForQ5FilterCodec,
 	)

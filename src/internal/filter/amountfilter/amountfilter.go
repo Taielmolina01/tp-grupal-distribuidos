@@ -1,6 +1,8 @@
 package amountfilter
 
 import (
+	"strconv"
+
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/queryresult"
@@ -23,6 +25,9 @@ func CreateAmountFilter(config filter.FilterConfig) (worker.Worker, error) {
 				ToAccount:   t.ToBankAccount,
 				Amount:      t.AmountPaid,
 			}
+		},
+		func(q queryresult.Query1Result) []string {
+			return []string{strconv.FormatFloat(q.Amount, 'f', -1, 64)}
 		},
 		records.TransferAfterCurrencyCodec,
 		records.Query1ResultCodec,

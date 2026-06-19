@@ -120,6 +120,8 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 		return
 	}
 
+	slog.Info("MSG", "seq", input.Seq, "EOF", input.EOF)
+
 	clientID := input.ClientID
 	state := f.states.For(clientID)
 	tracker := state.transferTracker

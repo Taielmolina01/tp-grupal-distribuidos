@@ -2,11 +2,13 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
 	"tp-grupal-distribuidos/internal/common/filter"
+	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/splitter"
 )
 
@@ -36,58 +38,32 @@ func loadConfig() (filter.FilterConfig, error) {
 
 	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
 
-	outputQueue := os.Getenv("OUTPUT_QUEUE")
-
-	outputRoutingKeysStr := os.Getenv("OUTPUT_ROUTING_KEYS")
-	outputRoutingKeys := []string{}
-	if outputRoutingKeysStr != "" {
-		outputRoutingKeys = strings.Split(outputRoutingKeysStr, ",")
-	}
-
-	filterAmount := os.Getenv("FILTER_AMOUNT")
-	if filterAmount == "" {
-		return filter.FilterConfig{}, errors.New("FILTER_AMOUNT environment variable is required")
-	}
-
-	filterAmountInt, err := strconv.Atoi(filterAmount)
+	filterAmountInt, err := strconv.Atoi(os.Getenv("FILTER_AMOUNT"))
 	if err != nil {
-		return filter.FilterConfig{}, errors.New("FILTER_AMOUNT environment variable must be a number")
+		return filter.FilterConfig{}, errors.New("FILTER_AMOUNT environment variable is required and must be a number")
 	}
 
-	queryIdStr := os.Getenv("QUERY_ID")
-	if queryIdStr == "" {
-		return filter.FilterConfig{}, errors.New("QUERY_ID environment variable is required")
-	}
-	queryId, err := strconv.Atoi(queryIdStr)
+	queryId, err := strconv.Atoi(os.Getenv("QUERY_ID"))
 	if err != nil {
 		return filter.FilterConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
 	}
 
-	rightInputExchange := os.Getenv("RIGHT_INPUT_EXCHANGE")
-	rightInputQueue := os.Getenv("RIGHT_INPUT_QUEUE")
-	leftInputQueue := os.Getenv("LEFT_INPUT_QUEUE")
-	rightInputRoutingKeysStr := os.Getenv("RIGHT_INPUT_ROUTING_KEYS")
-	rightInputRoutingKeys := []string{}
-	if rightInputRoutingKeysStr != "" {
-		rightInputRoutingKeys = splitter.Split(rightInputRoutingKeysStr, ",")
+	outputClusters, err := loadOutputClusters()
+	if err != nil {
+		return filter.FilterConfig{}, err
 	}
 
 	config := filter.FilterConfig{
-		Id:                    id,
-		MomHost:               momHost,
-		MomPort:               momPort,
-		InputQueue:            inputQueue,
-		InputExchange:         inputExchange,
-		InputRoutingKeys:      inputRoutingKeys,
-		OutputExchange:        outputExchange,
-		OutputQueue:           outputQueue,
-		OutputRoutingKeys:     outputRoutingKeys,
-		LeftInputQueue:        leftInputQueue,
-		RightInputQueue:       rightInputQueue,
-		FilterAmount:          filterAmountInt,
-		QueryId:               uint8(queryId),
-		RightInputExchange:    rightInputExchange,
-		RightInputRoutingKeys: rightInputRoutingKeys,
+		Id:               id,
+		MomHost:          momHost,
+		MomPort:          momPort,
+		InputQueue:       inputQueue,
+		InputExchange:    inputExchange,
+		InputRoutingKeys: inputRoutingKeys,
+		OutputExchange:   outputExchange,
+		FilterAmount:     filterAmountInt,
+		QueryId:          uint8(queryId),
+		OutputClusters:   outputClusters,
 	}
 
 	if err := loadFilterTypeConfig(&config); err != nil {
@@ -97,7 +73,29 @@ func loadConfig() (filter.FilterConfig, error) {
 	return config, nil
 }
 
-// Helpers
+func loadOutputClusters() ([]shard.ClusterConfig, error) {
+	clustersStr := os.Getenv("OUTPUT_CLUSTERS")
+	if clustersStr == "" {
+		return nil, errors.New("OUTPUT_CLUSTERS environment variable is required")
+	}
+	parts := splitter.Split(clustersStr, ",")
+	clusters := make([]shard.ClusterConfig, 0, len(parts))
+	for _, part := range parts {
+		kv := strings.SplitN(part, ":", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid OUTPUT_CLUSTERS entry %q (expected prefix:N)", part)
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(kv[1]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid node count in OUTPUT_CLUSTERS entry %q: %w", part, err)
+		}
+		clusters = append(clusters, shard.ClusterConfig{
+			Prefix:    strings.TrimSpace(kv[0]),
+			NodeCount: n,
+		})
+	}
+	return clusters, nil
+}
 
 func loadCurrenciesVenv(config *filter.FilterConfig) error {
 	currencies := strings.Split(os.Getenv("CURRENCIES"), ",")
@@ -113,12 +111,6 @@ func loadFilterTypeConfig(config *filter.FilterConfig) error {
 	if filterTypeVenv == "" {
 		return errors.New("FILTER_TYPE environment variable is required")
 	}
-
 	config.Type = filter.FilterType(filterTypeVenv)
-
-	if err := loadCurrenciesVenv(config); err != nil {
-		return err
-	}
-
-	return nil
+	return loadCurrenciesVenv(config)
 }

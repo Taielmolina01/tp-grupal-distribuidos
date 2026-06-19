@@ -473,6 +473,7 @@ func (gateway *Gateway) takeCount(counts map[int]uint32, clientID int) uint32 {
 func (gateway *Gateway) sendEOF(clientID int, seq uint64, total uint32, targets ...middleware.Middleware) error {
 	body := batch.WriteEOF(clientID, 0, 0, seq, total)
 	var errs []error
+	slog.Info("EOF SENT", "seq", seq, "total", total)
 	for _, t := range targets {
 		if err := t.Send(middleware.Message{Body: body}); err != nil {
 			slog.Error("While sending EOF", "err", err)

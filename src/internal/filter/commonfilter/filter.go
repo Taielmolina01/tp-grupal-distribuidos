@@ -152,7 +152,9 @@ func (f *Filter[T, O]) handleInput(msg middleware.Message, ack func(), nack func
 
 func (f *Filter[T, O]) processBatch(input batch.Msg[T], state *clientState) error {
 	outputs := make([]O, 0)
+	slog.Info("MSG", "seq", input.Seq, "EOF", input.EOF)
 	for _, record := range input.Records {
+
 		if f.filterFunction(record) {
 			outputs = append(outputs, f.outputTransform(record))
 		}
