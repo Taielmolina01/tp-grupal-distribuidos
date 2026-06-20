@@ -1,0 +1,42 @@
+src/internal/filter/filteraccountseen/types.go
+  s_170690cb63d1f5::t_a31cbcb6ba56c7 4-5,7,11-12,29-32,45,48-51,55
+scripts/compose-gen/compose-config.yaml
+  h_3c9b41718876fe 16
+src/cmd/filteraccountseen/config.go
+  s_170690cb63d1f5::t_e3db4fb9281a4d 7
+  s_170690cb63d1f5::t_8408737674a349 58-69,71-72,83-85
+  h_3c9b41718876fe 70
+src/cmd/filterandsplitter/config.go
+  h_3c9b41718876fe 71
+src/internal/filter/filteraccountseen/persist.go
+  s_170690cb63d1f5::t_b6106f06429b77 1-53
+src/cmd/acumaccounts/config.go
+  h_3c9b41718876fe 70
+scripts/compose-gen/generator.go
+  s_170690cb63d1f5::t_0e4362d5e3ec11 489,491
+  h_3c9b41718876fe 408,438,464,490
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_170690cb63d1f5::t_95614561a5dd72 10,12,18-19,60-82,84-94,101-102,113-114,116,131-133,135-143,145-184,187-199,201-202,204,206,216-218,221,224,226
+  h_3c9b41718876fe 209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "dae6af4ec6e1b0acadd62fdfc8e73519e1f43d5d",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_170690cb63d1f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aa7f0277-688d-4fcf-8e1b-7bdd84381bb9",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
