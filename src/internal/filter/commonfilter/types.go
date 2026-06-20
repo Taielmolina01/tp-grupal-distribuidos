@@ -3,7 +3,6 @@ package commonfilter
 import (
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -23,7 +22,7 @@ type Filter[T any, O any] struct {
 	inputCodec      wire.Codec[T]
 	outputCodec     wire.Codec[O]
 
-	inputExchange  middleware.Middleware
+	inputExchange  newmiddleware.Middleware
 	outputExchange newmiddleware.Middleware
 	multiHasher    shard.MultiClusterHasher
 

@@ -11,7 +11,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -28,20 +27,16 @@ func NewFilter[T any, O any](
 	inputCodec wire.Codec[T],
 	outputCodec wire.Codec[O],
 ) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := middleware.CreateExchangeMiddleware(
-		config.InputExchange,
-		config.InputQueue,
-		config.InputRoutingKeys,
-		connSettings,
+	inputExchange, err := newmiddleware.NewShardedMiddleware(
+		connSettings, config.InputExchange, config.InputQueue, config.InputRoutingKeys[0],
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	outputExchange, err := newmiddleware.NewShardedMiddleware(newConnSettings, config.OutputExchange, "", "")
+	outputExchange, err := newmiddleware.NewShardedMiddleware(connSettings, config.OutputExchange, "", "")
 	if err != nil {
 		if err := inputExchange.Close(); err != nil {
 			slog.Error("While closing input exchange after output exchange creation failure", "err", err)
@@ -74,7 +69,7 @@ func NewFilter[T any, O any](
 func (f *Filter[T, O]) Run() {
 	defer f.close()
 
-	if err := f.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := f.inputExchange.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 		f.handleInput(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
@@ -104,7 +99,7 @@ func (f *Filter[T, O]) close() {
 	}
 }
 
-func (f *Filter[T, O]) handleInput(msg middleware.Message, ack func(), nack func()) {
+func (f *Filter[T, O]) handleInput(msg newmiddleware.Message, ack func(), nack func()) {
 	input, err := batch.Read(msg.Body, f.inputCodec)
 	if err != nil {
 		slog.Error("decode failed", "err", err)
