@@ -3,7 +3,6 @@ package joinaccounts
 import (
 	"sync"
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
@@ -39,7 +38,7 @@ type clientState struct {
 	qualifyingLeft  map[account.AccountIdentifier]struct{}
 	qualifyingRight map[account.AccountIdentifier]struct{}
 
-	qualifiedBatch *batch.Builder[qualifiedaccount.QualifiedAccount]
+	pendingQualified []qualifiedaccount.QualifiedAccount
 
 	transferTracker  *sendertracker.SenderTracker
 	qualifiedTracker *sendertracker.SenderTracker

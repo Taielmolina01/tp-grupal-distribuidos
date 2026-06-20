@@ -51,6 +51,7 @@ func (t *SenderTracker) RegisterBatch(senderID int) uint64 {
 }
 
 func (t *SenderTracker) RegisterEOF(senderID int, total uint64, seq uint64) {
+	slog.Info("EOF REGISTER", "seq", seq, "Sender", senderID, "total", total)
 	t.eofSet[senderID] = seq
 	t.expected[senderID] = total
 }

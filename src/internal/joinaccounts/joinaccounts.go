@@ -103,7 +103,6 @@ func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
 				right:                  map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
 				qualifyingLeft:         map[account.AccountIdentifier]struct{}{},
 				qualifyingRight:        map[account.AccountIdentifier]struct{}{},
-				qualifiedBatch:         qualifiedaccount.NewBatchBuilder(config.MaxBatchSize, config.MaxBatchBytes),
 				transferTracker:        sendertracker.New(10_000_000),
 				qualifiedTracker:       sendertracker.New(10_000_000),
 				qualifiedOutputTracker: outputtracker.New(),
@@ -232,16 +231,7 @@ func (j *JoinAccounts) processTransferBatch(input splittransfer.Msg, state *clie
 		} else {
 			j.accumulateRight(record, state)
 		}
-
 	}
-
-	if state.qualifiedBatch.IsEmpty() {
-		return nil
-	}
-	if err := j.flushQualifiedBatch(input.ClientID, input.Seq, state.qualifiedBatch); err != nil {
-		return err
-	}
-	state.qualifiedOutputTracker.RegisterBatch("")
 	return nil
 }
 
@@ -290,25 +280,37 @@ func (j *JoinAccounts) accumulateRight(record transfer.SplittedTransfer, state *
 }
 
 func (j *JoinAccounts) prepareQuallified(acc account.AccountIdentifier, isLeft bool, state *clientState) {
-	qa := qualifiedaccount.QualifiedAccount{Account: acc, IsLeft: isLeft}
-	state.qualifiedBatch.Add(&qa)
-}
-
-func (j *JoinAccounts) flushQualifiedBatch(clientID int, seqNumber uint64, b *batch.Builder[qualifiedaccount.QualifiedAccount]) error {
-	// Acá funciona medio de suerte
-	// Si tengo 3 origenes con secuencias independientes no puedo garantizar que usandoel seqNumber todas sean diferentes.
-	// Si llega origen 1 seq 1, y luego origen 2 seq 1 me arruina
-	body := b.Flush(clientID, uint8(j.queryID), uint8(j.id), seqNumber)
-	return j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: body})
+	state.pendingQualified = append(state.pendingQualified, qualifiedaccount.QualifiedAccount{Account: acc, IsLeft: isLeft})
 }
 
 func (j *JoinAccounts) finishTransfersStep(clientID int, state *clientState) error {
-	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), state.transferTracker.GetEOFSeq(), uint32(state.qualifiedOutputTracker.Total()))
+	b := qualifiedaccount.NewBatchBuilder(j.maxBatchSize, j.maxBatchBytes)
+	for _, qualified := range state.pendingQualified {
+		if !b.TryAdd(&qualified) {
+			seq := state.qualifiedOutputTracker.RegisterBatch("")
+			body := b.Flush(clientID, uint8(j.queryID), uint8(j.id), seq)
+			if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
+				slog.Error("While sending qualified batch", "err", err)
+				return err
+			}
+			b.TryAdd(&qualified)
+		}
+	}
+	if !b.IsEmpty() {
+		seq := state.qualifiedOutputTracker.RegisterBatch("")
+		body := b.Flush(clientID, uint8(j.queryID), uint8(j.id), seq)
+		if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
+			slog.Error("While sending qualified batch", "err", err)
+			return err
+		}
+	}
+
+	eofSeq := state.qualifiedOutputTracker.RegisterBatch("")
+	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), eofSeq, uint32(eofSeq-1))
 	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
 		slog.Error("While sending qualified EOF", "err", err)
 		return err
 	}
-
 	return nil
 }
 
