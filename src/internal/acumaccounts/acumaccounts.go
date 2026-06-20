@@ -7,50 +7,18 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
-	"time"
 
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountchain"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
-
-type AcumAccountsConfig struct {
-	Id int
-
-	OutputMiddlewareAmount int
-	OutputMiddlewarePrefix string
-
-	MomHost string
-	MomPort int
-
-	ExpectedEOFs          int
-	InputMiddlewarePrefix string
-
-	QueryID int
-
-	RequiredAmt int8
-
-	PersistPath          string
-	PersistBatchSize     int
-	PersistFlushInterval time.Duration
-}
-
-type clientState struct {
-	acum            map[account.AccountPair]int8
-	seqSent         uint64
-	transferTracker *sendertracker.SenderTracker
-}
-
-func (s *clientState) nextSeq() uint64 {
-	s.seqSent++
-	return s.seqSent
-}
 
 func NewAcumAccounts(config AcumAccountsConfig) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
@@ -103,19 +71,21 @@ func NewAcumAccounts(config AcumAccountsConfig) (worker.Worker, error) {
 		return &clientState{
 			acum:            map[account.AccountPair]int8{},
 			transferTracker: sendertracker.New(10_000_000),
+			outputTracker:   outputtracker.New(),
 		}
 	})
 	for clientID, cs := range recovered {
 		states.Set(clientID, cs)
 		slog.Info("recovered client state", "clientID", clientID,
 			"acumEntries", len(cs.acum),
-			"seqSent", cs.seqSent,
+			"outputTotal", cs.outputTracker.Total(),
 		)
 	}
 
 	return &AcumAccounts{
 		id:                   config.Id,
 		hasher:               shard.New(config.OutputMiddlewareAmount),
+		outputAmount:         config.OutputMiddlewareAmount,
 		expectedEOFs:         config.ExpectedEOFs,
 		inputMiddleware:      inputMiddleware,
 		outputMiddleware:     outputMiddleware,
@@ -191,17 +161,14 @@ func (a *AcumAccounts) handleBatch(msgs []newmiddleware.Message, ack func(), nac
 					outgoing[rk] = append(outgoing[rk], ids...)
 				}
 			}
-			if len(outgoing) > 0 {
-				//Ver de usar el builder con tryadd cmoo en los otros para armar bien los batches
-				seq := state.nextSeq()
-				for routingKey, ids := range outgoing {
-					body := accountid.WriteBatch(clientID, uint8(a.queryID), uint8(a.id), seq, ids)
-					if err := a.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
-						slog.Error("While sending output batch", "err", err)
-						nack()
-						a.stopConsuming()
-						return
-					}
+			for routingKey, ids := range outgoing {
+				seq := state.outputTracker.RegisterBatch(routingKey)
+				body := accountid.WriteBatch(clientID, uint8(a.queryID), uint8(a.id), seq, ids)
+				if err := a.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
+					slog.Error("While sending output batch", "err", err)
+					nack()
+					a.stopConsuming()
+					return
 				}
 			}
 		}
@@ -210,12 +177,16 @@ func (a *AcumAccounts) handleBatch(msgs []newmiddleware.Message, ack func(), nac
 		modified[clientID] = state
 
 		if tracker.IsComplete(a.expectedEOFs) {
-			eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), uint8(a.id), state.nextSeq(), input.Total)
-			if err := a.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
-				slog.Error("While sending EOF message", "err", err)
-				nack()
-				a.stopConsuming()
-				return
+			for i := range a.outputAmount {
+				rk := fmt.Sprintf("shard-%d", i)
+				total := state.outputTracker.CountFor(rk)
+				eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), uint8(a.id), total+1, uint32(total))
+				if err := a.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+					slog.Error("While sending EOF message", "err", err)
+					nack()
+					a.stopConsuming()
+					return
+				}
 			}
 			completed[clientID] = struct{}{}
 		}

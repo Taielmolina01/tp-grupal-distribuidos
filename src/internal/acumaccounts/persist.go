@@ -5,13 +5,14 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 )
 
 func marshalClientState(s *clientState) []byte {
 	w := wire.NewWriter()
 	s.transferTracker.Marshal(w)
-	w.Uint64(s.seqSent)
+	s.outputTracker.Marshal(w)
 	w.Uint32(uint32(len(s.acum)))
 	for pair, count := range s.acum {
 		w.String(pair.Left.BankID)
@@ -31,7 +32,11 @@ func unmarshalClientState(data []byte) (*clientState, error) {
 		return nil, fmt.Errorf("acumaccounts: unmarshal transferTracker: %w", err)
 	}
 
-	seqSent := r.Uint64()
+	ot, err := outputtracker.Unmarshal(r)
+	if err != nil {
+		return nil, fmt.Errorf("acumaccounts: unmarshal outputTracker: %w", err)
+	}
+
 	n := r.Uint32()
 	if r.Err() != nil {
 		return nil, fmt.Errorf("acumaccounts: unmarshal header: %w", r.Err())
@@ -60,7 +65,7 @@ func unmarshalClientState(data []byte) (*clientState, error) {
 
 	return &clientState{
 		transferTracker: tracker,
-		seqSent:         seqSent,
+		outputTracker:   ot,
 		acum:            acum,
 	}, nil
 }
