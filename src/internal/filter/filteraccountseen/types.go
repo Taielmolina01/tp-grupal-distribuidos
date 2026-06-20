@@ -1,11 +1,15 @@
 package filteraccountseen
 
 import (
-	"sync"
+	"time"
+
 	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
 )
 
 type FilterAccountSeenConfig struct {
@@ -22,12 +26,14 @@ type FilterAccountSeenConfig struct {
 	QueryID               int
 	MaxBatchSize          int
 	MaxBatchBytes         int
+
+	PersistPath          string
+	PersistBatchSize     int
+	PersistFlushInterval time.Duration
 }
 
 type FilterAccountSeen struct {
 	id int
-
-	mu sync.Mutex
 
 	expectedEOFs  int
 	maxBatchSize  int
@@ -36,25 +42,17 @@ type FilterAccountSeen struct {
 	inputMiddleware  newmiddleware.Middleware
 	outputMiddleware newmiddleware.Middleware
 
-	clientsState map[int]*clientState
+	states statemap.StateMap[clientState]
 
 	queryID int
+
+	checkpoint           *checkpoint.Checkpoint[clientState]
+	persistBatchSize     int
+	persistFlushInterval time.Duration
 }
 
 type clientState struct {
-	eofAmt       int
+	tracker      *sendertracker.SenderTracker
 	seenAccounts map[account.AccountIdentifier]struct{}
 	builder      *batch.Builder[queryresult.Query4Result]
-	seqReceived  map[int]uint64
-}
-
-func (s *clientState) isDuplicateEOF(senderID int, seq uint64) bool {
-	if seq == 0 {
-		return false
-	}
-	if seq <= s.seqReceived[senderID] {
-		return true
-	}
-	s.seqReceived[senderID] = seq
-	return false
 }

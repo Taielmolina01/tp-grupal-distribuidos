@@ -7,12 +7,16 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+
 	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
@@ -53,23 +57,49 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (worker.Worker, error)
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
+	ckpt, err := checkpoint.New(config.PersistPath, marshalClientState, unmarshalClientState)
+	if err != nil {
+		return nil, fmt.Errorf("creating checkpoint: %w", err)
+	}
+
+	recovered, err := ckpt.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading checkpoint: %w", err)
+	}
+
+	states := statemap.New(func() *clientState {
+		return &clientState{
+			tracker:      sendertracker.New(10_000_000),
+			seenAccounts: map[account.AccountIdentifier]struct{}{},
+			builder:      batch.NewBuilder(config.MaxBatchSize, config.MaxBatchBytes, records.Query4ResultCodec),
+		}
+	})
+	for clientID, state := range recovered {
+		state.builder = batch.NewBuilder(config.MaxBatchSize, config.MaxBatchBytes, records.Query4ResultCodec)
+		states.Set(clientID, state)
+		slog.Info("recovered client state", "clientID", clientID, "seenAccounts", len(state.seenAccounts))
+	}
+
 	return &FilterAccountSeen{
-		id:               config.Id,
-		queryID:          config.QueryID,
-		inputMiddleware:  inputMiddleware,
-		outputMiddleware: outputMiddleware,
-		clientsState:     map[int]*clientState{},
-		expectedEOFs:     config.ExpectedEOFs,
-		maxBatchSize:     config.MaxBatchSize,
-		maxBatchBytes:    config.MaxBatchBytes,
+		id:                   config.Id,
+		queryID:              config.QueryID,
+		inputMiddleware:      inputMiddleware,
+		outputMiddleware:     outputMiddleware,
+		states:               states,
+		expectedEOFs:         config.ExpectedEOFs,
+		maxBatchSize:         config.MaxBatchSize,
+		maxBatchBytes:        config.MaxBatchBytes,
+		checkpoint:           ckpt,
+		persistBatchSize:     config.PersistBatchSize,
+		persistFlushInterval: config.PersistFlushInterval,
 	}, nil
 }
 
 func (f *FilterAccountSeen) Run() {
 	defer f.close()
 
-	if err := f.inputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
-		f.handleInput(msg, ack)
+	if err := f.inputMiddleware.StartConsumingBatch(f.persistBatchSize, f.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		f.handleBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input queue", "err", err)
 	}
@@ -80,7 +110,10 @@ func (f *FilterAccountSeen) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
+	f.stopConsuming()
+}
 
+func (f *FilterAccountSeen) stopConsuming() {
 	if err := f.inputMiddleware.StopConsuming(); err != nil {
 		slog.Error("While stopping input consumer", "filter_id", f.id, "err", err)
 	}
@@ -95,90 +128,100 @@ func (f *FilterAccountSeen) close() {
 	}
 }
 
-func (f *FilterAccountSeen) handleInput(msg newmiddleware.Message, ack func()) {
-	defer ack()
-	input, err := accountid.Read(msg.Body)
-	if err != nil {
-		slog.Error("While deserializing input batch", "err", err)
-		return
+func (f *FilterAccountSeen) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
+	modified := make(map[int]*clientState)
+	completed := make(map[int]struct{})
+
+	for _, msg := range msgs {
+		input, err := accountid.Read(msg.Body)
+		if err != nil {
+			slog.Error("While deserializing input batch", "err", err)
+			continue
+		}
+
+		clientID := input.ClientID
+		state := f.states.For(clientID)
+
+		if state.tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+			slog.Warn("Discarding duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
+			continue
+		}
+
+		if input.EOF {
+			state.tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+		} else {
+			state.tracker.RegisterBatch(int(input.SenderID))
+			for i := range input.Records {
+				if err := f.addRecord(clientID, state, input.Records[i]); err != nil {
+					slog.Error("While sending results batch", "err", err)
+					nack()
+					f.stopConsuming()
+					return
+				}
+			}
+		}
+
+		state.tracker.Claim(int(input.SenderID), input.Seq)
+		modified[clientID] = state
+
+		if state.tracker.IsComplete(f.expectedEOFs) {
+			if !state.builder.IsEmpty() {
+				if err := f.flushResults(clientID, state); err != nil {
+					slog.Error("While flushing results on completion", "err", err)
+					nack()
+					f.stopConsuming()
+					return
+				}
+			}
+			eofBody := batch.WriteEOF(clientID, uint8(f.queryID), 0, 0, input.Total)
+			if err := f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
+				slog.Error("While sending EOF message", "err", err)
+				nack()
+				f.stopConsuming()
+				return
+			}
+			completed[clientID] = struct{}{}
+		}
 	}
 
-	if input.EOF {
-		f.handleEOF(input.ClientID, input.SenderID, input.Seq, input.Total)
-		return
+	for clientID, state := range modified {
+		if _, done := completed[clientID]; done {
+			f.states.Delete(clientID)
+			f.checkpoint.DeleteClient(clientID)
+			continue
+		}
+		if err := f.checkpoint.SaveClient(clientID, state); err != nil {
+			slog.Error("persist failed, stopping", "err", err)
+			nack()
+			f.stopConsuming()
+			return
+		}
 	}
 
-	for i := range input.Records {
-		f.handleRecord(input.ClientID, input.Records[i])
-	}
+	ack()
 }
 
-func (f *FilterAccountSeen) handleRecord(clientID int, record account.AccountIdentifier) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	state := f.stateFor(clientID)
-
+func (f *FilterAccountSeen) addRecord(clientID int, state *clientState, record account.AccountIdentifier) error {
 	if _, ok := state.seenAccounts[record]; ok {
-		return
+		return nil
 	}
 
+	// TODO: Con la nueva lógica de propagr el SeqNum acá tenemos que acumular hasta el final y solo ahí mandar todos los outputs. Tampoco nos es muy caro así q np
 	state.seenAccounts[record] = struct{}{}
 	result := queryresult.Query4Result{
 		BankId:        record.BankID,
 		AccountNumber: record.AccountNumber,
 	}
 	if !state.builder.TryAdd(&result) {
-		f.flushResults(clientID, state)
+		if err := f.flushResults(clientID, state); err != nil {
+			return err
+		}
 		state.builder.TryAdd(&result)
 	}
+	return nil
 }
 
-func (f *FilterAccountSeen) handleEOF(clientID int, senderID uint8, seq uint64, total uint32) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	state := f.stateFor(clientID)
-
-	if state.isDuplicateEOF(int(senderID), seq) {
-		slog.Warn("Discarding duplicate EOF", "clientID", clientID, "senderID", senderID, "seq", seq)
-		return
-	}
-
-	state.eofAmt++
-
-	if state.eofAmt < f.expectedEOFs {
-		return
-	}
-
-	if !state.builder.IsEmpty() {
-		f.flushResults(clientID, state)
-	}
-
-	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), 0, 0, total)
-	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
-		slog.Error("While sending EOF message", "err", err)
-	}
-
-	delete(f.clientsState, clientID)
-}
-
-func (f *FilterAccountSeen) flushResults(clientID int, state *clientState) {
+func (f *FilterAccountSeen) flushResults(clientID int, state *clientState) error {
 	body := state.builder.Flush(clientID, uint8(f.queryID), 0, 0)
-	if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
-		slog.Error("While sending Q4 results batch", "err", err)
-	}
-}
-
-func (f *FilterAccountSeen) stateFor(clientID int) *clientState {
-	st, ok := f.clientsState[clientID]
-	if !ok {
-		st = &clientState{
-			seenAccounts: map[account.AccountIdentifier]struct{}{},
-			builder:      batch.NewBuilder(f.maxBatchSize, f.maxBatchBytes, records.Query4ResultCodec),
-			seqReceived:  map[int]uint64{},
-		}
-		f.clientsState[clientID] = st
-	}
-	return st
+	return f.outputMiddleware.Send(newmiddleware.Message{Body: body})
 }

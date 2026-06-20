@@ -67,7 +67,7 @@ func loadConfig() (acumaccounts.AcumAccountsConfig, error) {
 
 	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
 	if err != nil {
-		return acumaccounts.AcumAccountsConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
+		return acumaccounts.AcumAccountsConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required")
 	}
 
 	return acumaccounts.AcumAccountsConfig{

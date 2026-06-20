@@ -68,7 +68,7 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 
 	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
 	if err != nil {
-		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required")
 	}
 
 	return filterandsplitter.FilterAndSplitterConfig{
@@ -77,16 +77,16 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		EndDate:                endDate,
 		OutputMiddlewareAmount: outputAmount,
 		OutputMiddlewarePrefix: outputPrefix,
-		FilterCurrencyAmt: filterAmount,
+		FilterCurrencyAmt:      filterAmount,
 		MomHost:                momHost,
 		MomPort:                momPort,
 		InputMiddlewareName:    os.Getenv("INPUT_EXCHANGE"),
 		InputMiddlewareQueue:   os.Getenv("INPUT_QUEUE"),
 		InputShardKey:          inputShardKey,
-		QueryID:              uint8(queryID),
-		PersistPath:          persistPath,
-		PersistBatchSize:     persistBatchSize,
-		PersistFlushInterval: persistFlushInterval,
+		QueryID:                uint8(queryID),
+		PersistPath:            persistPath,
+		PersistBatchSize:       persistBatchSize,
+		PersistFlushInterval:   persistFlushInterval,
 	}, nil
 }
 
