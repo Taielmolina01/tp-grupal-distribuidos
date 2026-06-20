@@ -458,6 +458,9 @@ func writeAcumAccountsQ4(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.JoinAccountsQ4)
 		b.WriteString("      - REQUIRED_AMT=5\n")
 		b.WriteString("      - QUERY_ID=4\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_acum_accounts_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}

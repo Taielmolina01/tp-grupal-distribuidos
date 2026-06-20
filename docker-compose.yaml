@@ -468,6 +468,9 @@ services:
       - EXPECTED_EOFS=2
       - REQUIRED_AMT=5
       - QUERY_ID=4
+      - PERSIST_PATH=/var/bkp/q4_acum_accounts_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -492,6 +495,9 @@ services:
       - EXPECTED_EOFS=2
       - REQUIRED_AMT=5
       - QUERY_ID=4
+      - PERSIST_PATH=/var/bkp/q4_acum_accounts_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
