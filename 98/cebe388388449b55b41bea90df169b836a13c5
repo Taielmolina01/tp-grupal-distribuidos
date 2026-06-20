@@ -1,0 +1,31 @@
+src/internal/acumaccounts/types.go
+  s_170690cb63d1f5::t_454ebb32297a92 6,9-10,15-29,31-45
+src/internal/acumaccounts/persist.go
+  s_170690cb63d1f5::t_8d2dc7d4580783 8,15,35-39,68
+src/internal/acumaccounts/acumaccounts.go
+  s_170690cb63d1f5::t_d0e2a542973e94 74,81,88
+  s_170690cb63d1f5::t_ca128ad89dedf6 180-189
+  s_170690cb63d1f5::t_311886a72ae122 16
+  s_170690cb63d1f5::t_73deee690f9cf8 164-171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "98cebe388388449b55b41bea90df169b836a13c5",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_170690cb63d1f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aa7f0277-688d-4fcf-8e1b-7bdd84381bb9",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
