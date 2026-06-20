@@ -142,6 +142,8 @@ func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
 		states:                    states,
 		transferCheckpoint:        transferCkpt,
 		qualifiedCheckpoint:       qualifiedCkpt,
+		persistBatchSize:          config.PersistBatchSize,
+		persistFlushInterval:      config.PersistFlushInterval,
 	}, nil
 }
 
@@ -210,16 +212,16 @@ func (j *JoinAccounts) Run() {
 	defer j.close()
 	go j.consumeQualified()
 
-	if err := j.inputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
-		j.handleTransferInput(msg, ack, nack)
+	if err := j.inputMiddleware.StartConsumingBatch(j.persistBatchSize, j.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		j.handleTransferBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
 	}
 }
 
 func (j *JoinAccounts) consumeQualified() {
-	if err := j.qualifiedInputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
-		j.handleQualifiedInput(msg, ack, nack)
+	if err := j.qualifiedInputMiddleware.StartConsumingBatch(j.persistBatchSize, j.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		j.handleQualifiedBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from qualified middleware", "err", err)
 	}
@@ -258,68 +260,67 @@ func (j *JoinAccounts) close() {
 	}
 }
 
-func (j *JoinAccounts) handleTransferInput(msg newmiddleware.Message, ack func(), nack func()) {
+func (j *JoinAccounts) handleTransferBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
-	//Podría usar el ProjectForQ4 creo
-	input, err := splittransfer.Read(msg.Body)
-	if err != nil {
-		slog.Error("decode failed", "err", err)
-		ack()
-		return
+	modified := make(map[int]*clientState)
+
+	for _, msg := range msgs {
+		input, err := splittransfer.Read(msg.Body)
+		if err != nil {
+			slog.Error("decode failed", "err", err)
+			continue
+		}
+
+		clientID := input.ClientID
+		state := j.states.For(clientID)
+		tracker := state.transferTracker
+
+		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
+			continue
+		}
+
+		if input.EOF {
+			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+		} else {
+			tracker.RegisterBatch(int(input.SenderID))
+			if err := j.processTransferBatch(input, state); err != nil {
+				slog.Error("process batch failed", "err", err)
+				nack()
+				j.stopConsuming()
+				return
+			}
+		}
+
+		tracker.Claim(int(input.SenderID), input.Seq)
+		modified[clientID] = state
+
+		if tracker.IsComplete(j.inputMiddlewareAmt) {
+			slog.Info("TRANSFERS COMPLETE")
+			if err := j.finishTransfersStep(clientID, state); err != nil {
+				slog.Error("finishing transfers step failed", "err", err)
+				nack()
+				j.stopConsuming()
+				return
+			}
+		}
 	}
 
-	clientID := input.ClientID
-
-	state := j.states.For(clientID)
-	tracker := state.transferTracker
-
-	if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
-		slog.Warn("duplicate", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
-		ack()
-		return
-	}
-
-	if input.EOF {
-		tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
-	} else {
-		// SI O SI TENGO QUE VERIF DUPLICADOS, SINO ACÁ SUMO CUALQUIER COSA
-		// Por ende no puedo mandar los outputs hasta terminar
-		// O puedo mandar el output con el mismo seqNumber que recibí, pero tengo q garantizar que el output de todo input entra en un solo batch
-		// Las quallifiedaccounts que mando al siguiente step son más chicas que el input recibido ais que puedo
-		tracker.RegisterBatch(int(input.SenderID))
-		if err := j.processTransferBatch(input, state); err != nil {
-			slog.Error("process batch failed", "err", err)
+	for clientID, state := range modified {
+		ts := &transferPartialState{
+			transferTracker:        state.transferTracker,
+			qualifiedOutputTracker: state.qualifiedOutputTracker,
+			left:                   state.left,
+			right:                  state.right,
+		}
+		if err := j.transferCheckpoint.SaveClient(clientID, ts); err != nil {
+			slog.Error("transfer persist failed, stopping", "err", err)
 			nack()
 			j.stopConsuming()
 			return
 		}
-	}
-
-	tracker.Claim(int(input.SenderID), input.Seq)
-
-	if tracker.IsComplete(j.inputMiddlewareAmt) {
-		slog.Info("TRANSFERS COMPLETE")
-		if err := j.finishTransfersStep(clientID, state); err != nil {
-			slog.Error("finishing transfers step failed", "err", err)
-			nack()
-			j.stopConsuming()
-			return
-		}
-	}
-
-	ts := &transferPartialState{
-		transferTracker:        state.transferTracker,
-		qualifiedOutputTracker: state.qualifiedOutputTracker,
-		left:                   state.left,
-		right:                  state.right,
-	}
-	if err := j.transferCheckpoint.SaveClient(clientID, ts); err != nil {
-		slog.Error("transfer persist failed, stopping", "err", err)
-		nack()
-		j.stopConsuming()
-		return
 	}
 
 	ack()
@@ -415,70 +416,75 @@ func (j *JoinAccounts) finishTransfersStep(clientID int, state *clientState) err
 	return nil
 }
 
-func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(), nack func()) {
+func (j *JoinAccounts) handleQualifiedBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
-	input, err := qualifiedaccount.Read(msg.Body)
-	if err != nil {
-		slog.Error("qualified decode failed", "err", err)
-		ack()
-		return
-	}
+	modified := make(map[int]*clientState)
+	completed := make(map[int]struct{})
 
-	clientID := input.ClientID
+	for _, msg := range msgs {
+		input, err := qualifiedaccount.Read(msg.Body)
+		if err != nil {
+			slog.Error("qualified decode failed", "err", err)
+			continue
+		}
 
-	state := j.states.For(clientID)
-	tracker := state.qualifiedTracker
+		clientID := input.ClientID
+		state := j.states.For(clientID)
+		tracker := state.qualifiedTracker
 
-	if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
-		// slog.Warn("quailified duplicate", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq, "EOF", input.EOF)
-		ack()
-		return
-	}
+		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+			continue
+		}
 
-	if input.EOF {
-		tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
-	} else {
-		tracker.RegisterBatch(int(input.SenderID))
-		for _, rec := range input.Records {
-			if rec.IsLeft {
-				state.qualifyingLeft[rec.Account] = struct{}{}
-			} else {
-				state.qualifyingRight[rec.Account] = struct{}{}
+		if input.EOF {
+			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+		} else {
+			tracker.RegisterBatch(int(input.SenderID))
+			for _, rec := range input.Records {
+				if rec.IsLeft {
+					state.qualifyingLeft[rec.Account] = struct{}{}
+				} else {
+					state.qualifyingRight[rec.Account] = struct{}{}
+				}
 			}
+		}
+
+		tracker.Claim(int(input.SenderID), input.Seq)
+		modified[clientID] = state
+
+		if tracker.IsComplete(int(j.peerAmount)) {
+			slog.Info("QUALIFIED COMPLETE")
+			if err := j.finishQualifiedStep(clientID, state); err != nil {
+				slog.Error("finishing qualified step failed", "err", err)
+				nack()
+				j.stopConsuming()
+				return
+			}
+			completed[clientID] = struct{}{}
 		}
 	}
 
-	tracker.Claim(int(input.SenderID), input.Seq)
-
-	if tracker.IsComplete(int(j.peerAmount)) {
-		slog.Info("QUALIFIED COMPLETE")
-
-		if err := j.finishQualifiedStep(clientID, state); err != nil {
-			slog.Error("finishing qualified step failed", "err", err)
+	for clientID, state := range modified {
+		if _, done := completed[clientID]; done {
+			j.states.Delete(clientID)
+			j.transferCheckpoint.DeleteClient(clientID)
+			j.qualifiedCheckpoint.DeleteClient(clientID)
+			continue
+		}
+		qs := &qualifiedPartialState{
+			qualifiedTracker:   state.qualifiedTracker,
+			chainOutputTracker: state.chainOutputTracker,
+			qualifyingLeft:     state.qualifyingLeft,
+			qualifyingRight:    state.qualifyingRight,
+		}
+		if err := j.qualifiedCheckpoint.SaveClient(clientID, qs); err != nil {
+			slog.Error("qualified persist failed, stopping", "err", err)
 			nack()
 			j.stopConsuming()
 			return
 		}
-		j.states.Delete(clientID)
-		j.transferCheckpoint.DeleteClient(clientID)
-		j.qualifiedCheckpoint.DeleteClient(clientID)
-		ack()
-		return
-	}
-
-	qs := &qualifiedPartialState{
-		qualifiedTracker:   state.qualifiedTracker,
-		chainOutputTracker: state.chainOutputTracker,
-		qualifyingLeft:     state.qualifyingLeft,
-		qualifyingRight:    state.qualifyingRight,
-	}
-	if err := j.qualifiedCheckpoint.SaveClient(clientID, qs); err != nil {
-		slog.Error("qualified persist failed, stopping", "err", err)
-		nack()
-		j.stopConsuming()
-		return
 	}
 
 	ack()

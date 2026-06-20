@@ -411,6 +411,8 @@ services:
       - MAX_BATCH_SIZE=500
       - MAX_BATCH_BYTES=65536
       - PERSIST_PATH=/var/bkp/q4_join_accounts_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -440,6 +442,8 @@ services:
       - MAX_BATCH_SIZE=500
       - MAX_BATCH_BYTES=65536
       - PERSIST_PATH=/var/bkp/q4_join_accounts_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:

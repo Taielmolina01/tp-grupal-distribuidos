@@ -433,6 +433,8 @@ func writeJoinAccountsQ4(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - MAX_BATCH_SIZE=500\n")
 		b.WriteString("      - MAX_BATCH_BYTES=65536\n")
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_join_accounts_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}

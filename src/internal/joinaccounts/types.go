@@ -2,6 +2,7 @@ package joinaccounts
 
 import (
 	"sync"
+	"time"
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
@@ -31,7 +32,9 @@ type JoinAccountsConfig struct {
 	MaxBatchBytes      int
 	InputMiddlewareAmt int
 
-	PersistPath string
+	PersistPath          string
+	PersistBatchSize     int
+	PersistFlushInterval time.Duration
 }
 
 type transferPartialState struct {
@@ -85,6 +88,9 @@ type JoinAccounts struct {
 
 	transferCheckpoint  *checkpoint.Checkpoint[transferPartialState]
 	qualifiedCheckpoint *checkpoint.Checkpoint[qualifiedPartialState]
+
+	persistBatchSize     int
+	persistFlushInterval time.Duration
 
 	mu      sync.Mutex
 	queryID int
