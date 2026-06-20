@@ -355,6 +355,8 @@ services:
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - QUERY_ID=4
       - PERSIST_PATH=/var/bkp/q4_filter_and_splitter_0.bin
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -382,6 +384,8 @@ services:
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - QUERY_ID=4
       - PERSIST_PATH=/var/bkp/q4_filter_and_splitter_1.bin
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -411,7 +415,7 @@ services:
       - MAX_BATCH_SIZE=500
       - MAX_BATCH_BYTES=65536
       - PERSIST_PATH=/var/bkp/q4_join_accounts_0
-      - PERSIST_BATCH_SIZE=50
+      - PERSIST_BATCH_SIZE=100
       - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
@@ -442,7 +446,7 @@ services:
       - MAX_BATCH_SIZE=500
       - MAX_BATCH_BYTES=65536
       - PERSIST_PATH=/var/bkp/q4_join_accounts_1
-      - PERSIST_BATCH_SIZE=50
+      - PERSIST_BATCH_SIZE=100
       - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
@@ -469,7 +473,7 @@ services:
       - REQUIRED_AMT=5
       - QUERY_ID=4
       - PERSIST_PATH=/var/bkp/q4_acum_accounts_0
-      - PERSIST_BATCH_SIZE=50
+      - PERSIST_BATCH_SIZE=100
       - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
@@ -496,7 +500,7 @@ services:
       - REQUIRED_AMT=5
       - QUERY_ID=4
       - PERSIST_PATH=/var/bkp/q4_acum_accounts_1
-      - PERSIST_BATCH_SIZE=50
+      - PERSIST_BATCH_SIZE=100
       - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file

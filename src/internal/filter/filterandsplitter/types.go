@@ -29,6 +29,9 @@ type FilterAndSplitterConfig struct {
 
 	QueryID     uint8
 	PersistPath string
+
+	PersistBatchSize     int
+	PersistFlushInterval time.Duration
 }
 
 type FilterAndSplitter struct {
@@ -47,6 +50,9 @@ type FilterAndSplitter struct {
 	checkpoint *checkpoint.Checkpoint[clientState]
 
 	states statemap.StateMap[clientState]
+
+	persistBatchSize     int
+	persistFlushInterval time.Duration
 }
 
 type clientState struct {

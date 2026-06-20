@@ -61,6 +61,16 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("PERSIST_PATH environment variable is required")
 	}
 
+	persistBatchSize, err := strconv.Atoi(os.Getenv("PERSIST_BATCH_SIZE"))
+	if err != nil {
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("PERSIST_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
+	if err != nil {
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
+	}
+
 	return filterandsplitter.FilterAndSplitterConfig{
 		Id:                     id,
 		StartDate:              startDate,
@@ -73,8 +83,10 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		InputMiddlewareName:    os.Getenv("INPUT_EXCHANGE"),
 		InputMiddlewareQueue:   os.Getenv("INPUT_QUEUE"),
 		InputShardKey:          inputShardKey,
-		QueryID:                uint8(queryID),
-		PersistPath:            persistPath,
+		QueryID:              uint8(queryID),
+		PersistPath:          persistPath,
+		PersistBatchSize:     persistBatchSize,
+		PersistFlushInterval: persistFlushInterval,
 	}, nil
 }
 

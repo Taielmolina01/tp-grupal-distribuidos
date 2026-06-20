@@ -86,17 +86,19 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 	}
 
 	node := &FilterAndSplitter{
-		id:               config.Id,
-		startDate:        config.StartDate,
-		endDate:          config.EndDate,
-		outputAmount:     config.OutputMiddlewareAmount,
-		prevNodeAmt:      config.FilterCurrencyAmt,
-		hasher:           shard.New(config.OutputMiddlewareAmount),
-		queryID:          config.QueryID,
-		inputMiddleware:  inputMiddleware,
-		outputMiddleware: outputMiddleware,
-		checkpoint:       ckpt,
-		states:           states,
+		id:                   config.Id,
+		startDate:            config.StartDate,
+		endDate:              config.EndDate,
+		outputAmount:         config.OutputMiddlewareAmount,
+		prevNodeAmt:          config.FilterCurrencyAmt,
+		hasher:               shard.New(config.OutputMiddlewareAmount),
+		queryID:              config.QueryID,
+		inputMiddleware:      inputMiddleware,
+		outputMiddleware:     outputMiddleware,
+		checkpoint:           ckpt,
+		states:               states,
+		persistBatchSize:     config.PersistBatchSize,
+		persistFlushInterval: config.PersistFlushInterval,
 	}
 
 	return node, nil
@@ -105,8 +107,8 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 func (f *FilterAndSplitter) Run() {
 	defer f.close()
 
-	if err := f.inputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
-		f.handleInput(msg, ack, nack)
+	if err := f.inputMiddleware.StartConsumingBatch(f.persistBatchSize, f.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		f.handleBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
 	}
@@ -131,44 +133,57 @@ func (f *FilterAndSplitter) close() {
 	}
 }
 
-func (f *FilterAndSplitter) handleInput(msg newmiddleware.Message, ack func(), nack func()) {
-	input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
-	if err != nil {
-		slog.Error("decode failed", "err", err)
-		ack()
-		return
-	}
+func (f *FilterAndSplitter) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
+	modified := make(map[int]*clientState)
+	completed := make(map[int]struct{})
 
-	clientID := input.ClientID
-	state := f.states.For(clientID)
-	tracker := state.transferTracker
+	for _, msg := range msgs {
+		input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
+		if err != nil {
+			slog.Error("decode failed", "err", err)
+			continue
+		}
 
-	if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
-		slog.Warn("duplicate", "clientID", input.ClientID, "senderID", input.SenderID, "seq", input.Seq)
-		ack()
-		return
-	}
+		clientID := input.ClientID
+		state := f.states.For(clientID)
+		tracker := state.transferTracker
 
-	if input.EOF {
-		tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
-	} else {
-		tracker.RegisterBatch(int(input.SenderID))
-		if err := f.processBatch(input, state); err != nil {
-			slog.Error("process batch failed", "err", err)
-			nack()
-			f.stopConsuming()
-			return
+		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
+			continue
+		}
+
+		if input.EOF {
+			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+		} else {
+			tracker.RegisterBatch(int(input.SenderID))
+			if err := f.processBatch(input, state); err != nil {
+				slog.Error("process batch failed", "err", err)
+				nack()
+				f.stopConsuming()
+				return
+			}
+		}
+
+		tracker.Claim(int(input.SenderID), input.Seq)
+		modified[clientID] = state
+
+		if tracker.IsComplete(f.prevNodeAmt) {
+			if err := f.finishTransfersStep(clientID, state); err != nil {
+				slog.Error("finishing transfers step failed", "err", err)
+				nack()
+				f.stopConsuming()
+				return
+			}
+			completed[clientID] = struct{}{}
 		}
 	}
 
-	tracker.Claim(int(input.SenderID), input.Seq)
-
-	if tracker.IsComplete(f.prevNodeAmt) {
-		if err := f.finishTransfersStep(clientID, state); err != nil {
-			slog.Error("finishing transfers step failed", "err", err)
-			nack()
-			f.stopConsuming()
-			return
+	for clientID, state := range modified {
+		if _, done := completed[clientID]; done {
+			f.states.Delete(clientID)
+			f.checkpoint.DeleteClient(clientID)
+			continue
 		}
 		if err := f.checkpoint.SaveClient(clientID, state); err != nil {
 			slog.Error("persist failed, stopping", "err", err)
@@ -176,18 +191,6 @@ func (f *FilterAndSplitter) handleInput(msg newmiddleware.Message, ack func(), n
 			f.stopConsuming()
 			return
 		}
-		ack()
-
-		f.states.Delete(clientID)
-		f.checkpoint.DeleteClient(clientID)
-		return
-	}
-
-	if err := f.checkpoint.SaveClient(clientID, state); err != nil {
-		slog.Error("persist failed, stopping", "err", err)
-		nack()
-		f.stopConsuming()
-		return
 	}
 
 	ack()
