@@ -28,4 +28,4 @@ filter_date_and_payment: 2
 filter_amt_q5: 2
 
 # Tolerancia a fallas:
-watchdogs: 3
+watchdogs: 0

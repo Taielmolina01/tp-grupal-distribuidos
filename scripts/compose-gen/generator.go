@@ -404,8 +404,7 @@ func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - INPUT_ROUTING_KEYS=Q4_filtered_shard-%d\n", i)
 		b.WriteString("      - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00\n")
 		b.WriteString("      - QUERY_ID=4\n")
-		b.WriteString("      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin\n")
-		b.WriteString("      - SEQ_STORE_QUEUE=Q4_filter_splitter_seqstore\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_filter_and_splitter_%d.bin\n", i)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}

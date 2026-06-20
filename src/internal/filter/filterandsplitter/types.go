@@ -2,6 +2,7 @@ package filterandsplitter
 
 import (
 	"time"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
@@ -27,7 +28,8 @@ type FilterAndSplitterConfig struct {
 	InputMiddlewareQueue string
 	InputRoutingKeys     []string
 
-	QueryID uint8
+	QueryID     uint8
+	PersistPath string
 }
 
 type FilterAndSplitter struct {
@@ -41,7 +43,8 @@ type FilterAndSplitter struct {
 	inputMiddleware  middleware.Middleware
 	outputMiddleware newmiddleware.Middleware
 
-	queryID uint8
+	queryID    uint8
+	checkpoint *checkpoint.Checkpoint[clientState]
 
 	states statemap.StateMap[clientState]
 }

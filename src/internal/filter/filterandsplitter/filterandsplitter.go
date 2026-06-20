@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/splittransfer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
@@ -64,6 +65,26 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
+	ckpt, err := checkpoint.New(config.PersistPath, marshalClientState, unmarshalClientState)
+	if err != nil {
+		return nil, fmt.Errorf("creating checkpoint: %w", err)
+	}
+
+	recovered, err := ckpt.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading checkpoint: %w", err)
+	}
+
+	states := statemap.New(func() *clientState {
+		return &clientState{
+			transferTracker: sendertracker.New(10_000_000),
+			outputTracker:   outputtracker.New(),
+		}
+	})
+	for clientID, state := range recovered {
+		states.Set(clientID, state)
+	}
+
 	node := &FilterAndSplitter{
 		id:               config.Id,
 		startDate:        config.StartDate,
@@ -73,12 +94,8 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		queryID:          config.QueryID,
 		inputMiddleware:  inputMiddleware,
 		outputMiddleware: outputMiddleware,
-		states: statemap.New(func() *clientState {
-			return &clientState{
-				transferTracker: sendertracker.New(10_000_000),
-				outputTracker:   outputtracker.New(),
-			}
-		}),
+		checkpoint:       ckpt,
+		states:           states,
 	}
 
 	return node, nil
@@ -121,8 +138,6 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 		return
 	}
 
-	slog.Info("MSG", "seq", input.Seq, "EOF", input.EOF)
-
 	clientID := input.ClientID
 	state := f.states.For(clientID)
 	tracker := state.transferTracker
@@ -147,7 +162,7 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 
 	tracker.Claim(int(input.SenderID), input.Seq)
 
-	//PREV NODE AMT es la cantidad de nodos del stage anterior xq cada uno manda su eof ahora
+	//TODO: PREV NODE AMT es la cantidad de nodos del stage anterior xq cada uno manda su eof ahora
 
 	var prevNodeAmt = 2
 	if tracker.IsComplete(prevNodeAmt) {
@@ -157,17 +172,25 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 			f.stopConsuming()
 			return
 		}
+		if err := f.checkpoint.SaveClient(clientID, state); err != nil {
+			slog.Error("persist failed, stopping", "err", err)
+			nack()
+			f.stopConsuming()
+			return
+		}
+		ack()
 
-		slog.Info("Liberando cliente")
 		f.states.Delete(clientID)
+		f.checkpoint.DeleteClient(clientID)
+		return
 	}
 
-	// // if err := h.persist(); err != nil {
-	// // 	slog.Error("persist failed, stopping", "err", err)
-	// // 	nack()
-	// //	j.StopConsuming()
-	// // 	return
-	// // }
+	if err := f.checkpoint.SaveClient(clientID, state); err != nil {
+		slog.Error("persist failed, stopping", "err", err)
+		nack()
+		f.stopConsuming()
+		return
+	}
 
 	ack()
 }

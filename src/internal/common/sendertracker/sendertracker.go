@@ -71,14 +71,12 @@ func (t *SenderTracker) GetMsgCount() uint32 {
 }
 
 func (t *SenderTracker) IsComplete(expectedSenders int) bool {
-	slog.Info("Is Complete?", "len(t.eofSet)", len(t.eofSet), "expectedSenders", expectedSenders)
 	if len(t.eofSet) < expectedSenders {
-		slog.Info("Is Complete? FALSE")
 		return false
 	}
 	for senderID, exp := range t.expected {
 		if t.msgCount[senderID] < exp {
-			slog.Info("Is Complete? FALSE 2")
+			slog.Info("Is Complete? FALSE 2", "msgCount", t.msgCount[senderID], "exp", exp)
 			return false
 		}
 	}
