@@ -1,0 +1,46 @@
+src/internal/filter/filterandsplitter/types.go
+  s_4ac499d9302c7e::t_f4cd6694298521 46-47
+  s_4ac499d9302c7e::t_361fdc70a199f8 5
+  s_4ac499d9302c7e::t_966cefef3a09b1 31-32
+src/internal/filter/filterandsplitter/persist.go
+  s_4ac499d9302c7e::t_88b0be498f0487 1-35
+src/internal/common/sendertracker/sendertracker.go
+  h_3c9b41718876fe 79
+src/cmd/filterandsplitter/config.go
+  s_4ac499d9302c7e::t_b8b05179a2351f 62-66,80
+scripts/compose-gen/generator.go
+  s_4ac499d9302c7e::t_16c21918c1cd77 407
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_4ac499d9302c7e::t_9f79628a4151f8 175-181
+  s_4ac499d9302c7e::t_a24552b89d5489 184-185,188
+  s_4ac499d9302c7e::t_0a646d624f4291 189-193
+  s_4ac499d9302c7e::t_d8b10457d18c09 72-87,97-98
+  s_4ac499d9302c7e::t_af7bd12389be91 9
+  h_3c9b41718876fe 165
+  s_4ac499d9302c7e::t_098648c2134305 68-71
+src/internal/common/checkpoint/checkpoint.go
+  s_4ac499d9302c7e::t_93d8302028cefb 1-6,8,10-12,14-17,50-51,56-59,61,63-64,76,78-85,90
+  s_4ac499d9302c7e::t_26c3550760e4f6 7,9,13,18-29,45-49,52-55,60,62,65-75,77,86-89
+  s_4ac499d9302c7e::t_5993a1ac47d634 30-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "d1c09b2478c80e5f8cf060bd44282d395724dec0",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_4ac499d9302c7e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1b4a2fa-4219-41eb-8cf4-07a716b6c906",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
