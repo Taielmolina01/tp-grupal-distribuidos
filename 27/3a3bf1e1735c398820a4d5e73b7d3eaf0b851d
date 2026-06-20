@@ -1,0 +1,33 @@
+src/internal/acumaccounts/persist.go
+  s_170690cb63d1f5::t_e587da609ce5ad 1-66
+scripts/compose-gen/generator.go
+  s_170690cb63d1f5::t_84bd92b283cddd 461-463
+src/cmd/acumaccounts/config.go
+  s_170690cb63d1f5::t_b7a4b345a3fa0a 7,58-72,83-85
+src/internal/acumaccounts/types.go
+  s_170690cb63d1f5::t_1b16659530fb35 4-6,9,23-28
+src/internal/acumaccounts/acumaccounts.go
+  h_3c9b41718876fe 195
+  s_170690cb63d1f5::t_5bb5b9bffaeb92 10-11,13,17,19,38-41,45-47,92-115,117-127,134-135,146-147,149,164-166,168-173,175-181,184-194,196-207,209-220,224-234,237-238,242
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "273a3bf1e1735c398820a4d5e73b7d3eaf0b851d",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_170690cb63d1f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aa7f0277-688d-4fcf-8e1b-7bdd84381bb9",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
