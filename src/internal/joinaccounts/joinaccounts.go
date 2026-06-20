@@ -206,6 +206,7 @@ func (j *JoinAccounts) handleTransferInput(msg newmiddleware.Message, ack func()
 	tracker.Claim(int(input.SenderID), input.Seq)
 
 	if tracker.IsComplete(j.inputMiddlewareAmt) {
+		slog.Info("TRANSFERS COMPLETE")
 		if err := j.finishTransfersStep(clientID, state); err != nil {
 			slog.Error("finishing transfers step failed", "err", err)
 			nack()
@@ -352,6 +353,8 @@ func (j *JoinAccounts) handleQualifiedInput(msg newmiddleware.Message, ack func(
 	tracker.Claim(int(input.SenderID), input.Seq)
 
 	if tracker.IsComplete(int(j.peerAmount)) {
+		slog.Info("QUALIFIED COMPLETE")
+
 		if err := j.finishQualifiedStep(clientID, state); err != nil {
 			slog.Error("finishing transfers step failed", "err", err)
 			nack()
