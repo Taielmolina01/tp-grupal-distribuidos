@@ -52,7 +52,7 @@ func (b *baseMiddleware) StartConsuming(callbackFunc func(msg Message, ack func(
 					}
 				},
 				func() {
-					if err := d.Nack(false, false); err != nil {
+					if err := d.Nack(false, true); err != nil {
 						slog.Error("nack failed", "err", err)
 					}
 				},

@@ -54,10 +54,7 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		return filterandsplitter.FilterAndSplitterConfig{}, err
 	}
 
-	inputRoutingKeys := []string{}
-	if raw := os.Getenv("INPUT_ROUTING_KEYS"); raw != "" {
-		inputRoutingKeys = strings.Split(raw, ",")
-	}
+	inputShardKey := os.Getenv("INPUT_ROUTING_KEYS")
 
 	persistPath := os.Getenv("PERSIST_PATH")
 	if persistPath == "" {
@@ -75,7 +72,7 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		MomPort:                momPort,
 		InputMiddlewareName:    os.Getenv("INPUT_EXCHANGE"),
 		InputMiddlewareQueue:   os.Getenv("INPUT_QUEUE"),
-		InputRoutingKeys:       inputRoutingKeys,
+		InputShardKey:          inputShardKey,
 		QueryID:                uint8(queryID),
 		PersistPath:            persistPath,
 	}, nil

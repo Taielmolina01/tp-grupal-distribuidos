@@ -3,7 +3,6 @@ package filterandsplitter
 import (
 	"time"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -26,7 +25,7 @@ type FilterAndSplitterConfig struct {
 
 	InputMiddlewareName  string
 	InputMiddlewareQueue string
-	InputRoutingKeys     []string
+	InputShardKey        string
 
 	QueryID     uint8
 	PersistPath string
@@ -41,7 +40,7 @@ type FilterAndSplitter struct {
 
 	hasher shard.Hasher
 
-	inputMiddleware  middleware.Middleware
+	inputMiddleware  newmiddleware.Middleware
 	outputMiddleware newmiddleware.Middleware
 
 	queryID    uint8

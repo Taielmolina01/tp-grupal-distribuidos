@@ -26,11 +26,10 @@ const (
 )
 
 func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error) {
-	oldConnSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware  middleware.Middleware
+		inputMiddleware  newmiddleware.Middleware
 		outputMiddleware newmiddleware.Middleware
 		err              error
 	)
@@ -50,17 +49,14 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		}
 	}()
 
-	inputMiddleware, err = middleware.CreateExchangeMiddleware(
-		config.InputMiddlewareName,
-		config.InputMiddlewareQueue,
-		config.InputRoutingKeys,
-		oldConnSettings,
+	inputMiddleware, err = newmiddleware.NewShardedMiddleware(
+		connSettings, config.InputMiddlewareName, config.InputMiddlewareQueue, config.InputShardKey,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewShardedMiddleware(newConnSettings, config.OutputMiddlewarePrefix, "", "")
+	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
@@ -83,6 +79,11 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 	})
 	for clientID, state := range recovered {
 		states.Set(clientID, state)
+		slog.Info("DEBUG recovered client state",
+			"clientID", clientID,
+			"processed", state.transferTracker.GetMsgCount(),
+			"expected", state.transferTracker.TotalInput(),
+		)
 	}
 
 	node := &FilterAndSplitter{
@@ -105,7 +106,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 func (f *FilterAndSplitter) Run() {
 	defer f.close()
 
-	if err := f.inputMiddleware.StartConsuming(func(msg middleware.Message, ack, nack func()) {
+	if err := f.inputMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
 		f.handleInput(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
@@ -131,7 +132,7 @@ func (f *FilterAndSplitter) close() {
 	}
 }
 
-func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack func()) {
+func (f *FilterAndSplitter) handleInput(msg newmiddleware.Message, ack func(), nack func()) {
 	input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
 	if err != nil {
 		slog.Error("decode failed", "err", err)
