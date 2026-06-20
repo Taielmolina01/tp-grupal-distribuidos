@@ -15,7 +15,10 @@ type Compose struct {
 }
 
 func ListServices(path string) ([]string, error) {
-	data, _ := os.ReadFile(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
 	var c Compose
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return nil, err
@@ -39,8 +42,5 @@ func restartContainers(containers []string, amount int) {
 }
 
 func DockerRestart(node string) error {
-	if err := exec.Command("docker", "stop", node).Run(); err != nil {
-		return err
-	}
 	return exec.Command("docker", "restart", node).Run()
 }
