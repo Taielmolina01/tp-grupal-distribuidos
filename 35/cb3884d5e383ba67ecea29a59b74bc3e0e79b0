@@ -1,0 +1,35 @@
+scripts/compose-gen/generator.go
+  s_170690cb63d1f5::t_89d06378470b44 408-409
+docker-compose.yaml
+  h_3c9b41718876fe 358-359,387-388,418,449,476,503
+src/internal/filter/filterandsplitter/types.go
+  s_170690cb63d1f5::t_186d4805eed26b 32-34,53-55
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_170690cb63d1f5::t_c1eb9da3e1fd94 136-138,140-145,147-149,151-165,168-169,171-186
+  s_170690cb63d1f5::t_8299037fff1f0f 89-101
+  s_170690cb63d1f5::t_3d84513458e085 110-111
+src/cmd/filterandsplitter/config.go
+  s_170690cb63d1f5::t_6128d21e5e87da 64-73
+  s_170690cb63d1f5::t_5929241d6ce8fc 86-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "35cb3884d5e383ba67ecea29a59b74bc3e0e79b0",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_170690cb63d1f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aa7f0277-688d-4fcf-8e1b-7bdd84381bb9",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
