@@ -19,7 +19,7 @@ type FilterAndSplitterConfig struct {
 	OutputMiddlewareAmount int
 	OutputMiddlewarePrefix string
 
-	FilterAndSpliterAmount int
+	FilterCurrencyAmt int
 
 	MomHost string
 	MomPort int
@@ -37,6 +37,7 @@ type FilterAndSplitter struct {
 	startDate    time.Time
 	endDate      time.Time
 	outputAmount int
+	prevNodeAmt  int
 
 	hasher shard.Hasher
 

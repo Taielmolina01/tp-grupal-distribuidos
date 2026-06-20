@@ -70,7 +70,7 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		EndDate:                endDate,
 		OutputMiddlewareAmount: outputAmount,
 		OutputMiddlewarePrefix: outputPrefix,
-		FilterAndSpliterAmount: filterAmount,
+		FilterCurrencyAmt: filterAmount,
 		MomHost:                momHost,
 		MomPort:                momPort,
 		InputMiddlewareName:    os.Getenv("INPUT_EXCHANGE"),

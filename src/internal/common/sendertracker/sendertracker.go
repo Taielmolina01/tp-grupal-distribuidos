@@ -24,10 +24,6 @@ func New(seqCapacity uint64) *SenderTracker {
 	}
 }
 
-func (t *SenderTracker) Clear() {
-
-}
-
 func (t *SenderTracker) IsDuplicate(senderID int, seq uint64) bool {
 	store, ok := t.seqStores[senderID]
 	if !ok {
@@ -46,6 +42,7 @@ func (t *SenderTracker) Claim(senderID int, seq uint64) {
 }
 
 func (t *SenderTracker) RegisterBatch(senderID int) uint64 {
+	//Esto lo podemos terminar moviendo al claim calculo, total se ejecutan juntos
 	t.msgCount[senderID]++
 	return t.msgCount[senderID]
 }
@@ -69,6 +66,10 @@ func (t *SenderTracker) GetMsgCount() uint32 {
 		acum += uint32(int(v)) //ARREGLAR ESTO ACTUALIZANDO EL WIRE
 	}
 	return acum
+}
+
+func (t *SenderTracker) GetMsgCountByKey() map[int]uint64 {
+	return t.msgCount
 }
 
 func (t *SenderTracker) IsComplete(expectedSenders int) bool {

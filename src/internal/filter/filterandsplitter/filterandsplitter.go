@@ -90,6 +90,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		startDate:        config.StartDate,
 		endDate:          config.EndDate,
 		outputAmount:     config.OutputMiddlewareAmount,
+		prevNodeAmt:      config.FilterCurrencyAmt,
 		hasher:           shard.New(config.OutputMiddlewareAmount),
 		queryID:          config.QueryID,
 		inputMiddleware:  inputMiddleware,
@@ -162,10 +163,7 @@ func (f *FilterAndSplitter) handleInput(msg middleware.Message, ack func(), nack
 
 	tracker.Claim(int(input.SenderID), input.Seq)
 
-	//TODO: PREV NODE AMT es la cantidad de nodos del stage anterior xq cada uno manda su eof ahora
-
-	var prevNodeAmt = 2
-	if tracker.IsComplete(prevNodeAmt) {
+	if tracker.IsComplete(f.prevNodeAmt) {
 		if err := f.finishTransfersStep(clientID, state); err != nil {
 			slog.Error("finishing transfers step failed", "err", err)
 			nack()
