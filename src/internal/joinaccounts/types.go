@@ -3,6 +3,7 @@ package joinaccounts
 import (
 	"sync"
 	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
@@ -29,6 +30,22 @@ type JoinAccountsConfig struct {
 	MaxBatchSize       int
 	MaxBatchBytes      int
 	InputMiddlewareAmt int
+
+	PersistPath string
+}
+
+type transferPartialState struct {
+	transferTracker        *sendertracker.SenderTracker
+	qualifiedOutputTracker *outputtracker.OutputTracker
+	left                   map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}
+	right                  map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}
+}
+
+type qualifiedPartialState struct {
+	qualifiedTracker   *sendertracker.SenderTracker
+	chainOutputTracker *outputtracker.OutputTracker
+	qualifyingLeft     map[account.AccountIdentifier]struct{}
+	qualifyingRight    map[account.AccountIdentifier]struct{}
 }
 
 type clientState struct {
@@ -65,6 +82,9 @@ type JoinAccounts struct {
 	maxBatchBytes int
 
 	states statemap.StateMap[clientState]
+
+	transferCheckpoint  *checkpoint.Checkpoint[transferPartialState]
+	qualifiedCheckpoint *checkpoint.Checkpoint[qualifiedPartialState]
 
 	mu      sync.Mutex
 	queryID int

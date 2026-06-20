@@ -432,6 +432,7 @@ func writeJoinAccountsQ4(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - QUERY_ID=4\n")
 		b.WriteString("      - MAX_BATCH_SIZE=500\n")
 		b.WriteString("      - MAX_BATCH_BYTES=65536\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_join_accounts_%d\n", i)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}

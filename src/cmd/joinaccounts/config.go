@@ -74,6 +74,11 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		return joinaccounts.JoinAccountsConfig{}, errors.New("INPUT_MIDDLEWARE_AMT environment variable is required and must be a number")
 	}
 
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("PERSIST_PATH environment variable is required")
+	}
+
 	return joinaccounts.JoinAccountsConfig{
 		Id:                     id,
 		OutputMiddlewareAmount: outputAmount,
@@ -88,5 +93,6 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		MaxBatchSize:           maxBatchSize,
 		MaxBatchBytes:          maxBatchBytes,
 		InputMiddlewareAmt:     inputMiddlewareAmt,
+		PersistPath:            persistPath,
 	}, nil
 }
