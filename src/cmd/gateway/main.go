@@ -23,11 +23,6 @@ func loadConfig() (gateway.GatewayConfig, error) {
 
 	accountQueueList := splitter.Split(accountQueues, QUEUES_SEPARATOR)
 
-	transfersExchange := os.Getenv("TRANSFERS_EXCHANGE")
-	if transfersExchange == "" {
-		return gateway.GatewayConfig{}, errors.New("TRANSFERS_EXCHANGE environment variable is required")
-	}
-
 	transfersClusters, err := loadTransfersClusters()
 	if err != nil {
 		return gateway.GatewayConfig{}, err
@@ -94,15 +89,14 @@ func loadConfig() (gateway.GatewayConfig, error) {
 
 	return gateway.GatewayConfig{
 		AccountQueues:     accountQueueList,
-		TransfersExchange: transfersExchange,
 		TransfersClusters: transfersClusters,
 		ResultsQueue:      resultsQueue,
-		ServerHost:           serverHost,
-		ServerPort:           serverPort,
-		MomHost:              momHost,
-		MomPort:              momPort,
-		MaxBatchSize:         maxBatchSize,
-		QueryEOFsExpected:    queryEOFsExpected,
+		ServerHost:        serverHost,
+		ServerPort:        serverPort,
+		MomHost:           momHost,
+		MomPort:           momPort,
+		MaxBatchSize:      maxBatchSize,
+		QueryEOFsExpected: queryEOFsExpected,
 	}, nil
 }
 

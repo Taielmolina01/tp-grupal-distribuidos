@@ -1,10 +1,11 @@
 package commonfilter
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
+	"strconv"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
@@ -14,7 +15,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
-	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -23,11 +23,10 @@ func NewFilter[T any, O any](
 	config filter.FilterConfig,
 	filterFunction func(T) bool,
 	inputToOutput func(T) O,
-	routeRecord func(clientID int, o O) []string,
+	shardKeys func(O) []string,
 	inputCodec wire.Codec[T],
 	outputCodec wire.Codec[O],
-	outputMiddleware newmiddleware.Middleware,
-	router shard.OutputRouter,
+	outputClusters []OutputCluster,
 ) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
@@ -42,14 +41,18 @@ func NewFilter[T any, O any](
 					slog.Error("While closing input exchange after construction failure", "err", err)
 				}
 			}
-			if err := outputMiddleware.Close(); err != nil {
-				slog.Error("While closing output middleware after construction failure", "err", err)
+			for _, cl := range outputClusters {
+				if err := cl.Middleware.Close(); err != nil {
+					slog.Error("While closing output cluster middleware after construction failure", "err", err)
+				}
 			}
 		}
 	}()
 
+	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	shardKey := fmt.Sprintf("shard-%d", config.Id)
 	inputExchange, constructErr = newmiddleware.NewShardedMiddleware(
-		connSettings, config.InputExchange, config.InputQueue, config.InputRoutingKeys[0],
+		connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey,
 	)
 	if constructErr != nil {
 		return nil, constructErr
@@ -84,12 +87,11 @@ func NewFilter[T any, O any](
 		filterType:           config.Type,
 		filterFunction:       filterFunction,
 		outputTransform:      inputToOutput,
-		routeRecord:          routeRecord,
+		shardKeys:            shardKeys,
 		inputCodec:           inputCodec,
 		outputCodec:          outputCodec,
 		inputExchange:        inputExchange,
-		outputExchange:       outputMiddleware,
-		router:               router,
+		outputClusters:       outputClusters,
 		inputAmount:          config.FilterAmount,
 		states:               states,
 		checkpoint:           ckpt,
@@ -126,8 +128,10 @@ func (f *Filter[T, O]) close() {
 	if err := f.inputExchange.Close(); err != nil {
 		slog.Error("While closing input exchange", "err", err)
 	}
-	if err := f.outputExchange.Close(); err != nil {
-		slog.Error("While closing output exchange", "err", err)
+	for _, cluster := range f.outputClusters {
+		if err := cluster.Middleware.Close(); err != nil {
+			slog.Error("While closing output cluster middleware", "err", err)
+		}
 	}
 }
 
@@ -195,55 +199,48 @@ func (f *Filter[T, O]) handleBatch(msgs []newmiddleware.Message, ack func(), nac
 }
 
 func (f *Filter[T, O]) processBatch(input batch.Msg[T], state *clientState) error {
-	outputs := make([]O, 0)
+	type clusterKey struct {
+		index int
+		rk    string
+	}
+	byCluster := make(map[clusterKey][]O)
+
 	for _, record := range input.Records {
-		if f.filterFunction(record) {
-			outputs = append(outputs, f.outputTransform(record))
+		if !f.filterFunction(record) {
+			continue
+		}
+		o := f.outputTransform(record)
+		keys := f.shardKeys(o)
+		for index, cluster := range f.outputClusters {
+			rk := fmt.Sprintf("shard-%d", cluster.Hasher.ShardFor(input.ClientID, keys...))
+			ck := clusterKey{index, rk}
+			byCluster[ck] = append(byCluster[ck], o)
 		}
 	}
 
-	if len(outputs) == 0 {
-		return nil
-	}
-
-	byKeys := make(map[string]struct {
-		keys    []string
-		outputs []O
-	})
-	for _, o := range outputs {
-		keys := f.routeRecord(input.ClientID, o)
-		mapKey := strings.Join(keys, "|")
-		entry := byKeys[mapKey]
-		entry.keys = keys
-		entry.outputs = append(entry.outputs, o)
-		byKeys[mapKey] = entry
-	}
-
-	for _, entry := range byKeys {
-		body := batch.Write(input.ClientID, f.queryId, uint8(f.id), input.Seq, entry.outputs, f.outputCodec)
-		if err := f.outputExchange.Send(newmiddleware.Message{Body: body, RoutingKeys: entry.keys}); err != nil {
+	for ck, group := range byCluster {
+		cluster := f.outputClusters[ck.index]
+		body := batch.Write(input.ClientID, f.queryId, uint8(f.id), input.Seq, group, f.outputCodec)
+		if err := cluster.Middleware.Send(newmiddleware.Message{Body: body, RoutingKey: ck.rk}); err != nil {
 			return err
 		}
-		for _, k := range entry.keys {
-			state.outputTracker.RegisterBatch(k)
-		}
+		state.outputTracker.RegisterBatch(fmt.Sprintf("%d_%s", ck.index, ck.rk))
 	}
 	return nil
 }
 
 func (f *Filter[T, O]) finishStep(clientID int, state *clientState) error {
 	eofSeq := state.tracker.GetEOFSeq()
-	var sendErr error
-	for _, rk := range f.router.AllRoutingKeys() {
-		if sendErr != nil {
-			break
-		}
-		total := state.outputTracker.CountFor(rk)
-		eofBody := batch.WriteEOF(clientID, f.queryId, uint8(f.id), eofSeq, uint32(total))
-		if err := f.outputExchange.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
-			slog.Error("finish step: send EOF failed", "routingKey", rk, "err", err)
-			sendErr = err
+	for ci, cluster := range f.outputClusters {
+		for i := range cluster.Hasher.TotalShards() {
+			rk := fmt.Sprintf("shard-%d", i)
+			total := state.outputTracker.CountFor(fmt.Sprintf("%d_%s", ci, rk))
+			eofBody := batch.WriteEOF(clientID, f.queryId, uint8(f.id), eofSeq, uint32(total))
+			if err := cluster.Middleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+				slog.Error("finish step: send EOF failed", "cluster", ci, "routingKey", rk, "err", err)
+				return err
+			}
 		}
 	}
-	return sendErr
+	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
@@ -43,19 +44,21 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (worker.Worker, error)
 		}
 	}()
 
+	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	shardKey := fmt.Sprintf("shard-%d", config.Id)
 	inputExchange, err = newmiddleware.NewShardedMiddleware(
-		connSettings, config.InputExchange, config.InputQueue, config.InputRoutingKeys[0],
+		connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	avgMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.AvgOutputExchange, "", "")
+	avgMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.AvgOutputMiddlewarePrefix, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating avg output middleware: %w", err)
 	}
 
-	filterMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.FilterOutputExchange, "", "")
+	filterMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.FilterOutputMiddlewarePrefix, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating filter output middleware: %w", err)
 	}

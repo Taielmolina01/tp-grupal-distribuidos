@@ -34,15 +34,10 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	inputQueue := os.Getenv("INPUT_QUEUE")
-	inputExchange := os.Getenv("INPUT_EXCHANGE")
-	inputRoutingKeysStr := os.Getenv("INPUT_ROUTING_KEYS")
-	inputRoutingKeys := []string{}
-	if inputRoutingKeysStr != "" {
-		inputRoutingKeys = splitter.Split(inputRoutingKeysStr, ",")
+	inputMiddlewarePrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
+	if inputMiddlewarePrefix == "" {
+		return filter.FilterConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
-
-	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
 
 	filterAmountInt, err := strconv.Atoi(os.Getenv("FILTER_AMOUNT"))
 	if err != nil {
@@ -60,16 +55,13 @@ func loadConfig() (filter.FilterConfig, error) {
 	}
 
 	config := filter.FilterConfig{
-		Id:               id,
-		MomHost:          momHost,
-		MomPort:          momPort,
-		InputQueue:       inputQueue,
-		InputExchange:    inputExchange,
-		InputRoutingKeys: inputRoutingKeys,
-		OutputExchange:   outputExchange,
-		FilterAmount:     filterAmountInt,
-		QueryId:          uint8(queryId),
-		OutputClusters:   outputClusters,
+		Id:                    id,
+		MomHost:               momHost,
+		MomPort:               momPort,
+		InputMiddlewarePrefix: inputMiddlewarePrefix,
+		FilterAmount:          filterAmountInt,
+		QueryId:               uint8(queryId),
+		OutputClusters:        outputClusters,
 	}
 
 	if err := loadFilterTypeConfig(&config); err != nil {

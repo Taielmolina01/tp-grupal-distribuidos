@@ -13,6 +13,11 @@ import (
 	"tp-grupal-distribuidos/internal/common/statemap"
 )
 
+type OutputCluster struct {
+	Middleware newmiddleware.Middleware
+	Hasher     shard.Hasher
+}
+
 type Filter[T any, O any] struct {
 	id          uint32
 	queryId     uint8
@@ -21,13 +26,12 @@ type Filter[T any, O any] struct {
 
 	filterFunction  func(T) bool
 	outputTransform func(T) O
-	routeRecord     func(clientID int, o O) []string
+	shardKeys       func(O) []string
 	inputCodec      wire.Codec[T]
 	outputCodec     wire.Codec[O]
 
 	inputExchange  newmiddleware.Middleware
-	outputExchange newmiddleware.Middleware
-	router         shard.OutputRouter
+	outputClusters []OutputCluster
 
 	states               statemap.StateMap[clientState]
 	checkpoint           *checkpoint.Checkpoint[clientState]

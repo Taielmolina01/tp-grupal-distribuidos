@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
@@ -48,8 +49,10 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		}
 	}()
 
+	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	shardKey := fmt.Sprintf("shard-%d", config.Id)
 	inputMiddleware, err = newmiddleware.NewShardedMiddleware(
-		connSettings, config.InputMiddlewareName, config.InputMiddlewareQueue, config.InputShardKey,
+		connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)

@@ -17,6 +17,10 @@ func CreateAmountFilter(config filter.FilterConfig) (worker.Worker, error) {
 	if err != nil {
 		return nil, err
 	}
+	clusters := []commonfilter.OutputCluster{{
+		Middleware: outputMiddleware,
+		Hasher:     shard.New(1),
+	}}
 	return commonfilter.NewFilter(
 		config,
 		func(t transfer.TransferAfterCurrency) bool {
@@ -31,10 +35,9 @@ func CreateAmountFilter(config filter.FilterConfig) (worker.Worker, error) {
 				Amount:      t.AmountPaid,
 			}
 		},
-		func(_ int, _ queryresult.Query1Result) []string { return []string{""} },
+		func(queryresult.Query1Result) []string { return nil },
 		records.TransferAfterCurrencyCodec,
 		records.Query1ResultCodec,
-		outputMiddleware,
-		shard.QueueRouter{},
+		clusters,
 	)
 }

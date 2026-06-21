@@ -18,14 +18,12 @@ type DateRangeSplitterConfig struct {
 	MomHost string
 	MomPort int
 
-	InputExchange    string
-	InputQueue       string
-	InputRoutingKeys []string
+	InputMiddlewarePrefix string
 
-	AvgOutputExchange    string
-	AvgOutputAmount      int
-	FilterOutputExchange string
-	FilterOutputAmount   int
+	AvgOutputMiddlewarePrefix    string
+	AvgOutputAmount              int
+	FilterOutputMiddlewarePrefix string
+	FilterOutputAmount           int
 
 	QueryID uint8
 

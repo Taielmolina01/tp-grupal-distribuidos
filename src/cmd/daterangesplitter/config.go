@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"tp-grupal-distribuidos/internal/common/splitter"
 	"tp-grupal-distribuidos/internal/daterangesplitter"
 )
 
@@ -26,25 +25,23 @@ func loadConfig() (daterangesplitter.DateRangeSplitterConfig, error) {
 		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	inputExchange := os.Getenv("INPUT_EXCHANGE")
-	inputQueue := os.Getenv("INPUT_QUEUE")
-	inputRoutingKeys := []string{}
-	if v := os.Getenv("INPUT_ROUTING_KEYS"); v != "" {
-		inputRoutingKeys = splitter.Split(v, ",")
+	inputMiddlewarePrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
+	if inputMiddlewarePrefix == "" {
+		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	avgOutputExchange := os.Getenv("AVG_OUTPUT_EXCHANGE")
-	if avgOutputExchange == "" {
-		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("AVG_OUTPUT_EXCHANGE environment variable is required")
+	avgOutputMiddlewarePrefix := os.Getenv("AVG_OUTPUT_MIDDLEWARE_PREFIX")
+	if avgOutputMiddlewarePrefix == "" {
+		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("AVG_OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 	avgOutputAmount, err := strconv.Atoi(os.Getenv("AVG_OUTPUT_AMOUNT"))
 	if err != nil {
 		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("AVG_OUTPUT_AMOUNT environment variable is required and must be a number")
 	}
 
-	filterOutputExchange := os.Getenv("FILTER_OUTPUT_EXCHANGE")
-	if filterOutputExchange == "" {
-		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("FILTER_OUTPUT_EXCHANGE environment variable is required")
+	filterOutputMiddlewarePrefix := os.Getenv("FILTER_OUTPUT_MIDDLEWARE_PREFIX")
+	if filterOutputMiddlewarePrefix == "" {
+		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("FILTER_OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 	filterOutputAmount, err := strconv.Atoi(os.Getenv("FILTER_OUTPUT_AMOUNT"))
 	if err != nil {
@@ -75,24 +72,22 @@ func loadConfig() (daterangesplitter.DateRangeSplitterConfig, error) {
 	}
 
 	return daterangesplitter.DateRangeSplitterConfig{
-		Id:                   id,
-		FilterCurrencyAmt:    filterCurrencyAmt,
-		MomHost:              momHost,
-		MomPort:              momPort,
-		InputExchange:        inputExchange,
-		InputQueue:           inputQueue,
-		InputRoutingKeys:     inputRoutingKeys,
-		AvgOutputExchange:    avgOutputExchange,
-		AvgOutputAmount:      avgOutputAmount,
-		FilterOutputExchange: filterOutputExchange,
-		FilterOutputAmount:   filterOutputAmount,
-		QueryID:              uint8(queryID),
-		AvgPeriodStart:       time.Date(2022, 9, 1, 0, 0, 0, 0, time.UTC),
-		AvgPeriodEnd:         time.Date(2022, 9, 5, 23, 59, 59, 0, time.UTC),
-		FilterPeriodStart:    time.Date(2022, 9, 6, 0, 0, 0, 0, time.UTC),
-		FilterPeriodEnd:      time.Date(2022, 9, 15, 23, 59, 59, 0, time.UTC),
-		PersistPath:          persistPath,
-		PersistBatchSize:     persistBatchSize,
-		PersistFlushInterval: persistFlushInterval,
+		Id:                           id,
+		FilterCurrencyAmt:            filterCurrencyAmt,
+		MomHost:                      momHost,
+		MomPort:                      momPort,
+		InputMiddlewarePrefix:        inputMiddlewarePrefix,
+		AvgOutputMiddlewarePrefix:    avgOutputMiddlewarePrefix,
+		AvgOutputAmount:              avgOutputAmount,
+		FilterOutputMiddlewarePrefix: filterOutputMiddlewarePrefix,
+		FilterOutputAmount:           filterOutputAmount,
+		QueryID:                      uint8(queryID),
+		AvgPeriodStart:               time.Date(2022, 9, 1, 0, 0, 0, 0, time.UTC),
+		AvgPeriodEnd:                 time.Date(2022, 9, 5, 23, 59, 59, 0, time.UTC),
+		FilterPeriodStart:            time.Date(2022, 9, 6, 0, 0, 0, 0, time.UTC),
+		FilterPeriodEnd:              time.Date(2022, 9, 15, 23, 59, 59, 0, time.UTC),
+		PersistPath:                  persistPath,
+		PersistBatchSize:             persistBatchSize,
+		PersistFlushInterval:         persistFlushInterval,
 	}, nil
 }

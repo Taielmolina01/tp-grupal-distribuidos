@@ -27,14 +27,6 @@ func loadConfig() (filter.FilterConfig, error) {
 	}
 
 	inputQueue := os.Getenv("INPUT_QUEUE")
-	inputExchange := os.Getenv("INPUT_EXCHANGE")
-	inputRoutingKeysStr := os.Getenv("INPUT_ROUTING_KEYS")
-	inputRoutingKeys := []string{}
-	if inputRoutingKeysStr != "" {
-		inputRoutingKeys = splitter.Split(inputRoutingKeysStr, ",")
-	}
-
-	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
 
 	outputQueue := os.Getenv("OUTPUT_QUEUE")
 
@@ -77,9 +69,6 @@ func loadConfig() (filter.FilterConfig, error) {
 		MomHost:               momHost,
 		MomPort:               momPort,
 		InputQueue:            inputQueue,
-		InputExchange:         inputExchange,
-		InputRoutingKeys:      inputRoutingKeys,
-		OutputExchange:        outputExchange,
 		OutputQueue:           outputQueue,
 		OutputRoutingKeys:     outputRoutingKeys,
 		LeftInputQueue:        leftInputQueue,

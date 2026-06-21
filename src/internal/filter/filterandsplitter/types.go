@@ -23,9 +23,7 @@ type FilterAndSplitterConfig struct {
 	MomHost string
 	MomPort int
 
-	InputMiddlewareName  string
-	InputMiddlewareQueue string
-	InputShardKey        string
+	InputMiddlewarePrefix string
 
 	QueryID     uint8
 	PersistPath string

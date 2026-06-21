@@ -54,7 +54,10 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		return filterandsplitter.FilterAndSplitterConfig{}, err
 	}
 
-	inputShardKey := os.Getenv("INPUT_ROUTING_KEYS")
+	inputMiddlewarePrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
+	if inputMiddlewarePrefix == "" {
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
+	}
 
 	persistPath := os.Getenv("PERSIST_PATH")
 	if persistPath == "" {
@@ -80,9 +83,7 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		FilterCurrencyAmt:      filterAmount,
 		MomHost:                momHost,
 		MomPort:                momPort,
-		InputMiddlewareName:    os.Getenv("INPUT_EXCHANGE"),
-		InputMiddlewareQueue:   os.Getenv("INPUT_QUEUE"),
-		InputShardKey:          inputShardKey,
+		InputMiddlewarePrefix:  inputMiddlewarePrefix,
 		QueryID:                uint8(queryID),
 		PersistPath:            persistPath,
 		PersistBatchSize:       persistBatchSize,

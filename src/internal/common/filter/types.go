@@ -26,10 +26,8 @@ type FilterConfig struct {
 	Id                    int
 	MomHost               string
 	MomPort               int
-	InputExchange         string
+	InputMiddlewarePrefix string
 	InputQueue            string
-	InputRoutingKeys      []string
-	OutputExchange        string
 	OutputQueue           string
 	OutputRoutingKeys     []string
 	LeftInputQueue        string

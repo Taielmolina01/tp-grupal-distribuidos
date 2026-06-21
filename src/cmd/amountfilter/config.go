@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/filter"
-	"tp-grupal-distribuidos/internal/common/splitter"
 )
 
 func loadConfig() (filter.FilterConfig, error) {
@@ -26,12 +25,9 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	inputQueue := os.Getenv("INPUT_QUEUE")
-	inputExchange := os.Getenv("INPUT_EXCHANGE")
-	inputRoutingKeysStr := os.Getenv("INPUT_ROUTING_KEYS")
-	inputRoutingKeys := []string{}
-	if inputRoutingKeysStr != "" {
-		inputRoutingKeys = splitter.Split(inputRoutingKeysStr, ",")
+	inputMiddlewarePrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
+	if inputMiddlewarePrefix == "" {
+		return filter.FilterConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
 	outputQueue := os.Getenv("OUTPUT_QUEUE")
@@ -50,15 +46,13 @@ func loadConfig() (filter.FilterConfig, error) {
 	}
 
 	config := filter.FilterConfig{
-		Id:               id,
-		MomHost:          momHost,
-		MomPort:          momPort,
-		InputQueue:       inputQueue,
-		InputExchange:    inputExchange,
-		InputRoutingKeys: inputRoutingKeys,
-		OutputQueue:      outputQueue,
-		FilterAmount:     filterAmountInt,
-		QueryId:          uint8(queryId),
+		Id:                    id,
+		MomHost:               momHost,
+		MomPort:               momPort,
+		InputMiddlewarePrefix: inputMiddlewarePrefix,
+		OutputQueue:           outputQueue,
+		FilterAmount:          filterAmountInt,
+		QueryId:               uint8(queryId),
 	}
 
 	if err := loadFilterTypeConfig(&config); err != nil {

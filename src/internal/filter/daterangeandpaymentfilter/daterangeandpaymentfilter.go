@@ -1,6 +1,7 @@
 package daterangeandpaymentfilter
 
 import (
+	"log/slog"
 	"slices"
 	"strconv"
 
@@ -19,23 +20,35 @@ func isValidPaymentMethod(t transfer.Transfer, config filter.FilterConfig) bool 
 
 func CreateDateRangeAndPaymentMethod(config filter.FilterConfig) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-	outputMiddleware, err := newmiddleware.NewShardedMiddleware(connSettings, config.OutputExchange, "", "")
-	if err != nil {
-		return nil, err
+
+	clusters := make([]commonfilter.OutputCluster, 0, len(config.OutputClusters))
+	for _, c := range config.OutputClusters {
+		m, err := newmiddleware.NewShardedMiddleware(connSettings, c.Prefix, "", "")
+		if err != nil {
+			for _, cl := range clusters {
+				if closeErr := cl.Middleware.Close(); closeErr != nil {
+					slog.Error("While closing cluster middleware after creation failure", "err", closeErr)
+				}
+			}
+			return nil, err
+		}
+		clusters = append(clusters, commonfilter.OutputCluster{
+			Middleware: m,
+			Hasher:     shard.New(c.NodeCount),
+		})
 	}
-	router := shard.NewMultiCluster(config.OutputClusters)
+
 	return commonfilter.NewFilter(
 		config,
 		func(t transfer.Transfer) bool {
 			return isValidPaymentMethod(t, config) && !t.Timestamp.Before(config.StartDateRange) && t.Timestamp.Before(config.EndDateRange)
 		},
 		transfer.ProjectForQ5Filter,
-		func(clientID int, t transfer.TransferForQ5Filter) []string {
-			return router.RoutingKeysFor(clientID, strconv.FormatFloat(t.AmountPaid, 'f', -1, 64))
+		func(t transfer.TransferForQ5Filter) []string {
+			return []string{strconv.FormatFloat(t.AmountPaid, 'f', -1, 64)}
 		},
 		records.TransferCodec,
 		records.TransferForQ5FilterCodec,
-		outputMiddleware,
-		router,
+		clusters,
 	)
 }
