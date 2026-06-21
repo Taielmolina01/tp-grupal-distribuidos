@@ -770,8 +770,6 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 	tracker := gateway.transfersTrackerFor(client.ID)
 
 	for ci, cluster := range gateway.transferClusters {
-		slog.Info("LUCHO GOY")
-
 		rk := fmt.Sprintf("shard-%d", cluster.Hasher.ShardFor(client.ID, strconv.FormatUint(seq, 10)))
 		trackerKey := fmt.Sprintf("%d_%s", ci, rk)
 		if err := cluster.Middleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
