@@ -4,10 +4,10 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
-	"strings"
-
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
@@ -44,33 +44,64 @@ func NewFilter[T any, O any](
 		return nil, err
 	}
 
+	ckpt, err := checkpoint.New(config.PersistPath, marshalClientState, unmarshalClientState)
+	if err != nil {
+		if err := inputExchange.Close(); err != nil {
+			slog.Error("While closing input exchange after checkpoint creation failure", "err", err)
+		}
+		if err := outputExchange.Close(); err != nil {
+			slog.Error("While closing output exchange after checkpoint creation failure", "err", err)
+		}
+		return nil, err
+	}
+
+	recovered, err := ckpt.Load()
+	if err != nil {
+		if err := inputExchange.Close(); err != nil {
+			slog.Error("While closing input exchange after checkpoint load failure", "err", err)
+		}
+		if err := outputExchange.Close(); err != nil {
+			slog.Error("While closing output exchange after checkpoint load failure", "err", err)
+		}
+		return nil, err
+	}
+
+	states := statemap.New(func() *clientState {
+		return &clientState{
+			tracker:       sendertracker.New(10_000_000),
+			outputTracker: outputtracker.New(),
+		}
+	})
+	for clientID, state := range recovered {
+		states.Set(clientID, state)
+		slog.Info("recovered client state", "clientID", clientID)
+	}
+
 	return &Filter[T, O]{
-		id:              uint32(config.Id),
-		queryId:         config.QueryId,
-		filterType:      config.Type,
-		filterFunction:  filterFunction,
-		outputTransform: inputToOutput,
-		shardKeys:       shardKeys,
-		inputCodec:      inputCodec,
-		outputCodec:     outputCodec,
-		inputExchange:   inputExchange,
-		outputExchange:  outputExchange,
-		multiHasher:     shard.NewMultiCluster(config.OutputClusters),
-		inputAmount:     config.FilterAmount, // Igual que en el otro, reempalzar por el N de nodos de la etapa anterior
-		states: statemap.New(func() *clientState {
-			return &clientState{
-				tracker:       sendertracker.New(10_000_000),
-				outputTracker: outputtracker.New(),
-			}
-		}),
+		id:                   uint32(config.Id),
+		queryId:              config.QueryId,
+		filterType:           config.Type,
+		filterFunction:       filterFunction,
+		outputTransform:      inputToOutput,
+		shardKeys:            shardKeys,
+		inputCodec:           inputCodec,
+		outputCodec:          outputCodec,
+		inputExchange:        inputExchange,
+		outputExchange:       outputExchange,
+		multiHasher:          shard.NewMultiCluster(config.OutputClusters),
+		inputAmount:          config.FilterAmount,
+		states:               states,
+		checkpoint:           ckpt,
+		persistBatchSize:     config.PersistBatchSize,
+		persistFlushInterval: config.PersistFlushInterval,
 	}, nil
 }
 
 func (f *Filter[T, O]) Run() {
 	defer f.close()
 
-	if err := f.inputExchange.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
-		f.handleInput(msg, ack, nack)
+	if err := f.inputExchange.StartConsumingBatch(f.persistBatchSize, f.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		f.handleBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
 	}
@@ -99,47 +130,64 @@ func (f *Filter[T, O]) close() {
 	}
 }
 
-func (f *Filter[T, O]) handleInput(msg newmiddleware.Message, ack func(), nack func()) {
-	input, err := batch.Read(msg.Body, f.inputCodec)
-	if err != nil {
-		slog.Error("decode failed", "err", err)
-		ack()
-		return
+func (f *Filter[T, O]) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
+	modified := make(map[int]*clientState)
+	completed := make(map[int]struct{})
+
+	for _, msg := range msgs {
+		input, err := batch.Read(msg.Body, f.inputCodec)
+		if err != nil {
+			slog.Error("decode failed", "err", err)
+			continue
+		}
+
+		clientID := input.ClientID
+		state := f.states.For(clientID)
+		tracker := state.tracker
+
+		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
+			continue
+		}
+
+		if input.EOF {
+			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+		} else {
+			tracker.RegisterBatch(int(input.SenderID))
+			if err := f.processBatch(input, state); err != nil {
+				slog.Error("process batch failed", "err", err)
+				nack()
+				f.stopConsuming()
+				return
+			}
+		}
+
+		tracker.Claim(int(input.SenderID), input.Seq)
+		modified[clientID] = state
+
+		if tracker.IsComplete(f.inputAmount) {
+			if err := f.finishStep(clientID, state); err != nil {
+				slog.Error("finish step failed", "err", err)
+				nack()
+				f.stopConsuming()
+				return
+			}
+			completed[clientID] = struct{}{}
+		}
 	}
 
-	clientID := input.ClientID
-
-	state := f.states.For(clientID)
-	tracker := state.tracker
-
-	if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
-		slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
-		ack()
-		return
-	}
-
-	if input.EOF {
-		tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
-	} else {
-		tracker.RegisterBatch(int(input.SenderID))
-		if err := f.processBatch(input, state); err != nil {
-			slog.Error("process batch failed", "err", err)
+	for clientID, state := range modified {
+		if _, done := completed[clientID]; done {
+			f.states.Delete(clientID)
+			f.checkpoint.DeleteClient(clientID)
+			continue
+		}
+		if err := f.checkpoint.SaveClient(clientID, state); err != nil {
+			slog.Error("persist failed, stopping", "err", err)
 			nack()
 			f.stopConsuming()
 			return
 		}
-	}
-
-	tracker.Claim(int(input.SenderID), input.Seq)
-
-	if tracker.IsComplete(f.inputAmount) {
-		if err := f.finishStep(clientID, state); err != nil {
-			slog.Error("finish step failed", "err", err)
-			nack()
-			f.stopConsuming()
-			return
-		}
-		f.states.Delete(clientID)
 	}
 
 	ack()
@@ -148,7 +196,6 @@ func (f *Filter[T, O]) handleInput(msg newmiddleware.Message, ack func(), nack f
 func (f *Filter[T, O]) processBatch(input batch.Msg[T], state *clientState) error {
 	outputs := make([]O, 0)
 	for _, record := range input.Records {
-
 		if f.filterFunction(record) {
 			outputs = append(outputs, f.outputTransform(record))
 		}

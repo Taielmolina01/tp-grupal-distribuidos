@@ -261,6 +261,9 @@ func writeFilterCurrency(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - FILTER_TYPE=CURRENCY\n")
 		b.WriteString("      - FILTER_AMOUNT=1\n")
 		b.WriteString("      - QUERY_ID=1\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q1234_filter_currency_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -285,8 +288,11 @@ func writeFilterAmount(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - OUTPUT_CLUSTERS=results_queue:1\n")
 		b.WriteString("      - AMOUNT=50.0\n")
 		b.WriteString("      - FILTER_TYPE=AMOUNT\n")
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterAmount)
+		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterCurrency)
 		b.WriteString("      - QUERY_ID=1\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q1_filter_amount_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -510,7 +516,7 @@ func writeFilterRangeQ3(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - INPUT_QUEUE=Q3_filter_range_in_%d\n", i)
 		fmt.Fprintf(b, "      - INPUT_ROUTING_KEYS=Q3_filtered_shard-%d\n", i)
 		b.WriteString("      - OUTPUT_QUEUES=Q3_transfers_avg_period_q,Q3_transfers_filter_period_q\n")
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterRangeQ3)
+		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterCurrency)
 		b.WriteString("      - QUERY_ID=3\n")
 		b.WriteString("\n")
 	}
@@ -605,6 +611,9 @@ func writeFilterDateAndPayment(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00\n")
 		b.WriteString("      - PAYMENT_FORMATS=ACH,Wire\n")
 		b.WriteString("      - QUERY_ID=5\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q5_filter_date_and_payment_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		b.WriteString("\n")
 	}
 }

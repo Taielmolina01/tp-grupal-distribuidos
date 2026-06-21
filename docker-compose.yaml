@@ -80,6 +80,9 @@ services:
       - FILTER_TYPE=CURRENCY
       - FILTER_AMOUNT=1
       - QUERY_ID=1
+      - PERSIST_PATH=/var/bkp/q1234_filter_currency_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -107,6 +110,9 @@ services:
       - FILTER_TYPE=CURRENCY
       - FILTER_AMOUNT=1
       - QUERY_ID=1
+      - PERSIST_PATH=/var/bkp/q1234_filter_currency_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -134,6 +140,9 @@ services:
       - FILTER_TYPE=AMOUNT
       - FILTER_AMOUNT=2
       - QUERY_ID=1
+      - PERSIST_PATH=/var/bkp/q1_filter_amount_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -161,6 +170,9 @@ services:
       - FILTER_TYPE=AMOUNT
       - FILTER_AMOUNT=2
       - QUERY_ID=1
+      - PERSIST_PATH=/var/bkp/q1_filter_amount_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -829,6 +841,9 @@ services:
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - PAYMENT_FORMATS=ACH,Wire
       - QUERY_ID=5
+      - PERSIST_PATH=/var/bkp/q5_filter_date_and_payment_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
 
   q5_filter_date_and_payment_1:
     build:
@@ -852,6 +867,9 @@ services:
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - PAYMENT_FORMATS=ACH,Wire
       - QUERY_ID=5
+      - PERSIST_PATH=/var/bkp/q5_filter_date_and_payment_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
 
   q5_fetcher:
     build:

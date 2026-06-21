@@ -47,7 +47,8 @@ type FilterConfig struct {
 	PaymentFormats        []string
 	Quote                 string
 	OutputClusters        []shard.ClusterConfig
-}
 
-type FilterAndSplitter struct {
+	PersistPath          string
+	PersistBatchSize     int
+	PersistFlushInterval time.Duration
 }

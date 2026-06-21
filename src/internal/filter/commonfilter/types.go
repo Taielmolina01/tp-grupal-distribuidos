@@ -1,6 +1,9 @@
 package commonfilter
 
 import (
+	"time"
+
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
@@ -26,7 +29,10 @@ type Filter[T any, O any] struct {
 	outputExchange newmiddleware.Middleware
 	multiHasher    shard.MultiClusterHasher
 
-	states statemap.StateMap[clientState]
+	states               statemap.StateMap[clientState]
+	checkpoint           *checkpoint.Checkpoint[clientState]
+	persistBatchSize     int
+	persistFlushInterval time.Duration
 }
 
 type clientState struct {
