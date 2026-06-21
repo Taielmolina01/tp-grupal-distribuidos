@@ -1,0 +1,35 @@
+src/internal/common/middleware/newmiddleware/sharded_middleware.go
+  h_3c9b41718876fe 79,85
+src/cmd/convertedamountfilter/config.go
+  s_9503b715adfa3f::t_4ce9cbe5949974 51-57
+src/internal/common/filter/types.go
+  s_9503b715adfa3f::t_44bd22a3dfe949 18
+  h_3c9b41718876fe 17
+src/internal/common/middleware/newmiddleware/middleware.go
+  h_3c9b41718876fe 18
+src/cmd/seqstorenode/Dockerfile
+  s_9503b715adfa3f::t_fe4288d3dc844c 9
+src/cmd/bankdistinctfilter/config.go
+  s_9503b715adfa3f::t_5032a836e64699 52-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "24f87371b5013919ea7b39f413775fb190a29d75",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9503b715adfa3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c616592a-fd54-45b3-9308-88b61fce8101",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
