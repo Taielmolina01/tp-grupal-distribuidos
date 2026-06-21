@@ -53,7 +53,7 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (worker.Worker, error)
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewQueueMiddleware(connSettings, config.OutputMiddleware)
+	outputMiddleware, err = newmiddleware.NewQueueMiddleware(connSettings, config.OutputQueue)
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}

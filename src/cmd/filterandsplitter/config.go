@@ -29,9 +29,9 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	filterAmount, err := strconv.Atoi(os.Getenv("FILTER_AMOUNT"))
+	expectedEOFs, err := strconv.Atoi(os.Getenv("EXPECTED_EOFS"))
 	if err != nil {
-		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("FILTER_AMOUNT environment variable is required and must be a number")
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("EXPECTED_EOFS environment variable is required and must be a number")
 	}
 
 	outputAmount, err := strconv.Atoi(os.Getenv("OUTPUT_AMOUNT"))
@@ -80,7 +80,7 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		EndDate:                endDate,
 		OutputMiddlewareAmount: outputAmount,
 		OutputMiddlewarePrefix: outputPrefix,
-		FilterCurrencyAmt:      filterAmount,
+		ExpectedEOFs:           expectedEOFs,
 		MomHost:                momHost,
 		MomPort:                momPort,
 		InputMiddlewarePrefix:  inputMiddlewarePrefix,

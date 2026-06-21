@@ -15,7 +15,7 @@ type FilterAccountSeenConfig struct {
 
 	ExpectedEOFs int
 
-	OutputMiddleware string
+	OutputQueue string
 
 	MomHost string
 	MomPort int

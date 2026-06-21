@@ -93,7 +93,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 		startDate:            config.StartDate,
 		endDate:              config.EndDate,
 		outputAmount:         config.OutputMiddlewareAmount,
-		prevNodeAmt:          config.FilterCurrencyAmt,
+		prevNodeAmt:          config.ExpectedEOFs,
 		hasher:               shard.New(config.OutputMiddlewareAmount),
 		queryID:              config.QueryID,
 		inputMiddleware:      inputMiddleware,

@@ -29,7 +29,7 @@ type JoinAccountsConfig struct {
 	QueryID            int
 	MaxBatchSize       int
 	MaxBatchBytes      int
-	InputMiddlewareAmt int
+	ExpectedEOFs int
 
 	PersistPath          string
 	PersistBatchSize     int
@@ -68,7 +68,7 @@ type JoinAccounts struct {
 	outputAmount int
 
 	inputMiddleware           newmiddleware.Middleware
-	inputMiddlewareAmt        int
+	expectedEOFs              int
 	qualifiedInputMiddleware  newmiddleware.Middleware
 	qualifiedOutputMiddleware newmiddleware.Middleware
 	outputMiddleware          newmiddleware.Middleware

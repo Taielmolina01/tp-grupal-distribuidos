@@ -13,7 +13,7 @@ import (
 
 type DateRangeSplitterConfig struct {
 	Id                int
-	FilterCurrencyAmt int
+	ExpectedEOFs int
 
 	MomHost string
 	MomPort int

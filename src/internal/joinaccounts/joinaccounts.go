@@ -129,7 +129,7 @@ func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
 		outputAmount:              config.OutputMiddlewareAmount,
 		queryID:                   config.QueryID,
 		inputMiddleware:           inputMiddleware,
-		inputMiddlewareAmt:        config.InputMiddlewareAmt,
+		expectedEOFs:              config.ExpectedEOFs,
 		qualifiedInputMiddleware:  qualifiedInputMiddleware,
 		qualifiedOutputMiddleware: qualifiedOutputMiddleware,
 		outputMiddleware:          outputMiddleware,
@@ -291,7 +291,7 @@ func (j *JoinAccounts) handleTransferBatch(msgs []newmiddleware.Message, ack fun
 		tracker.Claim(int(input.SenderID), input.Seq)
 		modified[clientID] = state
 
-		if tracker.IsComplete(j.inputMiddlewareAmt) {
+		if tracker.IsComplete(j.expectedEOFs) {
 			slog.Info("TRANSFERS COMPLETE")
 			if err := j.finishTransfersStep(clientID, state); err != nil {
 				slog.Error("finishing transfers step failed", "err", err)

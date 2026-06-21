@@ -95,7 +95,7 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (worker.Worker, error)
 		filterOutputAmount:   config.FilterOutputAmount,
 		avgHasher:            shard.New(config.AvgOutputAmount),
 		filterHasher:         shard.New(config.FilterOutputAmount),
-		prevNodeAmt:          config.FilterCurrencyAmt,
+		prevNodeAmt:          config.ExpectedEOFs,
 		queryID:              config.QueryID,
 		avgPeriodStart:       config.AvgPeriodStart,
 		avgPeriodEnd:         config.AvgPeriodEnd,

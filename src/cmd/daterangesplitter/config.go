@@ -48,9 +48,9 @@ func loadConfig() (daterangesplitter.DateRangeSplitterConfig, error) {
 		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("FILTER_OUTPUT_AMOUNT environment variable is required and must be a number")
 	}
 
-	filterCurrencyAmt, err := strconv.Atoi(os.Getenv("FILTER_AMOUNT"))
+	expectedEOFs, err := strconv.Atoi(os.Getenv("EXPECTED_EOFS"))
 	if err != nil {
-		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("FILTER_AMOUNT environment variable is required and must be a number")
+		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("EXPECTED_EOFS environment variable is required and must be a number")
 	}
 
 	queryID, err := strconv.Atoi(os.Getenv("QUERY_ID"))
@@ -73,7 +73,7 @@ func loadConfig() (daterangesplitter.DateRangeSplitterConfig, error) {
 
 	return daterangesplitter.DateRangeSplitterConfig{
 		Id:                           id,
-		FilterCurrencyAmt:            filterCurrencyAmt,
+		ExpectedEOFs:                 expectedEOFs,
 		MomHost:                      momHost,
 		MomPort:                      momPort,
 		InputMiddlewarePrefix:        inputMiddlewarePrefix,

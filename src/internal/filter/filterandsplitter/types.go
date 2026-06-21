@@ -18,7 +18,7 @@ type FilterAndSplitterConfig struct {
 	OutputMiddlewareAmount int
 	OutputMiddlewarePrefix string
 
-	FilterCurrencyAmt int
+	ExpectedEOFs int
 
 	MomHost string
 	MomPort int

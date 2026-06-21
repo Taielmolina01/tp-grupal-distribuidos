@@ -39,9 +39,9 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	filterAmountInt, err := strconv.Atoi(os.Getenv("FILTER_AMOUNT"))
+	filterAmountInt, err := strconv.Atoi(os.Getenv("EXPECTED_EOFS"))
 	if err != nil {
-		return filter.FilterConfig{}, errors.New("FILTER_AMOUNT environment variable is required and must be a number")
+		return filter.FilterConfig{}, errors.New("EXPECTED_EOFS environment variable is required and must be a number")
 	}
 
 	queryId, err := strconv.Atoi(os.Getenv("QUERY_ID"))
