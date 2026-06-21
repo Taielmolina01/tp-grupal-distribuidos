@@ -14,6 +14,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -71,11 +72,9 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (worker.Worker, error)
 		return &clientState{
 			tracker:      sendertracker.New(10_000_000),
 			seenAccounts: map[account.AccountIdentifier]struct{}{},
-			builder:      batch.NewBuilder(config.MaxBatchSize, config.MaxBatchBytes, records.Query4ResultCodec),
 		}
 	})
 	for clientID, state := range recovered {
-		state.builder = batch.NewBuilder(config.MaxBatchSize, config.MaxBatchBytes, records.Query4ResultCodec)
 		states.Set(clientID, state)
 		slog.Info("recovered client state", "clientID", clientID, "seenAccounts", len(state.seenAccounts))
 	}
@@ -152,12 +151,7 @@ func (f *FilterAccountSeen) handleBatch(msgs []newmiddleware.Message, ack func()
 		} else {
 			state.tracker.RegisterBatch(int(input.SenderID))
 			for i := range input.Records {
-				if err := f.addRecord(clientID, state, input.Records[i]); err != nil {
-					slog.Error("While sending results batch", "err", err)
-					nack()
-					f.stopConsuming()
-					return
-				}
+				state.seenAccounts[input.Records[i]] = struct{}{}
 			}
 		}
 
@@ -165,17 +159,8 @@ func (f *FilterAccountSeen) handleBatch(msgs []newmiddleware.Message, ack func()
 		modified[clientID] = state
 
 		if state.tracker.IsComplete(f.expectedEOFs) {
-			if !state.builder.IsEmpty() {
-				if err := f.flushResults(clientID, state); err != nil {
-					slog.Error("While flushing results on completion", "err", err)
-					nack()
-					f.stopConsuming()
-					return
-				}
-			}
-			eofBody := batch.WriteEOF(clientID, uint8(f.queryID), 0, 0, input.Total)
-			if err := f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
-				slog.Error("While sending EOF message", "err", err)
+			if err := f.emitResults(clientID, state); err != nil {
+				slog.Error("While emitting results", "err", err)
 				nack()
 				f.stopConsuming()
 				return
@@ -201,27 +186,34 @@ func (f *FilterAccountSeen) handleBatch(msgs []newmiddleware.Message, ack func()
 	ack()
 }
 
-func (f *FilterAccountSeen) addRecord(clientID int, state *clientState, record account.AccountIdentifier) error {
-	if _, ok := state.seenAccounts[record]; ok {
-		return nil
+func (f *FilterAccountSeen) emitResults(clientID int, state *clientState) error {
+	ot := outputtracker.New()
+	builder := batch.NewBuilder(f.maxBatchSize, f.maxBatchBytes, records.Query4ResultCodec)
+
+	for acc := range state.seenAccounts {
+		result := queryresult.Query4Result{
+			BankId:        acc.BankID,
+			AccountNumber: acc.AccountNumber,
+		}
+		if !builder.TryAdd(&result) {
+			seq := ot.RegisterBatch("")
+			body := builder.Flush(clientID, uint8(f.queryID), uint8(f.id), seq)
+			if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
+				return err
+			}
+			builder.TryAdd(&result)
+		}
 	}
 
-	// TODO: Con la nueva lógica de propagr el SeqNum acá tenemos que acumular hasta el final y solo ahí mandar todos los outputs. Tampoco nos es muy caro así q np
-	state.seenAccounts[record] = struct{}{}
-	result := queryresult.Query4Result{
-		BankId:        record.BankID,
-		AccountNumber: record.AccountNumber,
-	}
-	if !state.builder.TryAdd(&result) {
-		if err := f.flushResults(clientID, state); err != nil {
+	if !builder.IsEmpty() {
+		seq := ot.RegisterBatch("")
+		body := builder.Flush(clientID, uint8(f.queryID), uint8(f.id), seq)
+		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
 			return err
 		}
-		state.builder.TryAdd(&result)
 	}
-	return nil
-}
 
-func (f *FilterAccountSeen) flushResults(clientID int, state *clientState) error {
-	body := state.builder.Flush(clientID, uint8(f.queryID), 0, 0)
-	return f.outputMiddleware.Send(newmiddleware.Message{Body: body})
+	total := ot.CountFor("")
+	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), uint8(f.id), total+1, uint32(total))
+	return f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody})
 }

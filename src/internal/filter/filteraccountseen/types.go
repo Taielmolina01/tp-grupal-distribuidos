@@ -5,9 +5,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
-	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
 )
@@ -54,5 +52,4 @@ type FilterAccountSeen struct {
 type clientState struct {
 	tracker      *sendertracker.SenderTracker
 	seenAccounts map[account.AccountIdentifier]struct{}
-	builder      *batch.Builder[queryresult.Query4Result]
 }
