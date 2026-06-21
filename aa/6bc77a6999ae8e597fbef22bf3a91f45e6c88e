@@ -1,0 +1,30 @@
+src/internal/filter/commonfilter/filter.go
+  h_3c9b41718876fe 8,11,15-18,26,29,31,33-35,37-48,52-55,57-59,61,63,67,69,73-82,86,88-98,102-103,105-106,112-118,120-122,124,126-128,130-132,135,137-139,141-145,148-150,152-166,169-180,183-194,197,200-203,205,207-212,214-218,221-227,229-230,232-240,242-243
+src/internal/filter/commonfilter/types.go
+  h_3c9b41718876fe 4-6,8-11,16-18,21,24-36
+src/internal/filter/amountfilter/amountfilter.go
+  h_3c9b41718876fe 6,8,15-23,38,41
+src/internal/gateway/gateway.go
+  h_3c9b41718876fe 13,26-28,36,57,69,74,80-84,90-92,95-102,104,106-109,112,116-117,120-123,131-132,135-138,140-141,153-156,174-177,195,205,269-272,684-685,687-689,693,715,763,770-781,783,801-802,808-822,826-834
+src/internal/filter/daterangeandpaymentfilter/daterangeandpaymentfilter.go
+  h_3c9b41718876fe 4,6-7,10-11,22-40,47-49,52
+src/cmd/gateway/main.go
+  h_3c9b41718876fe 13,28-30,126,141-162
+src/internal/common/middleware/newmiddleware/base.go
+  h_3c9b41718876fe 6,56,71-151,210-215
+src/internal/filter/currencyfilter/currencyfilter.go
+  h_3c9b41718876fe 4,6-7,10-11,22-40,45-47,50
+src/internal/common/messageprotocol/rabbit/batch/batch.go
+  h_3c9b41718876fe 33-37,102,104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "aa6bc77a6999ae8e597fbef22bf3a91f45e6c88e",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
