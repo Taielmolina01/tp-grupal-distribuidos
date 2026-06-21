@@ -4,10 +4,8 @@ import (
 	"errors"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
-	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/splitter"
 	"tp-grupal-distribuidos/internal/daterangesplitter"
 )
@@ -30,36 +28,71 @@ func loadConfig() (daterangesplitter.DateRangeSplitterConfig, error) {
 
 	inputExchange := os.Getenv("INPUT_EXCHANGE")
 	inputQueue := os.Getenv("INPUT_QUEUE")
-
 	inputRoutingKeys := []string{}
 	if v := os.Getenv("INPUT_ROUTING_KEYS"); v != "" {
 		inputRoutingKeys = splitter.Split(v, ",")
 	}
 
-	outputQueuesStr := os.Getenv("OUTPUT_QUEUES")
-	if outputQueuesStr == "" {
-		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("OUTPUT_QUEUES environment variable is required")
+	avgOutputExchange := os.Getenv("AVG_OUTPUT_EXCHANGE")
+	if avgOutputExchange == "" {
+		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("AVG_OUTPUT_EXCHANGE environment variable is required")
 	}
-	outputQueues := strings.Split(outputQueuesStr, ",")
+	avgOutputAmount, err := strconv.Atoi(os.Getenv("AVG_OUTPUT_AMOUNT"))
+	if err != nil {
+		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("AVG_OUTPUT_AMOUNT environment variable is required and must be a number")
+	}
 
-	splitterAmount, err := strconv.Atoi(os.Getenv("FILTER_AMOUNT"))
+	filterOutputExchange := os.Getenv("FILTER_OUTPUT_EXCHANGE")
+	if filterOutputExchange == "" {
+		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("FILTER_OUTPUT_EXCHANGE environment variable is required")
+	}
+	filterOutputAmount, err := strconv.Atoi(os.Getenv("FILTER_OUTPUT_AMOUNT"))
+	if err != nil {
+		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("FILTER_OUTPUT_AMOUNT environment variable is required and must be a number")
+	}
+
+	filterCurrencyAmt, err := strconv.Atoi(os.Getenv("FILTER_AMOUNT"))
 	if err != nil {
 		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("FILTER_AMOUNT environment variable is required and must be a number")
 	}
 
+	queryID, err := strconv.Atoi(os.Getenv("QUERY_ID"))
+	if err != nil {
+		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
+	}
+
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("PERSIST_PATH environment variable is required")
+	}
+	persistBatchSize, err := strconv.Atoi(os.Getenv("PERSIST_BATCH_SIZE"))
+	if err != nil {
+		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("PERSIST_BATCH_SIZE environment variable is required and must be a number")
+	}
+	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
+	if err != nil {
+		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
+	}
+
 	return daterangesplitter.DateRangeSplitterConfig{
-		Id:                id,
-		SplitterAmount:    splitterAmount,
-		MomHost:           momHost,
-		MomPort:           momPort,
-		InputExchange:     inputExchange,
-		InputQueue:        inputQueue,
-		InputRoutingKeys:  inputRoutingKeys,
-		OutputQueues:      outputQueues,
-		QueryID:           queryresult.Query3ID,
-		AvgPeriodStart:    time.Date(2022, 9, 1, 0, 0, 0, 0, time.UTC),
-		AvgPeriodEnd:      time.Date(2022, 9, 5, 23, 59, 59, 0, time.UTC),
-		FilterPeriodStart: time.Date(2022, 9, 6, 0, 0, 0, 0, time.UTC),
-		FilterPeriodEnd:   time.Date(2022, 9, 15, 23, 59, 59, 0, time.UTC),
+		Id:                   id,
+		FilterCurrencyAmt:    filterCurrencyAmt,
+		MomHost:              momHost,
+		MomPort:              momPort,
+		InputExchange:        inputExchange,
+		InputQueue:           inputQueue,
+		InputRoutingKeys:     inputRoutingKeys,
+		AvgOutputExchange:    avgOutputExchange,
+		AvgOutputAmount:      avgOutputAmount,
+		FilterOutputExchange: filterOutputExchange,
+		FilterOutputAmount:   filterOutputAmount,
+		QueryID:              uint8(queryID),
+		AvgPeriodStart:       time.Date(2022, 9, 1, 0, 0, 0, 0, time.UTC),
+		AvgPeriodEnd:         time.Date(2022, 9, 5, 23, 59, 59, 0, time.UTC),
+		FilterPeriodStart:    time.Date(2022, 9, 6, 0, 0, 0, 0, time.UTC),
+		FilterPeriodEnd:      time.Date(2022, 9, 15, 23, 59, 59, 0, time.UTC),
+		PersistPath:          persistPath,
+		PersistBatchSize:     persistBatchSize,
+		PersistFlushInterval: persistFlushInterval,
 	}, nil
 }

@@ -683,9 +683,20 @@ services:
       - INPUT_EXCHANGE=Q1234_filtered_exchange
       - INPUT_QUEUE=Q3_filter_range_in_0
       - INPUT_ROUTING_KEYS=Q3_filtered_shard-0
-      - OUTPUT_QUEUES=Q3_transfers_avg_period_q,Q3_transfers_filter_period_q
+      - AVG_OUTPUT_EXCHANGE=Q3_avg_exchange
+      - AVG_OUTPUT_AMOUNT=2
+      - FILTER_OUTPUT_EXCHANGE=Q3_filter_exchange
+      - FILTER_OUTPUT_AMOUNT=2
       - FILTER_AMOUNT=2
       - QUERY_ID=3
+      - PERSIST_PATH=/var/bkp/q3_filter_range_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q3_filter_range_1:
     build:
@@ -702,9 +713,20 @@ services:
       - INPUT_EXCHANGE=Q1234_filtered_exchange
       - INPUT_QUEUE=Q3_filter_range_in_1
       - INPUT_ROUTING_KEYS=Q3_filtered_shard-1
-      - OUTPUT_QUEUES=Q3_transfers_avg_period_q,Q3_transfers_filter_period_q
+      - AVG_OUTPUT_EXCHANGE=Q3_avg_exchange
+      - AVG_OUTPUT_AMOUNT=2
+      - FILTER_OUTPUT_EXCHANGE=Q3_filter_exchange
+      - FILTER_OUTPUT_AMOUNT=2
       - FILTER_AMOUNT=2
       - QUERY_ID=3
+      - PERSIST_PATH=/var/bkp/q3_filter_range_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q3_sum_0:
     build:

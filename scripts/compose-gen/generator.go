@@ -514,9 +514,16 @@ func writeFilterRangeQ3(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - INPUT_EXCHANGE=Q1234_filtered_exchange\n")
 		fmt.Fprintf(b, "      - INPUT_QUEUE=Q3_filter_range_in_%d\n", i)
 		fmt.Fprintf(b, "      - INPUT_ROUTING_KEYS=Q3_filtered_shard-%d\n", i)
-		b.WriteString("      - OUTPUT_QUEUES=Q3_transfers_avg_period_q,Q3_transfers_filter_period_q\n")
+		b.WriteString("      - AVG_OUTPUT_EXCHANGE=Q3_avg_exchange\n")
+		fmt.Fprintf(b, "      - AVG_OUTPUT_AMOUNT=%d\n", cfg.SumQ3)
+		b.WriteString("      - FILTER_OUTPUT_EXCHANGE=Q3_filter_exchange\n")
+		fmt.Fprintf(b, "      - FILTER_OUTPUT_AMOUNT=%d\n", cfg.AverageFilterQ3)
 		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterCurrency)
 		b.WriteString("      - QUERY_ID=3\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_filter_range_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }
