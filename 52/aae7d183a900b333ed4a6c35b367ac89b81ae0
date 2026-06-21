@@ -1,0 +1,48 @@
+src/internal/filter/commonfilter/filter.go
+  s_9503b715adfa3f::t_25fd03bb1f59d4 29-30,91-92
+  s_9503b715adfa3f::t_832d9709a08de2 214
+  s_9503b715adfa3f::t_a42099b2866baf 26
+  s_9503b715adfa3f::t_a56fcb48190c95 87
+  s_9503b715adfa3f::t_51417892e276c9 237
+  s_9503b715adfa3f::t_88cd531fbd9d2f 34-36,38-47,49-55,60,66
+src/internal/filter/amountfilter/amountfilter.go
+  s_9503b715adfa3f::t_afae9b048f4724 34
+  s_9503b715adfa3f::t_e4fd97247f7e48 6,8,15-19,37-38
+src/internal/filter/currencyfilter/currencyfilter.go
+  s_9503b715adfa3f::t_070e16e27621a5 9-10,21-25,38
+  s_9503b715adfa3f::t_8134ac70c90822 26,33-34,39
+scripts/compose-gen/generator.go
+  s_9503b715adfa3f::t_f756b93005aebb 287
+src/cmd/amountfilter/config.go
+  s_9503b715adfa3f::t_bce0a63a028448 37-40,59
+src/internal/common/shard/multicluster.go
+  s_9503b715adfa3f::t_4ca6e0f6c2650b 16
+  s_9503b715adfa3f::t_1361e84f734510 10-15,17
+src/internal/filter/daterangeandpaymentfilter/daterangeandpaymentfilter.go
+  s_9503b715adfa3f::t_4522f7a021f72a 26,33-34,39
+  s_9503b715adfa3f::t_9922c9cf19ce5d 9-10,21-25,38
+src/internal/filter/commonfilter/types.go
+  s_9503b715adfa3f::t_c4856a1a52f1a2 30
+  s_9503b715adfa3f::t_bb65cbb5638af8 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "52aae7d183a900b333ed4a6c35b367ac89b81ae0",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9503b715adfa3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c616592a-fd54-45b3-9308-88b61fce8101",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
