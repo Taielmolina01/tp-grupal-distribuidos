@@ -1,0 +1,61 @@
+src/cmd/amountfilter/config.go
+  s_cef398d530ed6a::t_51b5e515f63f35 38,40
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_cef398d530ed6a::t_a656e9357fc14c 56
+src/internal/filter/filterandsplitter/types.go
+  s_cef398d530ed6a::t_8c80169b7926d7 21
+src/cmd/filteraccountseen/config.go
+  s_cef398d530ed6a::t_165082c49bf160 76
+  s_cef398d530ed6a::t_d934b82f4be11e 33-35
+scripts/compose-gen/generator.go
+  s_cef398d530ed6a::t_620493cc656a42 394
+  s_cef398d530ed6a::t_a540d19412215e 507
+  s_cef398d530ed6a::t_19459ea46c5027 258
+  s_cef398d530ed6a::t_5c534bbc214435 283
+  s_cef398d530ed6a::t_6f23eb27e9378a 599,606
+  s_cef398d530ed6a::t_e8bd7a1005578e 477
+  s_cef398d530ed6a::t_d2eb98d03cf2e0 423
+src/cmd/joinaccounts/config.go
+  s_cef398d530ed6a::t_fae82cc584b8c5 73,75
+  s_cef398d530ed6a::t_7773f7efa2ed06 106
+src/internal/filter/filteraccountseen/types.go
+  s_cef398d530ed6a::t_00313cb276f209 18
+src/cmd/filterandsplitter/config.go
+  s_cef398d530ed6a::t_231401f9093b1b 32,34
+  s_cef398d530ed6a::t_0b39f663e188e9 83
+src/internal/daterangesplitter/types.go
+  s_cef398d530ed6a::t_55c4547ced956d 16
+src/internal/daterangesplitter/daterangesplitter.go
+  s_cef398d530ed6a::t_1687bb8893cf5e 98
+src/cmd/daterangesplitter/config.go
+  s_cef398d530ed6a::t_06d1df123c30c2 51,53
+  s_cef398d530ed6a::t_246565c51d64a4 76
+src/internal/joinaccounts/types.go
+  s_cef398d530ed6a::t_7416e94dcfe46c 71
+  s_cef398d530ed6a::t_fec776e0f7a98f 32
+src/internal/joinaccounts/joinaccounts.go
+  s_cef398d530ed6a::t_0eedabd66826e6 132
+  s_cef398d530ed6a::t_733b0d6d5d69f8 294
+src/cmd/daterangeandpaymentfilter/config.go
+  s_cef398d530ed6a::t_db6a31b8a4b843 42,44
+src/cmd/currencyfilter/config.go
+  s_cef398d530ed6a::t_7095838fabfeba 37,39
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_cef398d530ed6a::t_530273906ca06d 96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "098fb6cdb2ba073be8f7d15e861a03867f6e1d1a",
+  "prompts": {},
+  "sessions": {
+    "s_cef398d530ed6a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "64d1c46b-ee78-464b-8fbe-95f04d816a3e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
