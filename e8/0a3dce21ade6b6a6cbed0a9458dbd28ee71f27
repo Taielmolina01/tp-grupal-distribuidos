@@ -1,0 +1,38 @@
+src/internal/joinaccounts/types.go
+  s_170690cb63d1f5::t_32fdecfaef0349 40-42,46-48
+src/internal/joinaccounts/joinaccounts.go
+  s_170690cb63d1f5::t_d4a3bc7cf5bad4 541
+  s_170690cb63d1f5::t_c24bdf1db07602 382,386,396,404
+  s_170690cb63d1f5::t_55024b57a21f94 108-113
+  s_170690cb63d1f5::t_6da68a9ba40364 307-309
+  s_170690cb63d1f5::t_b501164bc5ef78 157-162,172-174
+  s_170690cb63d1f5::t_377ac4912eb904 487
+  s_170690cb63d1f5::t_45f5dade6566e6 515,527,542
+  s_170690cb63d1f5::t_2ac2c91679bbd9 471-473
+src/internal/joinaccounts/persist.go
+  s_170690cb63d1f5::t_394d85a75ab026 42-44,79-81
+src/internal/acumaccounts/acumaccounts.go
+  s_170690cb63d1f5::t_3a037afb922e01 192,194-195,197,199-201,203-213,216-221,224-230,232-233
+  s_170690cb63d1f5::t_2370dddc95ca13 157,165-169
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "e80a3dce21ade6b6a6cbed0a9458dbd28ee71f27",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_170690cb63d1f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aa7f0277-688d-4fcf-8e1b-7bdd84381bb9",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
