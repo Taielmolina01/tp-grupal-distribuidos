@@ -1,0 +1,36 @@
+src/internal/daterangesplitter/types.go
+  s_9503b715adfa3f::t_7abf812df2c835 5-9,11,15-16,36-39,54-55,59-68
+  s_9503b715adfa3f::t_16d7cbadc07ec5 10,25-28,45-47,49-52
+scripts/compose-gen/generator.go
+  s_9503b715adfa3f::t_30be26c08a2629 523-526
+  s_9503b715adfa3f::t_b9b06298abcb99 517-520
+src/internal/daterangesplitter/persist.go
+  s_9503b715adfa3f::t_254f2a56be0d34 1-39
+src/cmd/daterangesplitter/config.go
+  s_9503b715adfa3f::t_75763d0a79669e 36-51,78-95
+  s_9503b715adfa3f::t_1f98ec10df3464 54,59-76,96
+src/internal/daterangesplitter/daterangesplitter.go
+  s_9503b715adfa3f::t_9d9e9d6104b04b 10,15-17,19,25,35,41,46-47,50,61,63-64,69-70,75-83,86-88,95-105,110-112,123-124,126,144-146,148-153,155-157,159-174,176-177,179-186,188,190-193,196-207,211-212,225,232,236,239-241,249-250,259-260
+  s_9503b715adfa3f::t_1638bc5136aa6b 18,28-31,36-40,53-55,58-60,65-66,71-72,89-94,136-137,139-140,208-209,214-215,217-218,222-224,227,229-231,234,242-247,251-256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "ab571c6b051847e434af5d260430cda6cfeb2cad",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9503b715adfa3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c616592a-fd54-45b3-9308-88b61fce8101",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
