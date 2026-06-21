@@ -7,7 +7,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
-	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -38,17 +37,15 @@ type JoinAccountsConfig struct {
 }
 
 type transferPartialState struct {
-	transferTracker        *sendertracker.SenderTracker
-	qualifiedOutputTracker *outputtracker.OutputTracker
-	left                   map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}
-	right                  map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}
+	transferTracker *sendertracker.SenderTracker
+	left            map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}
+	right           map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}
 }
 
 type qualifiedPartialState struct {
-	qualifiedTracker   *sendertracker.SenderTracker
-	chainOutputTracker *outputtracker.OutputTracker
-	qualifyingLeft     map[account.AccountIdentifier]struct{}
-	qualifyingRight    map[account.AccountIdentifier]struct{}
+	qualifiedTracker *sendertracker.SenderTracker
+	qualifyingLeft   map[account.AccountIdentifier]struct{}
+	qualifyingRight  map[account.AccountIdentifier]struct{}
 }
 
 type clientState struct {
@@ -62,9 +59,6 @@ type clientState struct {
 
 	transferTracker  *sendertracker.SenderTracker
 	qualifiedTracker *sendertracker.SenderTracker
-
-	qualifiedOutputTracker *outputtracker.OutputTracker
-	chainOutputTracker     *outputtracker.OutputTracker
 }
 
 type JoinAccounts struct {

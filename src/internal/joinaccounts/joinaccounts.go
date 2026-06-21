@@ -105,14 +105,12 @@ func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
 
 	states := statemap.New(func() *clientState {
 		return &clientState{
-			left:                   map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
-			right:                  map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
-			qualifyingLeft:         map[account.AccountIdentifier]struct{}{},
-			qualifyingRight:        map[account.AccountIdentifier]struct{}{},
-			transferTracker:        sendertracker.New(10_000_000),
-			qualifiedTracker:       sendertracker.New(10_000_000),
-			qualifiedOutputTracker: outputtracker.New(),
-			chainOutputTracker:     outputtracker.New(),
+			left:             map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
+			right:            map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
+			qualifyingLeft:   map[account.AccountIdentifier]struct{}{},
+			qualifyingRight:  map[account.AccountIdentifier]struct{}{},
+			transferTracker:  sendertracker.New(10_000_000),
+			qualifiedTracker: sendertracker.New(10_000_000),
 		}
 	})
 
@@ -156,14 +154,12 @@ func mergeRecoveredStates(
 
 	for clientID, ts := range transferRecovered {
 		cs := &clientState{
-			transferTracker:        ts.transferTracker,
-			qualifiedOutputTracker: ts.qualifiedOutputTracker,
-			left:                   ts.left,
-			right:                  ts.right,
-			qualifiedTracker:       sendertracker.New(10_000_000),
-			chainOutputTracker:     outputtracker.New(),
-			qualifyingLeft:         map[account.AccountIdentifier]struct{}{},
-			qualifyingRight:        map[account.AccountIdentifier]struct{}{},
+			transferTracker:  ts.transferTracker,
+			left:             ts.left,
+			right:            ts.right,
+			qualifiedTracker: sendertracker.New(10_000_000),
+			qualifyingLeft:   map[account.AccountIdentifier]struct{}{},
+			qualifyingRight:  map[account.AccountIdentifier]struct{}{},
 		}
 		cs.pendingQualified = reconstructPendingQualified(ts.left, ts.right, threshold)
 		merged[clientID] = cs
@@ -173,15 +169,13 @@ func mergeRecoveredStates(
 		cs, ok := merged[clientID]
 		if !ok {
 			cs = &clientState{
-				transferTracker:        sendertracker.New(10_000_000),
-				qualifiedOutputTracker: outputtracker.New(),
-				left:                   map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
-				right:                  map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
+				transferTracker: sendertracker.New(10_000_000),
+				left:            map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
+				right:           map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
 			}
 			merged[clientID] = cs
 		}
 		cs.qualifiedTracker = qs.qualifiedTracker
-		cs.chainOutputTracker = qs.chainOutputTracker
 		cs.qualifyingLeft = qs.qualifyingLeft
 		cs.qualifyingRight = qs.qualifyingRight
 	}
@@ -310,10 +304,9 @@ func (j *JoinAccounts) handleTransferBatch(msgs []newmiddleware.Message, ack fun
 
 	for clientID, state := range modified {
 		ts := &transferPartialState{
-			transferTracker:        state.transferTracker,
-			qualifiedOutputTracker: state.qualifiedOutputTracker,
-			left:                   state.left,
-			right:                  state.right,
+			transferTracker: state.transferTracker,
+			left:            state.left,
+			right:           state.right,
 		}
 		if err := j.transferCheckpoint.SaveClient(clientID, ts); err != nil {
 			slog.Error("transfer persist failed, stopping", "err", err)
@@ -386,10 +379,11 @@ func (j *JoinAccounts) prepareQuallified(acc account.AccountIdentifier, isLeft b
 }
 
 func (j *JoinAccounts) finishTransfersStep(clientID int, state *clientState) error {
+	ot := outputtracker.New()
 	b := qualifiedaccount.NewBatchBuilder(j.maxBatchSize, j.maxBatchBytes)
 	for _, qualified := range state.pendingQualified {
 		if !b.TryAdd(&qualified) {
-			seq := state.qualifiedOutputTracker.RegisterBatch("")
+			seq := ot.RegisterBatch("")
 			body := b.Flush(clientID, uint8(j.queryID), uint8(j.id), seq)
 			if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
 				slog.Error("While sending qualified batch", "err", err)
@@ -399,7 +393,7 @@ func (j *JoinAccounts) finishTransfersStep(clientID int, state *clientState) err
 		}
 	}
 	if !b.IsEmpty() {
-		seq := state.qualifiedOutputTracker.RegisterBatch("")
+		seq := ot.RegisterBatch("")
 		body := b.Flush(clientID, uint8(j.queryID), uint8(j.id), seq)
 		if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
 			slog.Error("While sending qualified batch", "err", err)
@@ -407,7 +401,7 @@ func (j *JoinAccounts) finishTransfersStep(clientID int, state *clientState) err
 		}
 	}
 
-	eofSeq := state.qualifiedOutputTracker.RegisterBatch("")
+	eofSeq := ot.RegisterBatch("")
 	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), eofSeq, uint32(eofSeq-1))
 	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
 		slog.Error("While sending qualified EOF", "err", err)
@@ -474,10 +468,9 @@ func (j *JoinAccounts) handleQualifiedBatch(msgs []newmiddleware.Message, ack fu
 			continue
 		}
 		qs := &qualifiedPartialState{
-			qualifiedTracker:   state.qualifiedTracker,
-			chainOutputTracker: state.chainOutputTracker,
-			qualifyingLeft:     state.qualifyingLeft,
-			qualifyingRight:    state.qualifyingRight,
+			qualifiedTracker: state.qualifiedTracker,
+			qualifyingLeft:   state.qualifyingLeft,
+			qualifyingRight:  state.qualifyingRight,
 		}
 		if err := j.qualifiedCheckpoint.SaveClient(clientID, qs); err != nil {
 			slog.Error("qualified persist failed, stopping", "err", err)
@@ -491,6 +484,7 @@ func (j *JoinAccounts) handleQualifiedBatch(msgs []newmiddleware.Message, ack fu
 }
 
 func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) error {
+	ot := outputtracker.New()
 	batches := make(map[string]*batch.Builder[account.AccountChain])
 
 	for protagonistKey, rightMap := range state.right {
@@ -518,7 +512,7 @@ func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) err
 				rk := fmt.Sprintf("shard-%d", j.hasher.ShardFor(clientID, chain.Left.GetKey(), chain.Right.GetKey()))
 				b := j.builderFor(batches, rk)
 				if !b.TryAdd(&chain) {
-					seq := state.chainOutputTracker.RegisterBatch(rk)
+					seq := ot.RegisterBatch(rk)
 					if err := j.flushChainBatch(clientID, rk, seq, b); err != nil {
 						return err
 					}
@@ -530,7 +524,7 @@ func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) err
 
 	for rk, b := range batches {
 		if !b.IsEmpty() {
-			seq := state.chainOutputTracker.RegisterBatch(rk)
+			seq := ot.RegisterBatch(rk)
 
 			if err := j.flushChainBatch(clientID, rk, seq, b); err != nil {
 				return err
@@ -544,8 +538,8 @@ func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) err
 			break
 		}
 		rk := fmt.Sprintf("shard-%d", i)
-		total := state.chainOutputTracker.CountFor(rk)
-		seq := state.chainOutputTracker.RegisterBatch(rk)
+		total := ot.CountFor(rk)
+		seq := ot.RegisterBatch(rk)
 		eofBody := accountchain.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), seq, uint32(total))
 		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			slog.Error("While sending EOF message", "routingKey", rk, "err", err)

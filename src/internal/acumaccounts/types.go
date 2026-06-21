@@ -6,7 +6,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
-	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -35,7 +34,6 @@ type AcumAccountsConfig struct {
 
 type clientState struct {
 	acum            map[account.AccountPair]int8
-	outputTracker   *outputtracker.OutputTracker
 	transferTracker *sendertracker.SenderTracker
 }
 

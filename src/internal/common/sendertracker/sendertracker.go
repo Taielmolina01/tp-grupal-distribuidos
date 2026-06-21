@@ -136,7 +136,6 @@ func Unmarshal(r *wire.Reader) (*SenderTracker, error) {
 	n = r.Uint64()
 	eofSet := make(map[int]uint64, n)
 	for range n {
-		// TODO: SERIALIZAR Y DESERIALIZAR USANDO ESTE VALOR
 		eofSet[int(r.Int32())] = 0
 	}
 	n = r.Uint64()

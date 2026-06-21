@@ -71,14 +71,12 @@ func NewAcumAccounts(config AcumAccountsConfig) (worker.Worker, error) {
 		return &clientState{
 			acum:            map[account.AccountPair]int8{},
 			transferTracker: sendertracker.New(10_000_000),
-			outputTracker:   outputtracker.New(),
 		}
 	})
 	for clientID, cs := range recovered {
 		states.Set(clientID, cs)
 		slog.Info("recovered client state", "clientID", clientID,
 			"acumEntries", len(cs.acum),
-			"outputTotal", cs.outputTracker.Total(),
 		)
 	}
 
@@ -155,21 +153,8 @@ func (a *AcumAccounts) handleBatch(msgs []newmiddleware.Message, ack func(), nac
 			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
 		} else {
 			tracker.RegisterBatch(int(input.SenderID))
-			outgoing := map[string][]account.AccountIdentifier{}
 			for i := range input.Records {
-				for rk, ids := range a.collectRecord(clientID, input.Records[i]) {
-					outgoing[rk] = append(outgoing[rk], ids...)
-				}
-			}
-			for routingKey, ids := range outgoing {
-				seq := state.outputTracker.RegisterBatch(routingKey)
-				body := accountid.WriteBatch(clientID, uint8(a.queryID), uint8(a.id), seq, ids)
-				if err := a.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: routingKey}); err != nil {
-					slog.Error("While sending output batch", "err", err)
-					nack()
-					a.stopConsuming()
-					return
-				}
+				a.collectRecord(state, input.Records[i])
 			}
 		}
 
@@ -177,16 +162,11 @@ func (a *AcumAccounts) handleBatch(msgs []newmiddleware.Message, ack func(), nac
 		modified[clientID] = state
 
 		if tracker.IsComplete(a.expectedEOFs) {
-			for i := range a.outputAmount {
-				rk := fmt.Sprintf("shard-%d", i)
-				total := state.outputTracker.CountFor(rk)
-				eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), uint8(a.id), total+1, uint32(total))
-				if err := a.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
-					slog.Error("While sending EOF message", "err", err)
-					nack()
-					a.stopConsuming()
-					return
-				}
+			if err := a.emitResults(clientID, state); err != nil {
+				slog.Error("While emitting results", "err", err)
+				nack()
+				a.stopConsuming()
+				return
 			}
 			completed[clientID] = struct{}{}
 		}
@@ -209,30 +189,46 @@ func (a *AcumAccounts) handleBatch(msgs []newmiddleware.Message, ack func(), nac
 	ack()
 }
 
-func (a *AcumAccounts) collectRecord(clientID int, record account.AccountChain) map[string][]account.AccountIdentifier {
-	state := a.states.For(clientID)
-
+func (a *AcumAccounts) collectRecord(state *clientState, record account.AccountChain) {
 	pair := account.AccountPair{Left: record.Left, Right: record.Right}
-
-	if state.acum[pair] >= a.requiredAmt {
-		return nil
-	}
-
-	state.acum[pair]++
-
 	if state.acum[pair] < a.requiredAmt {
-		return nil
+		state.acum[pair]++
+	}
+}
+
+func (a *AcumAccounts) emitResults(clientID int, state *clientState) error {
+	ot := outputtracker.New()
+	outgoing := map[string][]account.AccountIdentifier{}
+
+	for pair, count := range state.acum {
+		if count < a.requiredAmt {
+			continue
+		}
+		for _, o := range []account.AccountIdentifier{
+			{BankID: pair.Left.BankID, AccountNumber: pair.Left.AccountNumber},
+			{BankID: pair.Right.BankID, AccountNumber: pair.Right.AccountNumber},
+		} {
+			rk := fmt.Sprintf("shard-%d", a.hasher.ShardFor(clientID, o.BankID, o.AccountNumber))
+			outgoing[rk] = append(outgoing[rk], o)
+		}
 	}
 
-	candidates := []account.AccountIdentifier{
-		{BankID: record.Left.BankID, AccountNumber: record.Left.AccountNumber},
-		{BankID: record.Right.BankID, AccountNumber: record.Right.AccountNumber},
+	for rk, ids := range outgoing {
+		seq := ot.RegisterBatch(rk)
+		body := accountid.WriteBatch(clientID, uint8(a.queryID), uint8(a.id), seq, ids)
+		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
+			return err
+		}
 	}
 
-	result := map[string][]account.AccountIdentifier{}
-	for _, o := range candidates {
-		rk := fmt.Sprintf("shard-%d", a.hasher.ShardFor(clientID, o.BankID, o.AccountNumber))
-		result[rk] = append(result[rk], o)
+	for i := range a.outputAmount {
+		rk := fmt.Sprintf("shard-%d", i)
+		total := ot.CountFor(rk)
+		eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), uint8(a.id), total+1, uint32(total))
+		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+			return err
+		}
 	}
-	return result
+
+	return nil
 }

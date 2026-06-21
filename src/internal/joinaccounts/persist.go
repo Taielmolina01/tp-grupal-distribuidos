@@ -5,14 +5,12 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 )
 
 func marshalTransferState(s *transferPartialState) []byte {
 	w := wire.NewWriter()
 	s.transferTracker.Marshal(w)
-	s.qualifiedOutputTracker.Marshal(w)
 	marshalAccountMap(w, s.left)
 	marshalAccountMap(w, s.right)
 	return w.Bytes()
@@ -24,11 +22,6 @@ func unmarshalTransferState(data []byte) (*transferPartialState, error) {
 	tracker, err := sendertracker.Unmarshal(r)
 	if err != nil {
 		return nil, fmt.Errorf("joinaccounts: unmarshal transferTracker: %w", err)
-	}
-
-	qualifiedOutTracker, err := outputtracker.Unmarshal(r)
-	if err != nil {
-		return nil, fmt.Errorf("joinaccounts: unmarshal qualifiedOutputTracker: %w", err)
 	}
 
 	left, err := unmarshalAccountMap(r)
@@ -46,17 +39,15 @@ func unmarshalTransferState(data []byte) (*transferPartialState, error) {
 	}
 
 	return &transferPartialState{
-		transferTracker:        tracker,
-		qualifiedOutputTracker: qualifiedOutTracker,
-		left:                   left,
-		right:                  right,
+		transferTracker: tracker,
+		left:            left,
+		right:           right,
 	}, nil
 }
 
 func marshalQualifiedState(s *qualifiedPartialState) []byte {
 	w := wire.NewWriter()
 	s.qualifiedTracker.Marshal(w)
-	s.chainOutputTracker.Marshal(w)
 	marshalAccountSet(w, s.qualifyingLeft)
 	marshalAccountSet(w, s.qualifyingRight)
 	return w.Bytes()
@@ -68,11 +59,6 @@ func unmarshalQualifiedState(data []byte) (*qualifiedPartialState, error) {
 	tracker, err := sendertracker.Unmarshal(r)
 	if err != nil {
 		return nil, fmt.Errorf("joinaccounts: unmarshal qualifiedTracker: %w", err)
-	}
-
-	chainOutTracker, err := outputtracker.Unmarshal(r)
-	if err != nil {
-		return nil, fmt.Errorf("joinaccounts: unmarshal chainOutputTracker: %w", err)
 	}
 
 	qualifyingLeft, err := unmarshalAccountSet(r)
@@ -90,10 +76,9 @@ func unmarshalQualifiedState(data []byte) (*qualifiedPartialState, error) {
 	}
 
 	return &qualifiedPartialState{
-		qualifiedTracker:   tracker,
-		chainOutputTracker: chainOutTracker,
-		qualifyingLeft:     qualifyingLeft,
-		qualifyingRight:    qualifyingRight,
+		qualifiedTracker: tracker,
+		qualifyingLeft:   qualifyingLeft,
+		qualifyingRight:  qualifyingRight,
 	}, nil
 }
 
