@@ -1,0 +1,84 @@
+src/cmd/daterangeandpaymentfilter/config.go
+  s_9503b715adfa3f::t_38318b8237b8db 148,152
+  s_9503b715adfa3f::t_cc1c52126f4c50 63
+  s_9503b715adfa3f::t_b536bfe8c12e1b 67-70
+src/internal/fetcher/fetcher.go
+  s_9503b715adfa3f::t_cc1c52126f4c50 75
+src/internal/reducer/count.go
+  s_9503b715adfa3f::t_cc1c52126f4c50 47
+src/cmd/currencyfilter/config.go
+  s_9503b715adfa3f::t_425c4cd5dff04b 112
+  s_9503b715adfa3f::t_f4733787c07807 62
+  s_9503b715adfa3f::t_cc1c52126f4c50 58
+src/internal/filter/currencyfilter/currencyfilter.go
+  s_9503b715adfa3f::t_bdcf839d3e8236 24
+  s_9503b715adfa3f::t_e3b874e3060a2f 35
+src/cmd/reducer/main.go
+  s_9503b715adfa3f::t_cc1c52126f4c50 74
+src/internal/reducer/types.go
+  s_9503b715adfa3f::t_cc1c52126f4c50 23
+src/cmd/bankdistinctfilter/config.go
+  s_9503b715adfa3f::t_137399ec3fb70c 82,94
+  s_9503b715adfa3f::t_cc1c52126f4c50 77
+src/internal/filter/daterangeandpaymentfilter/daterangeandpaymentfilter.go
+  s_9503b715adfa3f::t_6f3ba9e794017d 24
+  s_9503b715adfa3f::t_64d2f29bf7f715 35
+src/cmd/convertedamountfilter/config.go
+  s_9503b715adfa3f::t_4b609e0dac77fc 82-85
+  s_9503b715adfa3f::t_cc1c52126f4c50 77
+src/internal/gateway/gateway.go
+  s_9503b715adfa3f::t_1d4acf73215b8c 91,111,126,211
+  s_9503b715adfa3f::t_1b494a1cdb2470 560,596
+  s_9503b715adfa3f::t_d9217c2e06a8a8 81,97-99
+  s_9503b715adfa3f::t_3e62014e2b4056 562,601
+  s_9503b715adfa3f::t_d197158bcf9735 47
+src/internal/filter/convertedamountfilter/types.go
+  s_9503b715adfa3f::t_cc1c52126f4c50 13
+src/internal/common/middleware/newmiddleware/cluster.go
+  s_9503b715adfa3f::t_6f3391651a3919 1-8
+src/cmd/fetcher/config.go
+  s_9503b715adfa3f::t_cc1c52126f4c50 67
+src/internal/filter/amountfilter/amountfilter.go
+  s_9503b715adfa3f::t_6bfccdc59a14cb 20
+src/internal/filter/commonfilter/types.go
+  s_9503b715adfa3f::t_54c8c295de8846 26
+src/internal/filter/convertedamountfilter/convertedamountfilter.go
+  s_9503b715adfa3f::t_cc1c52126f4c50 105,122,130,210
+src/internal/filter/commonfilter/filter.go
+  s_9503b715adfa3f::t_f7f19da94991d7 86
+  s_9503b715adfa3f::t_7b2cbfdb4ab969 29
+src/cmd/amountfilter/config.go
+  s_9503b715adfa3f::t_899d57b3799b0e 58
+  s_9503b715adfa3f::t_cc1c52126f4c50 55
+  s_9503b715adfa3f::t_1f681eb44e970f 84
+src/internal/fetcher/types.go
+  s_9503b715adfa3f::t_cc1c52126f4c50 15
+src/internal/reducer/constructors.go
+  s_9503b715adfa3f::t_cc1c52126f4c50 30
+src/internal/common/filter/types.go
+  h_3c9b41718876fe 18
+  s_9503b715adfa3f::t_de2e4c2ccbd68c 10-13,16-17,19-20,25-35
+src/internal/filter/commondistinctfilter/distinctfilter.go
+  s_9503b715adfa3f::t_cc1c52126f4c50 49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "59d53d6138d6b0812fb3ecf352ab2f2b6dfc9658",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_9503b715adfa3f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c616592a-fd54-45b3-9308-88b61fce8101",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
