@@ -26,7 +26,7 @@ func NewFilter[T any, O any](
 	shardKeys func(O) []string,
 	inputCodec wire.Codec[T],
 	outputCodec wire.Codec[O],
-	outputClusters []OutputCluster,
+	outputClusters []newmiddleware.ShardedCluster,
 ) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
@@ -83,8 +83,7 @@ func NewFilter[T any, O any](
 
 	return &Filter[T, O]{
 		id:                   uint32(config.Id),
-		queryId:              config.QueryId,
-		filterType:           config.Type,
+		queryId:              config.QueryID,
 		filterFunction:       filterFunction,
 		outputTransform:      inputToOutput,
 		shardKeys:            shardKeys,

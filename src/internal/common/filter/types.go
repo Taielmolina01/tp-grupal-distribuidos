@@ -6,45 +6,33 @@ import (
 	"tp-grupal-distribuidos/internal/common/shard"
 )
 
-type FilterType string
-
-const (
-	CURRENCY                FilterType = "CURRENCY"
-	AMOUNT                  FilterType = "AMOUNT"
-	DATE_RANGE              FilterType = "DATE_RANGE"
-	DATE_RANGE_AND_PAYMENT  FilterType = "DATE_RANGE_AND_PAYMENT"
-	DATE_RANGE_AND_SPLITTER FilterType = "DATE_RANGE_AND_SPLITTER"
-	AVERAGE_FILTER          FilterType = "AVERAGE_FILTER"
-	COUNT_AND_FILTER        FilterType = "COUNT_AND_FILTER"
-	TRANSFER_DISTINCT       FilterType = "TRANSFER_DISTINCT"
-	BANK_DISTINCT           FilterType = "BANK_DISTINCT"
-	CONVERTED_AMOUNT_FILTER FilterType = "CONVERTED_AMOUNT_FILTER"
-)
-
 type FilterConfig struct {
-	Type                  FilterType
-	Id                    int
-	MomHost               string
-	MomPort               int
+	Id      int
+	MomHost string
+	MomPort int
+
 	InputMiddlewarePrefix string
 	InputQueue            string
-	OutputQueue           string
-	OutputRoutingKeys     []string
+
+	OutputQueue       string
+	OutputRoutingKeys []string
+	OutputClusters    []shard.ClusterConfig
+
 	LeftInputQueue        string
 	RightInputQueue       string
 	RightInputExchange    string
 	RightInputRoutingKeys []string
-	Amount                float64
-	StartDateRange        time.Time
-	EndDateRange          time.Time
-	Currencies            []string
-	AmountTreshold        int
-	FilterAmount          int
-	OutputQueues          []string
-	QueryId               uint8
-	PaymentFormats        []string
-	Quote                 string
-	OutputClusters        []shard.ClusterConfig
+
+	Amount         float64
+	StartDateRange time.Time
+	EndDateRange   time.Time
+	Currencies     []string
+	AmountTreshold int
+	FilterAmount   int
+	OutputQueues   []string
+	QueryID        uint8
+	PaymentFormats []string
+	Quote          string
 
 	PersistPath          string
 	PersistBatchSize     int

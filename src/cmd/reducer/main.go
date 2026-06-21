@@ -71,7 +71,7 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		ReducerAmount:     reducerAmount,
 		MomHost:           momHost,
 		MomPort:           momPort,
-		QueryId:           uint8(queryId),
+		QueryID:           uint8(queryId),
 		InputExchange:     inputExchange,
 		InputQueue:        inputQueue,
 		InputRoutingKeys:  inputRoutingKeys,

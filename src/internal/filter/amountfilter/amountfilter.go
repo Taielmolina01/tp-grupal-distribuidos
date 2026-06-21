@@ -17,7 +17,7 @@ func CreateAmountFilter(config filter.FilterConfig) (worker.Worker, error) {
 	if err != nil {
 		return nil, err
 	}
-	clusters := []commonfilter.OutputCluster{{
+	clusters := []newmiddleware.ShardedCluster{{
 		Middleware: outputMiddleware,
 		Hasher:     shard.New(1),
 	}}

@@ -72,7 +72,7 @@ func createFetcherImpl(config FetcherConfig) (worker.Worker, error) {
 	return &Fetcher{
 		inputQueue:  inputQueue,
 		outputQueue: outputQueue,
-		queryId:     config.QueryId,
+		queryId:     config.QueryID,
 		quote:       config.Quote,
 		ratesCache:  make(map[string]float64),
 	}, nil

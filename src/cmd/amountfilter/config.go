@@ -52,10 +52,10 @@ func loadConfig() (filter.FilterConfig, error) {
 		InputMiddlewarePrefix: inputMiddlewarePrefix,
 		OutputQueue:           outputQueue,
 		FilterAmount:          filterAmountInt,
-		QueryId:               uint8(queryId),
+		QueryID:               uint8(queryId),
 	}
 
-	if err := loadFilterTypeConfig(&config); err != nil {
+	if err := loadAmountVenv(&config); err != nil {
 		return filter.FilterConfig{}, err
 	}
 
@@ -81,17 +81,8 @@ func loadConfig() (filter.FilterConfig, error) {
 func loadAmountVenv(config *filter.FilterConfig) error {
 	amount, err := strconv.ParseFloat(os.Getenv("AMOUNT"), 64)
 	if err != nil {
-		return errors.New("AMOUNT environment variable is required if FILTER_TYPE is AMOUNT")
+		return errors.New("AMOUNT environment variable is required")
 	}
 	config.Amount = amount
 	return nil
-}
-
-func loadFilterTypeConfig(config *filter.FilterConfig) error {
-	filterTypeVenv := os.Getenv("FILTER_TYPE")
-	if filterTypeVenv == "" {
-		return errors.New("FILTER_TYPE environment variable is required")
-	}
-	config.Type = filter.FilterType(filterTypeVenv)
-	return loadAmountVenv(config)
 }

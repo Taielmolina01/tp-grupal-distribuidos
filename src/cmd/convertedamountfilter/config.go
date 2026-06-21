@@ -74,12 +74,15 @@ func loadConfig() (filter.FilterConfig, error) {
 		LeftInputQueue:        leftInputQueue,
 		RightInputQueue:       rightInputQueue,
 		FilterAmount:          filterAmountInt,
-		QueryId:               uint8(queryId),
+		QueryID:               uint8(queryId),
 		RightInputExchange:    rightInputExchange,
 		RightInputRoutingKeys: rightInputRoutingKeys,
 	}
 
-	if err := loadFilterTypeConfig(&config); err != nil {
+	if err := loadAmountVenv(&config); err != nil {
+		return filter.FilterConfig{}, err
+	}
+	if err := loadQuoteVenv(&config); err != nil {
 		return filter.FilterConfig{}, err
 	}
 
@@ -107,21 +110,3 @@ func loadQuoteVenv(config *filter.FilterConfig) error {
 	return nil
 }
 
-func loadFilterTypeConfig(config *filter.FilterConfig) error {
-	filterTypeVenv := os.Getenv("FILTER_TYPE")
-	if filterTypeVenv == "" {
-		return errors.New("FILTER_TYPE environment variable is required")
-	}
-
-	config.Type = filter.FilterType(filterTypeVenv)
-
-	if err := loadAmountVenv(config); err != nil {
-		return err
-	}
-
-	if err := loadQuoteVenv(config); err != nil {
-		return err
-	}
-
-	return nil
-}

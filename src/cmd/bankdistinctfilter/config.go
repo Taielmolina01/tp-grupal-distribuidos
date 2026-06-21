@@ -74,12 +74,12 @@ func loadConfig() (filter.FilterConfig, error) {
 		LeftInputQueue:        leftInputQueue,
 		RightInputQueue:       rightInputQueue,
 		FilterAmount:          filterAmountInt,
-		QueryId:               uint8(queryId),
+		QueryID:               uint8(queryId),
 		RightInputExchange:    rightInputExchange,
 		RightInputRoutingKeys: rightInputRoutingKeys,
 	}
 
-	if err := loadFilterTypeConfig(&config); err != nil {
+	if err := loadBankDistinctVenv(&config); err != nil {
 		return filter.FilterConfig{}, err
 	}
 
@@ -91,23 +91,8 @@ func loadConfig() (filter.FilterConfig, error) {
 func loadBankDistinctVenv(config *filter.FilterConfig) error {
 	outputQueues := os.Getenv("OUTPUT_QUEUES")
 	if outputQueues == "" {
-		return errors.New("OUTPUT_QUEUES environment variable is required if FILTER_TYPE is BANK_DISTINCT")
+		return errors.New("OUTPUT_QUEUES environment variable is required")
 	}
 	config.OutputQueues = strings.Split(outputQueues, ",")
-	return nil
-}
-
-func loadFilterTypeConfig(config *filter.FilterConfig) error {
-	filterTypeVenv := os.Getenv("FILTER_TYPE")
-	if filterTypeVenv == "" {
-		return errors.New("FILTER_TYPE environment variable is required")
-	}
-
-	config.Type = filter.FilterType(filterTypeVenv)
-
-	if err := loadBankDistinctVenv(config); err != nil {
-		return err
-	}
-
 	return nil
 }

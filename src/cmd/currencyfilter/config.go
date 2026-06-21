@@ -55,11 +55,11 @@ func loadConfig() (filter.FilterConfig, error) {
 		MomPort:               momPort,
 		InputMiddlewarePrefix: inputMiddlewarePrefix,
 		FilterAmount:          filterAmountInt,
-		QueryId:               uint8(queryId),
+		QueryID:               uint8(queryId),
 		OutputClusters:        outputClusters,
 	}
 
-	if err := loadFilterTypeConfig(&config); err != nil {
+	if err := loadCurrenciesVenv(&config); err != nil {
 		return filter.FilterConfig{}, err
 	}
 
@@ -109,17 +109,8 @@ func loadOutputClusters() ([]shard.ClusterConfig, error) {
 func loadCurrenciesVenv(config *filter.FilterConfig) error {
 	currencies := strings.Split(os.Getenv("CURRENCIES"), ",")
 	if len(currencies) < 1 {
-		return errors.New("CURRENCIES environment variable is required if FILTER_TYPE is CURRENCY")
+		return errors.New("CURRENCIES environment variable is required")
 	}
 	config.Currencies = currencies
 	return nil
-}
-
-func loadFilterTypeConfig(config *filter.FilterConfig) error {
-	filterTypeVenv := os.Getenv("FILTER_TYPE")
-	if filterTypeVenv == "" {
-		return errors.New("FILTER_TYPE environment variable is required")
-	}
-	config.Type = filter.FilterType(filterTypeVenv)
-	return loadCurrenciesVenv(config)
 }

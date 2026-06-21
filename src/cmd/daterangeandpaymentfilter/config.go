@@ -60,11 +60,14 @@ func loadConfig() (filter.FilterConfig, error) {
 		MomPort:               momPort,
 		InputMiddlewarePrefix: inputMiddlewarePrefix,
 		FilterAmount:          filterAmountInt,
-		QueryId:               uint8(queryId),
+		QueryID:               uint8(queryId),
 		OutputClusters:        outputClusters,
 	}
 
-	if err := loadFilterTypeConfig(&config); err != nil {
+	if err := loadDateRangeVenv(&config); err != nil {
+		return filter.FilterConfig{}, err
+	}
+	if err := loadPaymentMethods(&config); err != nil {
 		return filter.FilterConfig{}, err
 	}
 
@@ -142,25 +145,12 @@ func loadDateRangeVenv(config *filter.FilterConfig) error {
 func loadPaymentMethods(config *filter.FilterConfig) error {
 	paymentFormatStr := os.Getenv("PAYMENT_FORMATS")
 	if paymentFormatStr == "" {
-		return errors.New("PAYMENT_FORMATS environment variable is required if FILTER_TYPE is DATE_RANGE_AND_PAYMENT")
+		return errors.New("PAYMENT_FORMATS environment variable is required")
 	}
 	paymentFormats := splitter.Split(paymentFormatStr, ",")
 	if len(paymentFormats) < 1 {
-		return errors.New("PAYMENT_FORMATS environment variable is required if FILTER_TYPE is DATE_RANGE_AND_PAYMENT")
+		return errors.New("PAYMENT_FORMATS environment variable is required")
 	}
 	config.PaymentFormats = paymentFormats
 	return nil
-}
-
-func loadFilterTypeConfig(config *filter.FilterConfig) error {
-	filterTypeVenv := os.Getenv("FILTER_TYPE")
-	if filterTypeVenv == "" {
-		return errors.New("FILTER_TYPE environment variable is required")
-	}
-	config.Type = filter.FilterType(filterTypeVenv)
-
-	if err := loadDateRangeVenv(config); err != nil {
-		return err
-	}
-	return loadPaymentMethods(config)
 }

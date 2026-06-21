@@ -41,15 +41,10 @@ type GatewayConfig struct {
 	QueryEOFsExpected map[uint8]int
 }
 
-type transferCluster struct {
-	middleware newmiddleware.Middleware
-	hasher     shard.Hasher
-}
-
 type Gateway struct {
 	registry          clientregistry.ClientRegistry
 	accountQueues     []middleware.Middleware
-	transferClusters  []transferCluster
+	transferClusters  []newmiddleware.ShardedCluster
 	resultsQueue      middleware.Middleware
 	listener          net.Listener
 	running           atomic.Bool
@@ -83,7 +78,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		accountQueues = append(accountQueues, accountQueue)
 	}
 
-	clusters := make([]transferCluster, 0, len(config.TransfersClusters))
+	clusters := make([]newmiddleware.ShardedCluster, 0, len(config.TransfersClusters))
 	for _, c := range config.TransfersClusters {
 		m, err := newmiddleware.NewShardedMiddleware(newConnSettings, c.Prefix, "", "")
 		if err != nil {
@@ -93,15 +88,15 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 				}
 			}
 			for _, cl := range clusters {
-				if closeErr := cl.middleware.Close(); closeErr != nil {
+				if closeErr := cl.Middleware.Close(); closeErr != nil {
 					slog.Error("While closing transfer cluster middleware", "err", closeErr)
 				}
 			}
 			return nil, err
 		}
-		clusters = append(clusters, transferCluster{
-			middleware: m,
-			hasher:     shard.New(c.NodeCount),
+		clusters = append(clusters, newmiddleware.ShardedCluster{
+			Middleware: m,
+			Hasher:     shard.New(c.NodeCount),
 		})
 	}
 
@@ -113,7 +108,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 			}
 		}
 		for _, cl := range clusters {
-			if closeErr := cl.middleware.Close(); closeErr != nil {
+			if closeErr := cl.Middleware.Close(); closeErr != nil {
 				slog.Error("While closing transfer cluster middleware", "err", closeErr)
 			}
 		}
@@ -128,7 +123,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 			}
 		}
 		for _, cl := range clusters {
-			if closeErr := cl.middleware.Close(); closeErr != nil {
+			if closeErr := cl.Middleware.Close(); closeErr != nil {
 				slog.Error("While closing transfer cluster middleware", "err", closeErr)
 			}
 		}
@@ -213,7 +208,7 @@ func (gateway *Gateway) close() {
 		}
 	}
 	for _, cl := range gateway.transferClusters {
-		if err := cl.middleware.Close(); err != nil {
+		if err := cl.Middleware.Close(); err != nil {
 			slog.Error("While closing transfer cluster middleware", "err", err)
 		}
 	}
@@ -562,9 +557,9 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 
 	body := batch.WriteRaw(client.ID, 0, 0, seq, count, payload)
 	for ci, cluster := range gateway.transferClusters {
-		rk := fmt.Sprintf("shard-%d", cluster.hasher.ShardFor(client.ID, strconv.FormatUint(seq, 10)))
+		rk := fmt.Sprintf("shard-%d", cluster.Hasher.ShardFor(client.ID, strconv.FormatUint(seq, 10)))
 		trackerKey := fmt.Sprintf("%d_%s", ci, rk)
-		if err := cluster.middleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
+		if err := cluster.Middleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
 			slog.Debug("While sending transfers batch", "err", err)
 			return err
 		}
@@ -598,12 +593,12 @@ func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState) 
 
 	var errs []error
 	for ci, cluster := range gateway.transferClusters {
-		for i := range cluster.hasher.TotalShards() {
+		for i := range cluster.Hasher.TotalShards() {
 			rk := fmt.Sprintf("shard-%d", i)
 			trackerKey := fmt.Sprintf("%d_%s", ci, rk)
 			total := tracker.CountFor(trackerKey)
 			eofBody := batch.WriteEOF(client.ID, 0, 0, seq, uint32(total))
-			if err := cluster.middleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+			if err := cluster.Middleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 				slog.Error("While sending transfers EOF", "cluster", ci, "routingKey", rk, "total", total, "err", err)
 				errs = append(errs, err)
 			}

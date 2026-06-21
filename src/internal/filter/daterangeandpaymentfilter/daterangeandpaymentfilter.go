@@ -21,7 +21,7 @@ func isValidPaymentMethod(t transfer.Transfer, config filter.FilterConfig) bool 
 func CreateDateRangeAndPaymentMethod(config filter.FilterConfig) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	clusters := make([]commonfilter.OutputCluster, 0, len(config.OutputClusters))
+	clusters := make([]newmiddleware.ShardedCluster, 0, len(config.OutputClusters))
 	for _, c := range config.OutputClusters {
 		m, err := newmiddleware.NewShardedMiddleware(connSettings, c.Prefix, "", "")
 		if err != nil {
@@ -32,7 +32,7 @@ func CreateDateRangeAndPaymentMethod(config filter.FilterConfig) (worker.Worker,
 			}
 			return nil, err
 		}
-		clusters = append(clusters, commonfilter.OutputCluster{
+		clusters = append(clusters, newmiddleware.ShardedCluster{
 			Middleware: m,
 			Hasher:     shard.New(c.NodeCount),
 		})

@@ -4,24 +4,16 @@ import (
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
-	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
-	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
 )
-
-type OutputCluster struct {
-	Middleware newmiddleware.Middleware
-	Hasher     shard.Hasher
-}
 
 type Filter[T any, O any] struct {
 	id          uint32
 	queryId     uint8
-	filterType  filter.FilterType
 	inputAmount int
 
 	filterFunction  func(T) bool
@@ -31,7 +23,7 @@ type Filter[T any, O any] struct {
 	outputCodec     wire.Codec[O]
 
 	inputExchange  newmiddleware.Middleware
-	outputClusters []OutputCluster
+	outputClusters []newmiddleware.ShardedCluster
 
 	states               statemap.StateMap[clientState]
 	checkpoint           *checkpoint.Checkpoint[clientState]
