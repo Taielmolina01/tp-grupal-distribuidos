@@ -1,0 +1,24 @@
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_170690cb63d1f5::t_367378e8428a65 17,154,162-163,189-191,193-205,207-211,216-218
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "d0a71325c0c762b56b5dbb86d62884cefb091bf4",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_170690cb63d1f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aa7f0277-688d-4fcf-8e1b-7bdd84381bb9",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
