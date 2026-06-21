@@ -14,22 +14,15 @@ type FilterConfig struct {
 	InputMiddlewarePrefix string
 	InputQueue            string
 
-	OutputQueue       string
-	OutputRoutingKeys []string
-	OutputClusters    []shard.ClusterConfig
-
-	LeftInputQueue        string
-	RightInputQueue       string
-	RightInputExchange    string
-	RightInputRoutingKeys []string
+	OutputQueue    string
+	OutputQueues   []string
+	OutputClusters []shard.ClusterConfig
 
 	Amount         float64
 	StartDateRange time.Time
 	EndDateRange   time.Time
 	Currencies     []string
-	AmountTreshold int
 	FilterAmount   int
-	OutputQueues   []string
 	QueryID        uint8
 	PaymentFormats []string
 	Quote          string

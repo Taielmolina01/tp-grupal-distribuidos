@@ -73,7 +73,6 @@ services:
       - INPUT_MIDDLEWARE_PREFIX=Q1234_filter_currency
       - OUTPUT_CLUSTERS=Q1_filtered:2,Q2_filtered:2,Q3_filtered:2,Q4_filtered:2
       - CURRENCIES=US Dollar
-      - FILTER_TYPE=CURRENCY
       - FILTER_AMOUNT=1
       - QUERY_ID=1
       - PERSIST_PATH=/var/bkp/q1234_filter_currency_0
@@ -100,7 +99,6 @@ services:
       - INPUT_MIDDLEWARE_PREFIX=Q1234_filter_currency
       - OUTPUT_CLUSTERS=Q1_filtered:2,Q2_filtered:2,Q3_filtered:2,Q4_filtered:2
       - CURRENCIES=US Dollar
-      - FILTER_TYPE=CURRENCY
       - FILTER_AMOUNT=1
       - QUERY_ID=1
       - PERSIST_PATH=/var/bkp/q1234_filter_currency_1
@@ -127,7 +125,6 @@ services:
       - INPUT_MIDDLEWARE_PREFIX=Q1_filtered
       - OUTPUT_QUEUE=results_queue
       - AMOUNT=50.0
-      - FILTER_TYPE=AMOUNT
       - FILTER_AMOUNT=2
       - QUERY_ID=1
       - PERSIST_PATH=/var/bkp/q1_filter_amount_0
@@ -154,7 +151,6 @@ services:
       - INPUT_MIDDLEWARE_PREFIX=Q1_filtered
       - OUTPUT_QUEUE=results_queue
       - AMOUNT=50.0
-      - FILTER_TYPE=AMOUNT
       - FILTER_AMOUNT=2
       - QUERY_ID=1
       - PERSIST_PATH=/var/bkp/q1_filter_amount_1
@@ -186,7 +182,6 @@ services:
       - INPUT_QUEUE=Q2_reducer_in_q_0
       - INPUT_ROUTING_KEYS=Q2_filtered_shard-0
       - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
-      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
       - QUERY_ID=2
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
@@ -212,7 +207,6 @@ services:
       - INPUT_QUEUE=Q2_reducer_in_q_1
       - INPUT_ROUTING_KEYS=Q2_filtered_shard-1
       - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
-      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
       - QUERY_ID=2
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
@@ -236,7 +230,6 @@ services:
       - INPUT_QUEUE=Q2_accounts_0
       - OUTPUT_QUEUES=Q2_join_accounts_q_0,Q2_join_accounts_q_1
       - FILTER_AMOUNT=2
-      - FILTER_TYPE=BANK_DISTINCT
       - QUERY_ID=2
 
   q2_filter_bank_distinct_1:
@@ -254,7 +247,6 @@ services:
       - INPUT_QUEUE=Q2_accounts_1
       - OUTPUT_QUEUES=Q2_join_accounts_q_0,Q2_join_accounts_q_1
       - FILTER_AMOUNT=2
-      - FILTER_TYPE=BANK_DISTINCT
       - QUERY_ID=2
 
   q2_join_0:
@@ -273,7 +265,6 @@ services:
       - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_0
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
-      - OUTPUT_ROUTING_KEYS=results_queue
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2
       - JOIN_AMOUNT=2
@@ -300,7 +291,6 @@ services:
       - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_1
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
-      - OUTPUT_ROUTING_KEYS=results_queue
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2
       - JOIN_AMOUNT=2
@@ -835,7 +825,6 @@ services:
       - INPUT_MIDDLEWARE_PREFIX=Q5_filter
       - OUTPUT_CLUSTERS=Q5_filtered:1
       - FILTER_AMOUNT=1
-      - FILTER_TYPE=DATE_RANGE_AND_PAYMENT
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - PAYMENT_FORMATS=ACH,Wire
       - QUERY_ID=5
@@ -858,7 +847,6 @@ services:
       - INPUT_MIDDLEWARE_PREFIX=Q5_filter
       - OUTPUT_CLUSTERS=Q5_filtered:1
       - FILTER_AMOUNT=1
-      - FILTER_TYPE=DATE_RANGE_AND_PAYMENT
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - PAYMENT_FORMATS=ACH,Wire
       - QUERY_ID=5
@@ -900,7 +888,6 @@ services:
       - INPUT_QUEUE=Q5_fetcher_output
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
-      - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
       - QUERY_ID=5
       - QUOTE=US Dollar
 
@@ -920,7 +907,6 @@ services:
       - INPUT_QUEUE=Q5_fetcher_output
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
-      - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
       - QUERY_ID=5
       - QUOTE=US Dollar
 

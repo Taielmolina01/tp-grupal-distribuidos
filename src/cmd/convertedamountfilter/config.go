@@ -4,10 +4,8 @@ import (
 	"errors"
 	"os"
 	"strconv"
-	"strings"
 
 	"tp-grupal-distribuidos/internal/common/filter"
-	"tp-grupal-distribuidos/internal/common/splitter"
 )
 
 func loadConfig() (filter.FilterConfig, error) {
@@ -30,12 +28,6 @@ func loadConfig() (filter.FilterConfig, error) {
 
 	outputQueue := os.Getenv("OUTPUT_QUEUE")
 
-	outputRoutingKeysStr := os.Getenv("OUTPUT_ROUTING_KEYS")
-	outputRoutingKeys := []string{}
-	if outputRoutingKeysStr != "" {
-		outputRoutingKeys = strings.Split(outputRoutingKeysStr, ",")
-	}
-
 	filterAmount := os.Getenv("FILTER_AMOUNT")
 	if filterAmount == "" {
 		return filter.FilterConfig{}, errors.New("FILTER_AMOUNT environment variable is required")
@@ -55,28 +47,14 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
 	}
 
-	rightInputExchange := os.Getenv("RIGHT_INPUT_EXCHANGE")
-	rightInputQueue := os.Getenv("RIGHT_INPUT_QUEUE")
-	leftInputQueue := os.Getenv("LEFT_INPUT_QUEUE")
-	rightInputRoutingKeysStr := os.Getenv("RIGHT_INPUT_ROUTING_KEYS")
-	rightInputRoutingKeys := []string{}
-	if rightInputRoutingKeysStr != "" {
-		rightInputRoutingKeys = splitter.Split(rightInputRoutingKeysStr, ",")
-	}
-
 	config := filter.FilterConfig{
-		Id:                    id,
-		MomHost:               momHost,
-		MomPort:               momPort,
-		InputQueue:            inputQueue,
-		OutputQueue:           outputQueue,
-		OutputRoutingKeys:     outputRoutingKeys,
-		LeftInputQueue:        leftInputQueue,
-		RightInputQueue:       rightInputQueue,
-		FilterAmount:          filterAmountInt,
-		QueryID:               uint8(queryId),
-		RightInputExchange:    rightInputExchange,
-		RightInputRoutingKeys: rightInputRoutingKeys,
+		Id:           id,
+		MomHost:      momHost,
+		MomPort:      momPort,
+		InputQueue:   inputQueue,
+		OutputQueue:  outputQueue,
+		FilterAmount: filterAmountInt,
+		QueryID:      uint8(queryId),
 	}
 
 	if err := loadAmountVenv(&config); err != nil {
@@ -109,4 +87,3 @@ func loadQuoteVenv(config *filter.FilterConfig) error {
 	config.Quote = quote
 	return nil
 }
-
