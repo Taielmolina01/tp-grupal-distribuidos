@@ -2,14 +2,11 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/filter"
-	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/splitter"
 )
 
@@ -37,7 +34,10 @@ func loadConfig() (filter.FilterConfig, error) {
 		inputRoutingKeys = splitter.Split(inputRoutingKeysStr, ",")
 	}
 
-	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
+	outputQueue := os.Getenv("OUTPUT_QUEUE")
+	if outputQueue == "" {
+		return filter.FilterConfig{}, errors.New("OUTPUT_QUEUE environment variable is required")
+	}
 
 	filterAmountInt, err := strconv.Atoi(os.Getenv("FILTER_AMOUNT"))
 	if err != nil {
@@ -49,11 +49,6 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
 	}
 
-	outputClusters, err := loadOutputClusters()
-	if err != nil {
-		return filter.FilterConfig{}, err
-	}
-
 	config := filter.FilterConfig{
 		Id:               id,
 		MomHost:          momHost,
@@ -61,10 +56,9 @@ func loadConfig() (filter.FilterConfig, error) {
 		InputQueue:       inputQueue,
 		InputExchange:    inputExchange,
 		InputRoutingKeys: inputRoutingKeys,
-		OutputExchange:   outputExchange,
+		OutputQueue:      outputQueue,
 		FilterAmount:     filterAmountInt,
 		QueryId:          uint8(queryId),
-		OutputClusters:   outputClusters,
 	}
 
 	if err := loadFilterTypeConfig(&config); err != nil {
@@ -88,30 +82,6 @@ func loadConfig() (filter.FilterConfig, error) {
 	config.PersistFlushInterval = persistFlushInterval
 
 	return config, nil
-}
-
-func loadOutputClusters() ([]shard.ClusterConfig, error) {
-	clustersStr := os.Getenv("OUTPUT_CLUSTERS")
-	if clustersStr == "" {
-		return nil, errors.New("OUTPUT_CLUSTERS environment variable is required")
-	}
-	parts := splitter.Split(clustersStr, ",")
-	clusters := make([]shard.ClusterConfig, 0, len(parts))
-	for _, part := range parts {
-		kv := strings.SplitN(part, ":", 2)
-		if len(kv) != 2 {
-			return nil, fmt.Errorf("invalid OUTPUT_CLUSTERS entry %q (expected prefix:N)", part)
-		}
-		n, err := strconv.Atoi(strings.TrimSpace(kv[1]))
-		if err != nil {
-			return nil, fmt.Errorf("invalid node count in OUTPUT_CLUSTERS entry %q: %w", part, err)
-		}
-		clusters = append(clusters, shard.ClusterConfig{
-			Prefix:    strings.TrimSpace(kv[0]),
-			NodeCount: n,
-		})
-	}
-	return clusters, nil
 }
 
 func loadAmountVenv(config *filter.FilterConfig) error {

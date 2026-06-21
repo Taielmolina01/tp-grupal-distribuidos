@@ -7,6 +7,14 @@ type ClusterConfig struct {
 	NodeCount int
 }
 
+type OutputRouter interface {
+	AllRoutingKeys() []string
+}
+
+type QueueRouter struct{}
+
+func (QueueRouter) AllRoutingKeys() []string { return []string{""} }
+
 type MultiClusterHasher struct {
 	clusters []clusterEntry
 }

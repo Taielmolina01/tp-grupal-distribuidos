@@ -23,46 +23,47 @@ func NewFilter[T any, O any](
 	config filter.FilterConfig,
 	filterFunction func(T) bool,
 	inputToOutput func(T) O,
-	shardKeys func(O) []string,
+	routeRecord func(clientID int, o O) []string,
 	inputCodec wire.Codec[T],
 	outputCodec wire.Codec[O],
+	outputMiddleware newmiddleware.Middleware,
+	router shard.OutputRouter,
 ) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := newmiddleware.NewShardedMiddleware(
+	var (
+		inputExchange newmiddleware.Middleware
+		constructErr  error
+	)
+	defer func() {
+		if constructErr != nil {
+			if inputExchange != nil {
+				if err := inputExchange.Close(); err != nil {
+					slog.Error("While closing input exchange after construction failure", "err", err)
+				}
+			}
+			if err := outputMiddleware.Close(); err != nil {
+				slog.Error("While closing output middleware after construction failure", "err", err)
+			}
+		}
+	}()
+
+	inputExchange, constructErr = newmiddleware.NewShardedMiddleware(
 		connSettings, config.InputExchange, config.InputQueue, config.InputRoutingKeys[0],
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	outputExchange, err := newmiddleware.NewShardedMiddleware(connSettings, config.OutputExchange, "", "")
-	if err != nil {
-		if err := inputExchange.Close(); err != nil {
-			slog.Error("While closing input exchange after output exchange creation failure", "err", err)
-		}
-		return nil, err
+	if constructErr != nil {
+		return nil, constructErr
 	}
 
 	ckpt, err := checkpoint.New(config.PersistPath, marshalClientState, unmarshalClientState)
 	if err != nil {
-		if err := inputExchange.Close(); err != nil {
-			slog.Error("While closing input exchange after checkpoint creation failure", "err", err)
-		}
-		if err := outputExchange.Close(); err != nil {
-			slog.Error("While closing output exchange after checkpoint creation failure", "err", err)
-		}
+		constructErr = err
 		return nil, err
 	}
 
 	recovered, err := ckpt.Load()
 	if err != nil {
-		if err := inputExchange.Close(); err != nil {
-			slog.Error("While closing input exchange after checkpoint load failure", "err", err)
-		}
-		if err := outputExchange.Close(); err != nil {
-			slog.Error("While closing output exchange after checkpoint load failure", "err", err)
-		}
+		constructErr = err
 		return nil, err
 	}
 
@@ -83,12 +84,12 @@ func NewFilter[T any, O any](
 		filterType:           config.Type,
 		filterFunction:       filterFunction,
 		outputTransform:      inputToOutput,
-		shardKeys:            shardKeys,
+		routeRecord:          routeRecord,
 		inputCodec:           inputCodec,
 		outputCodec:          outputCodec,
 		inputExchange:        inputExchange,
-		outputExchange:       outputExchange,
-		multiHasher:          shard.NewMultiCluster(config.OutputClusters),
+		outputExchange:       outputMiddleware,
+		router:               router,
 		inputAmount:          config.FilterAmount,
 		states:               states,
 		checkpoint:           ckpt,
@@ -210,7 +211,7 @@ func (f *Filter[T, O]) processBatch(input batch.Msg[T], state *clientState) erro
 		outputs []O
 	})
 	for _, o := range outputs {
-		keys := f.multiHasher.RoutingKeysFor(input.ClientID, f.shardKeys(o)...)
+		keys := f.routeRecord(input.ClientID, o)
 		mapKey := strings.Join(keys, "|")
 		entry := byKeys[mapKey]
 		entry.keys = keys
@@ -233,7 +234,7 @@ func (f *Filter[T, O]) processBatch(input batch.Msg[T], state *clientState) erro
 func (f *Filter[T, O]) finishStep(clientID int, state *clientState) error {
 	eofSeq := state.tracker.GetEOFSeq()
 	var sendErr error
-	for _, rk := range f.multiHasher.AllRoutingKeys() {
+	for _, rk := range f.router.AllRoutingKeys() {
 		if sendErr != nil {
 			break
 		}

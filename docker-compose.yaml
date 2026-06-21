@@ -134,8 +134,7 @@ services:
       - INPUT_EXCHANGE=Q1234_filtered_exchange
       - INPUT_QUEUE=Q1_filtered_0
       - INPUT_ROUTING_KEYS=Q1_filtered_shard-0
-      - OUTPUT_EXCHANGE=results_exchange
-      - OUTPUT_CLUSTERS=results_queue:1
+      - OUTPUT_QUEUE=results_queue
       - AMOUNT=50.0
       - FILTER_TYPE=AMOUNT
       - FILTER_AMOUNT=2
@@ -164,8 +163,7 @@ services:
       - INPUT_EXCHANGE=Q1234_filtered_exchange
       - INPUT_QUEUE=Q1_filtered_1
       - INPUT_ROUTING_KEYS=Q1_filtered_shard-1
-      - OUTPUT_EXCHANGE=results_exchange
-      - OUTPUT_CLUSTERS=results_queue:1
+      - OUTPUT_QUEUE=results_queue
       - AMOUNT=50.0
       - FILTER_TYPE=AMOUNT
       - FILTER_AMOUNT=2

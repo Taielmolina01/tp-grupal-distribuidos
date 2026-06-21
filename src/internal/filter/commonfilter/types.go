@@ -21,13 +21,13 @@ type Filter[T any, O any] struct {
 
 	filterFunction  func(T) bool
 	outputTransform func(T) O
-	shardKeys       func(O) []string
+	routeRecord     func(clientID int, o O) []string
 	inputCodec      wire.Codec[T]
 	outputCodec     wire.Codec[O]
 
 	inputExchange  newmiddleware.Middleware
 	outputExchange newmiddleware.Middleware
-	multiHasher    shard.MultiClusterHasher
+	router         shard.OutputRouter
 
 	states               statemap.StateMap[clientState]
 	checkpoint           *checkpoint.Checkpoint[clientState]
