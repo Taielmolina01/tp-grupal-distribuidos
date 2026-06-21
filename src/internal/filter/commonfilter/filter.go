@@ -5,216 +5,242 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
-	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
-	"tp-grupal-distribuidos/internal/common/eofring"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
-
-const _EOF_RING_QUEUE_PREFIX = "FILTER_%s_"
 
 func NewFilter[T any, O any](
 	config filter.FilterConfig,
 	filterFunction func(T) bool,
 	inputToOutput func(T) O,
+	shardKeys func(O, uint64) []string,
 	inputCodec wire.Codec[T],
 	outputCodec wire.Codec[O],
+	outputClusters []newmiddleware.ShardedCluster,
 ) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := middleware.CreateExchangeMiddleware(
-		config.InputExchange,
-		config.InputQueue,
-		config.InputRoutingKeys,
-		connSettings,
+	var (
+		inputExchange newmiddleware.Middleware
+		constructErr  error
 	)
-	if err != nil {
-		return nil, err
-	}
-
-	outputExchange, err := middleware.CreateExchangeMiddleware(
-		config.OutputExchange,
-		config.OutputQueue,
-		config.OutputRoutingKeys,
-		connSettings,
-	)
-	if err != nil {
-		if err := inputExchange.Close(); err != nil {
-			slog.Error("While closing input exchange after output exchange creation failure", "err", err)
-		}
-		return nil, err
-	}
-
-	eofInputQueueName, eofOutputQueueName := eofring.GetInputAndOutputQueueNames(
-		config.Id,
-		config.FilterAmount,
-		fmt.Sprintf(_EOF_RING_QUEUE_PREFIX, config.Type),
-		fmt.Sprintf(_EOF_RING_QUEUE_PREFIX, config.Type),
-	)
-
-	eofInput, err := middleware.CreateQueueMiddleware(
-		eofInputQueueName,
-		connSettings,
-	)
-
-	if err != nil {
-		if err := inputExchange.Close(); err != nil {
-			slog.Error("While closing input exchange after EOF input queue creation failure", "err", err)
-		}
-		if err := outputExchange.Close(); err != nil {
-			slog.Error("While closing output exchange after EOF input queue creation failure", "err", err)
-		}
-		return nil, err
-	}
-
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		eofOutputQueueName,
-		connSettings,
-	)
-
-	if err != nil {
-		if err := inputExchange.Close(); err != nil {
-			slog.Error("While closing input exchange after EOF input queue creation failure", "err", err)
-		}
-		if err := outputExchange.Close(); err != nil {
-			slog.Error("While closing output exchange after EOF input queue creation failure", "err", err)
-		}
-		if err := eofInput.Close(); err != nil {
-			slog.Error("While closing EOF input queue after EOF output queue creation failure", "err", err)
-		}
-		return nil, err
-	}
-
-	handlerMessages := msgmonitor.NewMessageMonitor()
-
-	return &Filter[T, O]{
-		id:             uint32(config.Id),
-		inputExchange:  inputExchange,
-		outputExchange: outputExchange,
-		filterFunction: filterFunction,
-		eofHandler: eofring.CreateEofRingAlgorithm(
-			eofInput,
-			eofOutput,
-			config.FilterAmount,
-			uint32(config.Id),
-			handlerMessages,
-			func(clientID int, seq uint64, total uint32, isCoordinator bool) error {
-				if isCoordinator {
-					return outputExchange.Send(middleware.Message{Body: batch.WriteEOF(clientID, config.QueryId, 0, seq, total)})
-				}
-				return nil
-			},
-			config.QueryId,
-		),
-		handlerMessages: handlerMessages,
-		outputQueueEof:  eofOutput,
-		filterType:      config.Type,
-		outputTransform: inputToOutput,
-		queryId:         config.QueryId,
-		inputCodec:      inputCodec,
-		outputCodec:     outputCodec,
-	}, nil
-}
-
-func (filter *Filter[T, O]) Run() {
 	defer func() {
-		if err := filter.close(); err != nil {
-			slog.Error("While closing filter", "err", err)
+		if constructErr != nil {
+			if inputExchange != nil {
+				if err := inputExchange.Close(); err != nil {
+					slog.Error("While closing input exchange after construction failure", "err", err)
+				}
+			}
+			for _, cl := range outputClusters {
+				if err := cl.Middleware.Close(); err != nil {
+					slog.Error("While closing output cluster middleware after construction failure", "err", err)
+				}
+			}
 		}
 	}()
 
-	go filter.eofHandler.Run()
-	if err := filter.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		filter.handleMessage(msg, ack, nack)
+	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	shardKey := fmt.Sprintf("shard-%d", config.Id)
+	inputExchange, constructErr = newmiddleware.NewShardedMiddleware(
+		connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey,
+	)
+	if constructErr != nil {
+		return nil, constructErr
+	}
+
+	ckpt, err := checkpoint.New(config.PersistPath, marshalClientState, unmarshalClientState)
+	if err != nil {
+		constructErr = err
+		return nil, err
+	}
+
+	recovered, err := ckpt.Load()
+	if err != nil {
+		constructErr = err
+		return nil, err
+	}
+
+	states := statemap.New(func() *clientState {
+		return &clientState{
+			tracker:       sendertracker.New(10_000_000),
+			outputTracker: outputtracker.New(),
+		}
+	})
+	for clientID, state := range recovered {
+		states.Set(clientID, state)
+		slog.Info("recovered client state", "clientID", clientID)
+	}
+
+	return &Filter[T, O]{
+		id:                   uint32(config.Id),
+		queryId:              config.QueryID,
+		filterFunction:       filterFunction,
+		outputTransform:      inputToOutput,
+		shardKeys:            shardKeys,
+		inputCodec:           inputCodec,
+		outputCodec:          outputCodec,
+		inputExchange:        inputExchange,
+		outputClusters:       outputClusters,
+		inputAmount:          config.FilterAmount,
+		states:               states,
+		checkpoint:           ckpt,
+		persistBatchSize:     config.PersistBatchSize,
+		persistFlushInterval: config.PersistFlushInterval,
+	}, nil
+}
+
+func (f *Filter[T, O]) Run() {
+	defer f.close()
+
+	if err := f.inputExchange.StartConsumingBatch(f.persistBatchSize, f.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		f.handleBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
 	}
 }
 
-func (filter *Filter[T, O]) handleMessage(msg middleware.Message, ack, _ func()) {
-	ack()
-
-	input, err := batch.Read(msg.Body, filter.inputCodec)
-	if err != nil {
-		slog.Error("While deserializing input batch", "err", err)
-		return
-	}
-
-	if input.EOF {
-		filter.handleEOF(input.ClientID, input.Total, input.Seq)
-		return
-	}
-
-	outputs := make([]O, 0, len(input.Records))
-	filter.handlerMessages.AddProcessedMessagesAmountByClientId(input.ClientID, uint32(len(input.Records)))
-	for i := range input.Records {
-		if filter.filterFunction(input.Records[i]) {
-			filter.handlerMessages.AddForwardedMessagesAmountByClientId(input.ClientID, 1)
-			outputs = append(outputs, filter.outputTransform(input.Records[i]))
-		}
-	}
-
-	if len(outputs) == 0 {
-		return
-	}
-
-	body := batch.Write(input.ClientID, filter.queryId, uint8(filter.id), input.Seq, outputs, filter.outputCodec)
-	if err := filter.outputExchange.Send(middleware.Message{Body: body}); err != nil {
-		slog.Error("While sending batch to output exchange", "err", err)
-	}
-}
-
-func (filter *Filter[T, O]) handleEOF(clientID int, total uint32, seq uint64) {
-	eofRingMessage := eofmessagetypes.EofRingMessage{
-		RealAmount:     total,
-		ActualAmount:   filter.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
-		ClientId:       clientID,
-		CoordinatorId:  uint32(filter.id),
-		FilteredAmount: filter.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
-		Seq:            seq,
-	}
-
-	if err := filter.outputQueueEof.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)}); err != nil {
-		slog.Error("While sending EOF message to EOF ring", "err", err)
-	}
-}
-
-func (filter *Filter[T, O]) HandleSignals() {
+func (f *Filter[T, O]) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received")
-	if err := filter.inputExchange.StopConsuming(); err != nil {
-		slog.Error("while stop consuming from input exchange", "err", err)
+	f.stopConsuming()
+}
+
+func (f *Filter[T, O]) stopConsuming() {
+	if err := f.inputExchange.StopConsuming(); err != nil {
+		slog.Error("While stopping input consumer", "err", err)
 	}
 }
 
-func (filter *Filter[T, O]) close() error {
+func (f *Filter[T, O]) close() {
+	if err := f.inputExchange.Close(); err != nil {
+		slog.Error("While closing input exchange", "err", err)
+	}
+	for _, cluster := range f.outputClusters {
+		if err := cluster.Middleware.Close(); err != nil {
+			slog.Error("While closing output cluster middleware", "err", err)
+		}
+	}
+}
 
-	if err := filter.inputExchange.Close(); err != nil {
-		slog.Error("while closing input exchange", "err", err)
-		return err
+func (f *Filter[T, O]) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
+	modified := make(map[int]*clientState)
+	completed := make(map[int]struct{})
+
+	for _, msg := range msgs {
+		input, err := batch.Read(msg.Body, f.inputCodec)
+		if err != nil {
+			slog.Error("decode failed", "err", err)
+			continue
+		}
+
+		clientID := input.ClientID
+		state := f.states.For(clientID)
+		tracker := state.tracker
+
+		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
+			continue
+		}
+
+		if input.EOF {
+			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+		} else {
+			tracker.RegisterBatch(int(input.SenderID))
+			if err := f.processBatch(input, state); err != nil {
+				slog.Error("process batch failed", "err", err)
+				nack()
+				f.stopConsuming()
+				return
+			}
+		}
+
+		tracker.Claim(int(input.SenderID), input.Seq)
+		modified[clientID] = state
+
+		if tracker.IsComplete(f.inputAmount) {
+			if err := f.finishStep(clientID, state); err != nil {
+				slog.Error("finish step failed", "err", err)
+				nack()
+				f.stopConsuming()
+				return
+			}
+			completed[clientID] = struct{}{}
+		}
 	}
 
-	if err := filter.eofHandler.Close(); err != nil {
-		slog.Error("while closing EOF handler", "err", err)
-		return err
+	for clientID, state := range modified {
+		if _, done := completed[clientID]; done {
+			f.states.Delete(clientID)
+			f.checkpoint.DeleteClient(clientID)
+			continue
+		}
+		if err := f.checkpoint.SaveClient(clientID, state); err != nil {
+			slog.Error("persist failed, stopping", "err", err)
+			nack()
+			f.stopConsuming()
+			return
+		}
 	}
 
-	// no estoy seguro si aca deberia closear siendo que no es ni mi exchange ni mi queue
-	if err := filter.outputExchange.Close(); err != nil {
-		slog.Error("while closing output exchange", "err", err)
-		return err
+	ack()
+}
+
+func (f *Filter[T, O]) processBatch(input batch.Msg[T], state *clientState) error {
+	type clusterKey struct {
+		index int
+		rk    string
 	}
-	if err := filter.outputQueueEof.Close(); err != nil {
-		slog.Error("while closing EOF output queue", "err", err)
-		return err
+	byCluster := make(map[clusterKey][]O)
+
+	for _, record := range input.Records {
+		if !f.filterFunction(record) {
+			continue
+		}
+		o := f.outputTransform(record)
+		keys := f.shardKeys(o, input.Seq)
+
+		for index, cluster := range f.outputClusters {
+			rk := fmt.Sprintf("shard-%d", cluster.Hasher.ShardFor(input.ClientID, keys...))
+			ck := clusterKey{index, rk}
+			byCluster[ck] = append(byCluster[ck], o)
+		}
+	}
+
+	for ck, group := range byCluster {
+		cluster := f.outputClusters[ck.index]
+		body := batch.Write(input.ClientID, f.queryId, uint8(f.id), input.Seq, group, f.outputCodec)
+		if err := cluster.Middleware.Send(newmiddleware.Message{Body: body, RoutingKey: ck.rk}); err != nil {
+			return err
+		}
+		state.outputTracker.RegisterBatch(fmt.Sprintf("%d_%s", ck.index, ck.rk))
+	}
+	return nil
+}
+
+func (f *Filter[T, O]) finishStep(clientID int, state *clientState) error {
+	eofSeq := state.tracker.GetEOFSeq()
+	for ci, cluster := range f.outputClusters {
+		for i := range cluster.Hasher.TotalShards() {
+			rk := fmt.Sprintf("shard-%d", i)
+			total := state.outputTracker.CountFor(fmt.Sprintf("%d_%s", ci, rk))
+			eofBody := batch.WriteEOF(clientID, f.queryId, uint8(f.id), eofSeq, uint32(total))
+			if err := cluster.Middleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+				slog.Error("finish step: send EOF failed", "cluster", ci, "routingKey", rk, "err", err)
+				return err
+			}
+		}
 	}
 	return nil
 }

@@ -1,24 +1,37 @@
 package commonfilter
 
 import (
-	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/filter"
+	"time"
+
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
 )
 
 type Filter[T any, O any] struct {
-	filterType      filter.FilterType
-	id              uint32
-	inputExchange   middleware.Middleware
-	outputExchange  middleware.Middleware
+	id          uint32
+	queryId     uint8
+	inputAmount int
+
 	filterFunction  func(T) bool
-	eofHandler      eofring.EofRingAlgorithm
-	handlerMessages msgmonitor.MessageMonitor
-	outputQueueEof  middleware.Middleware
 	outputTransform func(T) O
-	queryId         uint8
+	shardKeys       func(O, uint64) []string
 	inputCodec      wire.Codec[T]
 	outputCodec     wire.Codec[O]
+
+	inputExchange  newmiddleware.Middleware
+	outputClusters []newmiddleware.ShardedCluster
+
+	states               statemap.StateMap[clientState]
+	checkpoint           *checkpoint.Checkpoint[clientState]
+	persistBatchSize     int
+	persistFlushInterval time.Duration
+}
+
+type clientState struct {
+	tracker       *sendertracker.SenderTracker
+	outputTracker *outputtracker.OutputTracker
 }

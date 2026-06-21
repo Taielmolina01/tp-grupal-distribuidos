@@ -206,7 +206,7 @@ func (e *exchangeMiddleware) StartConsuming(callbackFunc func(msg Message, ack f
 					}
 				},
 				func() {
-					if err := d.Nack(false, false); err != nil {
+					if err := d.Nack(false, true); err != nil {
 						slog.Error("While sending nack", "err", err)
 					}
 				},

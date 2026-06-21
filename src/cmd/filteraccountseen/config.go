@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"time"
 
 	"tp-grupal-distribuidos/internal/filter/filteraccountseen"
 )
@@ -54,6 +55,21 @@ func loadConfig() (filteraccountseen.FilterAccountSeenConfig, error) {
 		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("MAX_BATCH_BYTES environment variable is required and must be a number")
 	}
 
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("PERSIST_PATH environment variable is required")
+	}
+
+	persistBatchSize, err := strconv.Atoi(os.Getenv("PERSIST_BATCH_SIZE"))
+	if err != nil {
+		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("PERSIST_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
+	if err != nil {
+		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required")
+	}
+
 	return filteraccountseen.FilterAccountSeenConfig{
 		Id:                    id,
 		ExpectedEOFs:          expectedEOFs,
@@ -64,5 +80,8 @@ func loadConfig() (filteraccountseen.FilterAccountSeenConfig, error) {
 		QueryID:               queryID,
 		MaxBatchSize:          maxBatchSize,
 		MaxBatchBytes:         maxBatchBytes,
+		PersistPath:           persistPath,
+		PersistBatchSize:      persistBatchSize,
+		PersistFlushInterval:  persistFlushInterval,
 	}, nil
 }

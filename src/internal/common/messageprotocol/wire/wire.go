@@ -57,10 +57,17 @@ func (w *Writer) Time(t time.Time) {
 	w.buf = binary.BigEndian.AppendUint64(w.buf, uint64(t.Unix()))
 }
 
-func (w *Writer) Bytes() []byte  { return w.buf }
-func (w *Writer) Len() int       { return len(w.buf) }
-func (w *Writer) Truncate(n int) { w.buf = w.buf[:n] }
-func (w *Writer) Reset()         { w.buf = w.buf[:0] }
+func (w *Writer) Bytes() []byte     { return w.buf }
+func (w *Writer) Len() int          { return len(w.buf) }
+func (w *Writer) Truncate(n int)    { w.buf = w.buf[:n] }
+func (w *Writer) Reset()            { w.buf = w.buf[:0] }
+func (w *Writer) WriteRaw(b []byte) { w.buf = append(w.buf, b...) }
+
+func NewWriterWithBytes(data []byte) *Writer {
+	buf := make([]byte, len(data))
+	copy(buf, data)
+	return &Writer{buf: buf}
+}
 
 func AppendUint8(dst []byte, v uint8) []byte   { return append(dst, v) }
 func AppendUint16(dst []byte, v uint16) []byte { return binary.BigEndian.AppendUint16(dst, v) }
@@ -175,6 +182,10 @@ func (r *Reader) Time() time.Time {
 		return time.Time{}
 	}
 	return time.Unix(int64(binary.BigEndian.Uint64(b)), 0).UTC()
+}
+
+func (r *Reader) ReadRaw(n uint64) []byte {
+	return r.read(int(n))
 }
 
 func (r *Reader) Count(minRecordSize uint32) uint32 {

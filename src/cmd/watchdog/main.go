@@ -47,7 +47,7 @@ func run() int {
 		}
 	}()
 
-	checker.Start()
+	go checker.Start()
 
 	slog.Info(fmt.Sprintf("Watchdog %d started", config.Id))
 

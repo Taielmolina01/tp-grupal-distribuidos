@@ -2,11 +2,12 @@ package filterandsplitter
 
 import (
 	"time"
-	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
+	"tp-grupal-distribuidos/internal/common/statemap"
 )
 
 type FilterAndSplitterConfig struct {
@@ -17,41 +18,42 @@ type FilterAndSplitterConfig struct {
 	OutputMiddlewareAmount int
 	OutputMiddlewarePrefix string
 
-	FilterAndSpliterAmount int
+	FilterCurrencyAmt int
 
 	MomHost string
 	MomPort int
 
-	InputMiddlewareName  string
-	InputMiddlewareQueue string
-	InputRoutingKeys     []string
+	InputMiddlewarePrefix string
 
-	QueryID uint8
+	QueryID     uint8
+	PersistPath string
 
-	MonitorPersistPath string
-
-	SeqStoreQueue string
+	PersistBatchSize     int
+	PersistFlushInterval time.Duration
 }
 
 type FilterAndSplitter struct {
-	id        int
-	startDate time.Time
-	endDate   time.Time
+	id           int
+	startDate    time.Time
+	endDate      time.Time
+	outputAmount int
+	prevNodeAmt  int
 
 	hasher shard.Hasher
 
-	inputMiddleware  middleware.Middleware
+	inputMiddleware  newmiddleware.Middleware
 	outputMiddleware newmiddleware.Middleware
-	eofInput         middleware.Middleware
-	eofOutput        middleware.Middleware
-	eofHandler       eofring.EofRingAlgorithm
 
-	handlerMessages    msgmonitor.MessageMonitor
-	monitorPersistPath string
-	tempMonitorPath    string
-	outputPersistPath  string
+	queryID    uint8
+	checkpoint *checkpoint.Checkpoint[clientState]
 
-	seqStore newmiddleware.RPCClient
+	states statemap.StateMap[clientState]
 
-	queryID uint8
+	persistBatchSize     int
+	persistFlushInterval time.Duration
+}
+
+type clientState struct {
+	transferTracker *sendertracker.SenderTracker
+	outputTracker   *outputtracker.OutputTracker
 }

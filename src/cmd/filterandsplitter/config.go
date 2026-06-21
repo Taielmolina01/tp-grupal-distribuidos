@@ -54,14 +54,24 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		return filterandsplitter.FilterAndSplitterConfig{}, err
 	}
 
-	seqStoreQueue := os.Getenv("SEQ_STORE_QUEUE")
-	if seqStoreQueue == "" {
-		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("SEQ_STORE_QUEUE environment variable is required")
+	inputMiddlewarePrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
+	if inputMiddlewarePrefix == "" {
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	inputRoutingKeys := []string{}
-	if raw := os.Getenv("INPUT_ROUTING_KEYS"); raw != "" {
-		inputRoutingKeys = strings.Split(raw, ",")
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("PERSIST_PATH environment variable is required")
+	}
+
+	persistBatchSize, err := strconv.Atoi(os.Getenv("PERSIST_BATCH_SIZE"))
+	if err != nil {
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("PERSIST_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
+	if err != nil {
+		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required")
 	}
 
 	return filterandsplitter.FilterAndSplitterConfig{
@@ -70,15 +80,14 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		EndDate:                endDate,
 		OutputMiddlewareAmount: outputAmount,
 		OutputMiddlewarePrefix: outputPrefix,
-		FilterAndSpliterAmount: filterAmount,
+		FilterCurrencyAmt:      filterAmount,
 		MomHost:                momHost,
 		MomPort:                momPort,
-		InputMiddlewareName:    os.Getenv("INPUT_EXCHANGE"),
-		InputMiddlewareQueue:   os.Getenv("INPUT_QUEUE"),
-		InputRoutingKeys:       inputRoutingKeys,
+		InputMiddlewarePrefix:  inputMiddlewarePrefix,
 		QueryID:                uint8(queryID),
-		MonitorPersistPath:     os.Getenv("MONITOR_PERSIST_PATH"),
-		SeqStoreQueue:          seqStoreQueue,
+		PersistPath:            persistPath,
+		PersistBatchSize:       persistBatchSize,
+		PersistFlushInterval:   persistFlushInterval,
 	}, nil
 }
 

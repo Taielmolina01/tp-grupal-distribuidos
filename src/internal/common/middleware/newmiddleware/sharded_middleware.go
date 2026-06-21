@@ -71,16 +71,17 @@ func (s *shardedMiddleware) Send(msg Message) error {
 	if !s.areConnsUp() {
 		return ErrDisconnected
 	}
+
 	if msg.RoutingKey == "" {
 		return ErrSend
 	}
 
-	err := s.channel.Publish(s.exchange, msg.RoutingKey, true, false, amqp.Publishing{
+	if err := s.channel.Publish(s.exchange, msg.RoutingKey, true, false, amqp.Publishing{
 		ContentType: "text/plain",
 		Body:        msg.Body,
-	})
-	if err != nil {
+	}); err != nil {
 		return ErrSend
 	}
+
 	return nil
 }

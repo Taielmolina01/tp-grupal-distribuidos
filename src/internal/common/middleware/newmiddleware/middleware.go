@@ -1,6 +1,9 @@
 package newmiddleware
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 const BroadcastRoutingKey = "broadcast"
 
@@ -22,6 +25,7 @@ type ConnSettings struct {
 
 type Middleware interface {
 	StartConsuming(func(msg Message, ack func(), nack func())) error
+	StartConsumingBatch(batchSize int, flushInterval time.Duration, fn func(msgs []Message, ack func(), nack func())) error
 	StopConsuming() error
 	Send(msg Message) error
 	Close() error

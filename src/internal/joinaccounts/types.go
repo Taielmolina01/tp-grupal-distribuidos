@@ -2,11 +2,14 @@ package joinaccounts
 
 import (
 	"sync"
+	"time"
 	"tp-grupal-distribuidos/internal/common/account"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
+	"tp-grupal-distribuidos/internal/common/statemap"
 )
 
 type JoinAccountsConfig struct {
@@ -22,10 +25,27 @@ type JoinAccountsConfig struct {
 	QualifiedExchange     string
 	PeerAmount            int
 
-	Threshold     int
-	QueryID       int
-	MaxBatchSize  int
-	MaxBatchBytes int
+	Threshold          int
+	QueryID            int
+	MaxBatchSize       int
+	MaxBatchBytes      int
+	InputMiddlewareAmt int
+
+	PersistPath          string
+	PersistBatchSize     int
+	PersistFlushInterval time.Duration
+}
+
+type transferPartialState struct {
+	transferTracker *sendertracker.SenderTracker
+	left            map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}
+	right           map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}
+}
+
+type qualifiedPartialState struct {
+	qualifiedTracker *sendertracker.SenderTracker
+	qualifyingLeft   map[account.AccountIdentifier]struct{}
+	qualifyingRight  map[account.AccountIdentifier]struct{}
 }
 
 type clientState struct {
@@ -35,50 +55,20 @@ type clientState struct {
 	qualifyingLeft  map[account.AccountIdentifier]struct{}
 	qualifyingRight map[account.AccountIdentifier]struct{}
 
-	qualifiedBatch *batch.Builder[qualifiedaccount.QualifiedAccount]
+	pendingQualified []qualifiedaccount.QualifiedAccount
 
-	transferEOFReceived bool
-	transferEOFTotal    uint32
-	qualifiedEOFCount   int
-
-	seqSent              uint64
-	transferSeqReceived  map[int]uint64
-	qualifiedSeqReceived map[int]uint64
-}
-
-func (s *clientState) nextSeq() uint64 {
-	s.seqSent++
-	return s.seqSent
-}
-
-func (s *clientState) isDuplicateTransfer(senderID int, seq uint64) bool {
-	if seq == 0 {
-		return false
-	}
-	if seq <= s.transferSeqReceived[senderID] {
-		return true
-	}
-	s.transferSeqReceived[senderID] = seq
-	return false
-}
-
-func (s *clientState) isDuplicateQualified(senderID int, seq uint64) bool {
-	if seq == 0 {
-		return false
-	}
-	if seq <= s.qualifiedSeqReceived[senderID] {
-		return true
-	}
-	s.qualifiedSeqReceived[senderID] = seq
-	return false
+	transferTracker  *sendertracker.SenderTracker
+	qualifiedTracker *sendertracker.SenderTracker
 }
 
 type JoinAccounts struct {
 	id int
 
-	hasher shard.Hasher
+	hasher       shard.Hasher
+	outputAmount int
 
 	inputMiddleware           newmiddleware.Middleware
+	inputMiddlewareAmt        int
 	qualifiedInputMiddleware  newmiddleware.Middleware
 	qualifiedOutputMiddleware newmiddleware.Middleware
 	outputMiddleware          newmiddleware.Middleware
@@ -88,7 +78,14 @@ type JoinAccounts struct {
 	maxBatchSize  int
 	maxBatchBytes int
 
-	mu           sync.Mutex
-	clientsState map[int]*clientState
-	queryID      int
+	states statemap.StateMap[clientState]
+
+	transferCheckpoint  *checkpoint.Checkpoint[transferPartialState]
+	qualifiedCheckpoint *checkpoint.Checkpoint[qualifiedPartialState]
+
+	persistBatchSize     int
+	persistFlushInterval time.Duration
+
+	mu      sync.Mutex
+	queryID int
 }

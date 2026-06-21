@@ -64,6 +64,6 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 		InputRoutingKeys: inputRoutingKeys,
 		Quote:            quote,
 		OutputQueue:      outputQueue,
-		QueryId:          uint8(queryId),
+		QueryID:          uint8(queryId),
 	}, nil
 }

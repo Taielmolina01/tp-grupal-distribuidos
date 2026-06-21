@@ -2,11 +2,14 @@ package bully
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"sync"
 	"time"
+	"tp-grupal-distribuidos/internal/common/socket"
 )
 
 const (
@@ -16,70 +19,164 @@ const (
 
 func CreateBullyAlgorithm(id int, peerCount int, basePort int) (Bully, error) {
 	myPort := basePort + id
-	skt, err := CreateUDPSocket(myPort)
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", myPort))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create UDP socket on port %d: %v", myPort, err)
+		return nil, fmt.Errorf("failed to create TCP listener on port %d: %v", myPort, err)
 	}
 
-	peers := make([]net.UDPAddr, 0, peerCount-1)
-
-	for i := range peerCount {
-		if i == id {
-			continue
-		}
-		peerPort := basePort + i
-		addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s_%d:%d", _CONTAINER_PREFIX, i, peerPort))
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve peer %s_%d: %v", _CONTAINER_PREFIX, i, err)
-		}
-		peers = append(peers, *addr)
-	}
-
-	return &BullyImpl{
-		id:       id,
-		status:   normalStatus,
-		leaderId: -1,
-		address:  net.UDPAddr{Port: myPort},
-		peers:    peers,
-		socket:   skt,
+	impl := &BullyImpl{
+		id:           id,
+		status:       normalStatus,
+		leaderId:     -1,
+		address:      net.TCPAddr{Port: myPort},
+		peersMonitor: NewPeersMonitor(),
+		socket:       listener,
 		lastElection: lastElection{
 			inProgress:       false,
 			receivedResponse: false,
 			mutex:            sync.Mutex{},
 			ctxCancel:        nil,
 		},
-	}, nil
-}
+		basePort: basePort,
+	}
 
-func (b *BullyImpl) Run() error {
-	slog.Info("Starting bully", "id", b.id, "port", b.address.Port, "peers", len(b.peers))
-	b.StartElection()
-	buf := make([]byte, 2)
-	for {
-		n, senderAddr, err := b.socket.ReceiveMessage(buf)
-		if err != nil {
-			return fmt.Errorf("failed to read from UDP: %v", err)
-		}
-
-		if n == 0 {
+	for i := range peerCount {
+		peerPort := basePort + i
+		if i == id || peerPort < myPort {
 			continue
 		}
 
-		switch buf[0] {
-		case byte(electionMsg):
-			b.handleElectionMessage(buf[1], senderAddr)
-		case byte(answerMsg):
-			b.handleAnswerMessage(buf[1])
-		case byte(coordinatorMsg):
-			b.handleCoordinatorMessage(buf[1])
-		default:
-			slog.Info("Received unknown message type", "type", buf[0])
+		addr := fmt.Sprintf("%s_%d:%d", _CONTAINER_PREFIX, i, peerPort)
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve peer %s_%d: %v", _CONTAINER_PREFIX, i, err)
 		}
+
+		node := NodeInfo{
+			conn: socket.NewTCPSocket(conn),
+			id:   i,
+		}
+
+		err = node.conn.SendMessage([]byte{byte(id)})
+		if err != nil {
+			return nil, fmt.Errorf("failed to send ID to peer %s_%d: %v", _CONTAINER_PREFIX, i, err)
+		}
+
+		impl.peersMonitor.AddPeer(node)
+
+		go impl.handleClient(node)
 	}
+
+	return impl, nil
+}
+
+func (b *BullyImpl) Run() error {
+	defer b.close()
+	slog.Info("Starting bully", "id", b.id, "port", b.address.Port)
+
+	go b.StartElection()
+
+	for {
+		conn, err := b.socket.Accept()
+		if err != nil {
+			return fmt.Errorf("failed to accept connection: %v", err)
+		}
+
+		node := NodeInfo{
+			conn: socket.NewTCPSocket(conn),
+			id:   -1,
+		}
+
+		id, err := node.conn.ReadMessage(1)
+		if err != nil {
+			slog.Error("Failed to read node ID", "err", err)
+			node.conn.Close()
+			return err
+		}
+
+		node.id = int(id[0])
+
+		b.peersMonitor.AddPeer(node)
+		go b.handleClient(node)
+	}
+}
+
+func (b *BullyImpl) close() {
+	b.socket.Close()
+
+	b.peersMonitor.DeleteAll()
 }
 
 func (b *BullyImpl) GetStatus() bullyStatus {
 	return b.status
+}
+
+func (b *BullyImpl) handleClient(node NodeInfo) {
+	defer func() {
+		node.conn.Close()
+		b.removePeer(node)
+	}()
+
+	for {
+		bytes, err := node.conn.ReadMessage(2)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				slog.Info("Peer disconnected", "peer", node.id)
+			} else {
+				slog.Error("Failed to read from client", "err", err)
+			}
+			return
+		}
+
+		msgType := bullyMessage(bytes[0])
+		switch msgType {
+		case electionMsg:
+			b.handleElectionMessage(bytes[1], node.conn)
+		case answerMsg:
+			b.handleAnswerMessage(bytes[1])
+		case coordinatorMsg:
+			b.handleCoordinatorMessage(bytes[1])
+		case nodeIsAliveMsg:
+			b.reconnectPeer(bytes[1])
+		default:
+			slog.Warn("Received unknown message type from client", "msgType", msgType)
+		}
+	}
+}
+
+func (b *BullyImpl) reconnectPeer(nodeId byte) {
+	if nodeId < byte(b.id) {
+		return
+	}
+
+	slog.Info("Reconnecting peer", "peerId", nodeId)
+
+	peerPort := int(nodeId) + b.basePort
+	addr := fmt.Sprintf("%s_%d:%d", _CONTAINER_PREFIX, nodeId, peerPort)
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		slog.Error("Failed to reconnect to peer", "peerId", nodeId, "err", err)
+		return
+	}
+
+	node := NodeInfo{
+		conn: socket.NewTCPSocket(conn),
+		id:   int(nodeId),
+	}
+
+	err = node.conn.SendMessage([]byte{byte(b.id)})
+	if err != nil {
+		slog.Error("Failed to send ID to reconnected peer", "peerId", nodeId, "err", err)
+		node.conn.Close()
+		return
+	}
+
+	b.peersMonitor.AddPeer(node)
+	go b.handleClient(node)
+}
+
+func (b *BullyImpl) removePeer(node NodeInfo) {
+	b.peersMonitor.DeletePeer(node.id)
 }
 
 func (b *BullyImpl) StartElection() {
@@ -95,14 +192,7 @@ func (b *BullyImpl) StartElection() {
 
 	go b.waitElectionResponse(ctx)
 
-	for _, peer := range b.peers {
-		if peer.Port > b.address.Port {
-			err := b.socket.SendMessage([]byte{byte(electionMsg), byte(b.id)}, peer)
-			if err != nil {
-				slog.Error("Failed to send election message", "peer", peer.String(), "err", err)
-			}
-		}
-	}
+	b.peersMonitor.SendElectionMessage(b.id)
 }
 
 func (b *BullyImpl) GetLeaderId() (int, error) {
@@ -112,9 +202,10 @@ func (b *BullyImpl) GetLeaderId() (int, error) {
 	return b.leaderId, nil
 }
 
-func (b *BullyImpl) handleElectionMessage(electorId byte, senderAddr net.UDPAddr) {
+func (b *BullyImpl) handleElectionMessage(electorId byte, conn socket.TCPSocket) {
 	slog.Info("Receiving election message from node", "electorId", electorId)
-	err := b.socket.SendMessage([]byte{byte(answerMsg), byte(b.id)}, senderAddr)
+
+	err := conn.SendMessage([]byte{byte(answerMsg), byte(b.id)})
 	if err != nil {
 		slog.Error("Failed to send answer message", "electorId", electorId, "err", err)
 	}
@@ -176,14 +267,7 @@ func (b *BullyImpl) becomeLeader() {
 	b.lastElection.inProgress = false
 	b.lastElection.receivedResponse = false
 
-	for _, peer := range b.peers {
-		if peer.Port != b.address.Port {
-			err := b.socket.SendMessage([]byte{byte(coordinatorMsg), byte(b.id)}, peer)
-			if err != nil {
-				slog.Error("Failed to send coordinator message", "peer", peer.String(), "err", err)
-			}
-		}
-	}
+	b.peersMonitor.BroadcastCoordinatorMessage(b.id)
 	if b.onLeaderChange != nil {
 		b.onLeaderChange(b.leaderId)
 	}
@@ -191,4 +275,12 @@ func (b *BullyImpl) becomeLeader() {
 
 func (b *BullyImpl) SetLeaderChangeCallback(cb LeaderChangeCallback) {
 	b.onLeaderChange = cb
+}
+
+func (b *BullyImpl) SendNodeIsAliveMessage(nodeId int) {
+	slog.Info("Sending node is alive message for node", "nodeId", nodeId)
+
+	go b.peersMonitor.SendNodeIsAliveMessage(nodeId)
+
+	b.reconnectPeer(byte(nodeId))
 }

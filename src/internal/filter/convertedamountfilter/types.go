@@ -10,7 +10,7 @@ import (
 type ConvertedAmountFilter struct {
 	InputQueue      middleware.Middleware
 	OutputQueue     middleware.Middleware
-	QueryId         uint8
+	QueryID         uint8
 	HandlerMessages msgmonitor.MessageMonitor
 	EofRing         eofring.EofRingAlgorithm
 	Id              uint32

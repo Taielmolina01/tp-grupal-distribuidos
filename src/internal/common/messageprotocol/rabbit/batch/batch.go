@@ -30,6 +30,11 @@ func NewBuilder[T any](maxCount, maxBytes int, codec wire.Codec[T]) *Builder[T] 
 	}
 }
 
+func (b *Builder[T]) Add(record *T) {
+	b.codec.Marshal(b.w, record)
+	b.count++
+}
+
 func (b *Builder[T]) TryAdd(record *T) bool {
 	start := b.w.Len()
 	b.codec.Marshal(b.w, record)
@@ -94,9 +99,9 @@ func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uin
 	return w.Bytes()
 }
 
-func WriteAbort(clientID int, senderID uint8, seq uint64) []byte {
+func WriteAbort(clientID int, senderID uint8) []byte {
 	w := wire.NewWriter()
-	envelope.Header{ClientID: clientID, Type: typeAbort, SenderID: senderID, Seq: seq}.WriteTo(w)
+	envelope.Header{ClientID: clientID, Type: typeAbort, SenderID: senderID, Seq: 0}.WriteTo(w)
 	return w.Bytes()
 }
 
