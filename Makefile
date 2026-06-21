@@ -51,6 +51,8 @@ switch:
 
 EXPECTED_ENV = INPUT_DIR=$(PWD)/$(INPUT_DIR) EXPECTED_DIR=$(PWD)/$(EXPECTED_DIR) OUTPUT_DIR=$(PWD)/$(OUTPUT_DIR) N_CLIENTS=$(N_CLIENTS)
 
+CHAOS_MONKEY_EXPECTED_ENV = ROUNDS SLEEP_ROUND AMOUNT_OF_CONTAINERS_TO_RESTART
+
 build-expected:
 	@cd scripts/expected-output && GOWORK=off $(EXPECTED_ENV) go run . build
 .PHONY: build-expected
@@ -66,3 +68,7 @@ build-race:
 	@go build -race ./src/...
 	@cd src && go build -race ./...
 .PHONY: build-race
+
+chaos-monkey:
+	@cd scripts/chaos-monkey && GOWORK=off & $(CHAOS_MONKEY_EXPECTED_ENV) go run . chaos-monkey
+.PHONY: chaos-monkey
