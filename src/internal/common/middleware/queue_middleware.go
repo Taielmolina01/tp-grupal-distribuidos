@@ -47,6 +47,13 @@ func CreateQueueMiddlewareHelper(
 		return nil, ErrMessageMiddlewareDisconnected
 	}
 
+	if err := ch.Confirm(false); err != nil {
+		if err := middleware.Close(); err != nil {
+			slog.Error("While closing middleware", "err", err)
+		}
+		return nil, ErrMessageMiddlewareDisconnected
+	}
+
 	q, err := ch.QueueDeclare(
 		queueName, // name
 		false,     // durability
@@ -157,7 +164,7 @@ func (q *queueMiddleware) Send(msg Message) (err error) {
 		return ErrMessageMiddlewareDisconnected
 	}
 
-	err = q.channel.Publish(
+	confirmation, err := q.channel.PublishWithDeferredConfirm(
 		"",
 		q.queue.Name,
 		true,
@@ -168,6 +175,10 @@ func (q *queueMiddleware) Send(msg Message) (err error) {
 		})
 
 	if err != nil {
+		return ErrMessageMiddlewareMessage
+	}
+
+	if !confirmation.Wait() {
 		return ErrMessageMiddlewareMessage
 	}
 	return nil

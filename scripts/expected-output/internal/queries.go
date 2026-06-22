@@ -173,9 +173,9 @@ func getQuery4Result(inputDir string, n int, outPath string) error {
 		}
 		a := BankAcc{t.FromBank, t.FromAccount}
 		b := BankAcc{t.ToBank, t.ToAccount}
-		if a == b {
-			return nil
-		}
+		// if a == b {
+		// 	return nil
+		// }
 		if outEdges[a] == nil {
 			outEdges[a] = map[BankAcc]bool{}
 		}

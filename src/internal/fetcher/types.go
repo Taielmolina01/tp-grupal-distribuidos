@@ -14,7 +14,7 @@ type FetcherConfig struct {
 	InputRoutingKeys []string
 	OutputQueue      string
 	Quote            string
-	QueryId          uint8
+	QueryID          uint8
 }
 
 type Fetcher struct {

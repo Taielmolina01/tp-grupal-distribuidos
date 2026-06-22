@@ -29,8 +29,7 @@ services:
         condition: service_healthy
     environment:
       - ACCOUNT_QUEUES=Q2_accounts_0,Q2_accounts_1
-      - TRANSFERS_EXCHANGE=transfers_exchange
-      - TRANSFERS_ROUTING_KEYS=Q5_TRANSFERS_KEY,Q1234_TRANSFERS_KEY
+      - TRANSFERS_CLUSTERS=Q1234_filter_currency:2,Q5_filter:2
       - RESULTS_QUEUE=results_queue
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
@@ -71,16 +70,14 @@ services:
       - ID=0
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
-      - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_QUEUE=Q1234_transfers_queue
-      - INPUT_ROUTING_KEYS=Q1234_TRANSFERS_KEY
-      - OUTPUT_EXCHANGE=Q1234_filtered_exchange
-      - OUTPUT_QUEUE=Q1234_filtered_q
-      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
+      - INPUT_MIDDLEWARE_PREFIX=Q1234_filter_currency
+      - OUTPUT_CLUSTERS=Q1_filtered:2,Q2_filtered:2,Q3_filtered:2,Q4_filtered:2
       - CURRENCIES=US Dollar
-      - FILTER_TYPE=CURRENCY
-      - FILTER_AMOUNT=2
+      - EXPECTED_EOFS=1
       - QUERY_ID=1
+      - PERSIST_PATH=/var/bkp/q1234_filter_currency_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -99,16 +96,14 @@ services:
       - ID=1
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
-      - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_QUEUE=Q1234_transfers_queue
-      - INPUT_ROUTING_KEYS=Q1234_TRANSFERS_KEY
-      - OUTPUT_EXCHANGE=Q1234_filtered_exchange
-      - OUTPUT_QUEUE=Q1234_filtered_q
-      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
+      - INPUT_MIDDLEWARE_PREFIX=Q1234_filter_currency
+      - OUTPUT_CLUSTERS=Q1_filtered:2,Q2_filtered:2,Q3_filtered:2,Q4_filtered:2
       - CURRENCIES=US Dollar
-      - FILTER_TYPE=CURRENCY
-      - FILTER_AMOUNT=2
+      - EXPECTED_EOFS=1
       - QUERY_ID=1
+      - PERSIST_PATH=/var/bkp/q1234_filter_currency_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -127,16 +122,14 @@ services:
       - ID=0
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
-      - INPUT_EXCHANGE=Q1234_filtered_exchange
-      - INPUT_QUEUE=Q1234_filtered_q
-      - INPUT_ROUTING_KEYS=Q1234_filtered_key
-      - OUTPUT_EXCHANGE=results_queue
+      - INPUT_MIDDLEWARE_PREFIX=Q1_filtered
       - OUTPUT_QUEUE=results_queue
-      - OUTPUT_ROUTING_KEYS=results_queue
       - AMOUNT=50.0
-      - FILTER_TYPE=AMOUNT
-      - FILTER_AMOUNT=2
+      - EXPECTED_EOFS=2
       - QUERY_ID=1
+      - PERSIST_PATH=/var/bkp/q1_filter_amount_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -155,16 +148,14 @@ services:
       - ID=1
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
-      - INPUT_EXCHANGE=Q1234_filtered_exchange
-      - INPUT_QUEUE=Q1234_filtered_q
-      - INPUT_ROUTING_KEYS=Q1234_filtered_key
-      - OUTPUT_EXCHANGE=results_queue
+      - INPUT_MIDDLEWARE_PREFIX=Q1_filtered
       - OUTPUT_QUEUE=results_queue
-      - OUTPUT_ROUTING_KEYS=results_queue
       - AMOUNT=50.0
-      - FILTER_TYPE=AMOUNT
-      - FILTER_AMOUNT=2
+      - EXPECTED_EOFS=2
       - QUERY_ID=1
+      - PERSIST_PATH=/var/bkp/q1_filter_amount_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -188,10 +179,9 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - INPUT_EXCHANGE=Q1234_filtered_exchange
-      - INPUT_QUEUE=Q2_reducer_in_q
-      - INPUT_ROUTING_KEYS=Q1234_filtered_key
+      - INPUT_QUEUE=Q2_reducer_in_q_0
+      - INPUT_ROUTING_KEYS=Q2_filtered_shard-0
       - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
-      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
       - QUERY_ID=2
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
@@ -214,10 +204,9 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - INPUT_EXCHANGE=Q1234_filtered_exchange
-      - INPUT_QUEUE=Q2_reducer_in_q
-      - INPUT_ROUTING_KEYS=Q1234_filtered_key
+      - INPUT_QUEUE=Q2_reducer_in_q_1
+      - INPUT_ROUTING_KEYS=Q2_filtered_shard-1
       - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
-      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key
       - QUERY_ID=2
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
     logging:
@@ -241,7 +230,6 @@ services:
       - INPUT_QUEUE=Q2_accounts_0
       - OUTPUT_QUEUES=Q2_join_accounts_q_0,Q2_join_accounts_q_1
       - FILTER_AMOUNT=2
-      - FILTER_TYPE=BANK_DISTINCT
       - QUERY_ID=2
 
   q2_filter_bank_distinct_1:
@@ -259,7 +247,6 @@ services:
       - INPUT_QUEUE=Q2_accounts_1
       - OUTPUT_QUEUES=Q2_join_accounts_q_0,Q2_join_accounts_q_1
       - FILTER_AMOUNT=2
-      - FILTER_TYPE=BANK_DISTINCT
       - QUERY_ID=2
 
   q2_join_0:
@@ -278,7 +265,6 @@ services:
       - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_0
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
-      - OUTPUT_ROUTING_KEYS=results_queue
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2
       - JOIN_AMOUNT=2
@@ -305,7 +291,6 @@ services:
       - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_1
       - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
-      - OUTPUT_ROUTING_KEYS=results_queue
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2
       - JOIN_AMOUNT=2
@@ -350,16 +335,15 @@ services:
       - ID=0
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - FILTER_AMOUNT=2
-      - OUTPUT_AMOUNT=2
+      - EXPECTED_EOFS=2
+      - OUTPUT_AMOUNT=5
       - OUTPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
-      - INPUT_EXCHANGE=Q1234_filtered_exchange
-      - INPUT_QUEUE=Q4_filter_range_in
-      - INPUT_ROUTING_KEYS=Q1234_filtered_key
+      - INPUT_MIDDLEWARE_PREFIX=Q4_filtered
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - QUERY_ID=4
-      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin
-      - SEQ_STORE_QUEUE=Q4_filter_splitter_seqstore
+      - PERSIST_PATH=/var/bkp/q4_filter_and_splitter_0.bin
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -378,16 +362,15 @@ services:
       - ID=1
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - FILTER_AMOUNT=2
-      - OUTPUT_AMOUNT=2
+      - EXPECTED_EOFS=2
+      - OUTPUT_AMOUNT=5
       - OUTPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
-      - INPUT_EXCHANGE=Q1234_filtered_exchange
-      - INPUT_QUEUE=Q4_filter_range_in
-      - INPUT_ROUTING_KEYS=Q1234_filtered_key
+      - INPUT_MIDDLEWARE_PREFIX=Q4_filtered
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - QUERY_ID=4
-      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin
-      - SEQ_STORE_QUEUE=Q4_filter_splitter_seqstore
+      - PERSIST_PATH=/var/bkp/q4_filter_and_splitter_1.bin
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -409,12 +392,16 @@ services:
       - OUTPUT_AMOUNT=2
       - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
       - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - EXPECTED_EOFS=2
       - QUALIFIED_EXCHANGE=Q4_qualified_accounts
-      - PEER_AMOUNT=2
+      - PEER_AMOUNT=5
       - THRESHOLD=5
       - QUERY_ID=4
       - MAX_BATCH_SIZE=500
       - MAX_BATCH_BYTES=65536
+      - PERSIST_PATH=/var/bkp/q4_join_accounts_0
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -436,12 +423,109 @@ services:
       - OUTPUT_AMOUNT=2
       - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
       - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - EXPECTED_EOFS=2
       - QUALIFIED_EXCHANGE=Q4_qualified_accounts
-      - PEER_AMOUNT=2
+      - PEER_AMOUNT=5
       - THRESHOLD=5
       - QUERY_ID=4
       - MAX_BATCH_SIZE=500
       - MAX_BATCH_BYTES=65536
+      - PERSIST_PATH=/var/bkp/q4_join_accounts_1
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  q4_join_accounts_2:
+    build:
+      context: ./src/
+      dockerfile: cmd/joinaccounts/Dockerfile
+    container_name: q4_join_accounts_2
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=2
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - OUTPUT_AMOUNT=2
+      - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
+      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - EXPECTED_EOFS=2
+      - QUALIFIED_EXCHANGE=Q4_qualified_accounts
+      - PEER_AMOUNT=5
+      - THRESHOLD=5
+      - QUERY_ID=4
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
+      - PERSIST_PATH=/var/bkp/q4_join_accounts_2
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  q4_join_accounts_3:
+    build:
+      context: ./src/
+      dockerfile: cmd/joinaccounts/Dockerfile
+    container_name: q4_join_accounts_3
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=3
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - OUTPUT_AMOUNT=2
+      - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
+      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - EXPECTED_EOFS=2
+      - QUALIFIED_EXCHANGE=Q4_qualified_accounts
+      - PEER_AMOUNT=5
+      - THRESHOLD=5
+      - QUERY_ID=4
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
+      - PERSIST_PATH=/var/bkp/q4_join_accounts_3
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  q4_join_accounts_4:
+    build:
+      context: ./src/
+      dockerfile: cmd/joinaccounts/Dockerfile
+    container_name: q4_join_accounts_4
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ID=4
+      - MOM_HOST=rabbitmq
+      - MOM_PORT=5672
+      - OUTPUT_AMOUNT=2
+      - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
+      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter
+      - EXPECTED_EOFS=2
+      - QUALIFIED_EXCHANGE=Q4_qualified_accounts
+      - PEER_AMOUNT=5
+      - THRESHOLD=5
+      - QUERY_ID=4
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
+      - PERSIST_PATH=/var/bkp/q4_join_accounts_4
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -463,9 +547,12 @@ services:
       - OUTPUT_AMOUNT=2
       - OUTPUT_MIDDLEWARE_PREFIX=Q4_AcumAccounts
       - INPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
-      - EXPECTED_EOFS=2
+      - EXPECTED_EOFS=5
       - REQUIRED_AMT=5
       - QUERY_ID=4
+      - PERSIST_PATH=/var/bkp/q4_acum_accounts_0
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -487,9 +574,12 @@ services:
       - OUTPUT_AMOUNT=2
       - OUTPUT_MIDDLEWARE_PREFIX=Q4_AcumAccounts
       - INPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts
-      - EXPECTED_EOFS=2
+      - EXPECTED_EOFS=5
       - REQUIRED_AMT=5
       - QUERY_ID=4
+      - PERSIST_PATH=/var/bkp/q4_acum_accounts_1
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -509,11 +599,14 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - INPUT_MIDDLEWARE_PREFIX=Q4_AcumAccounts
-      - OUTPUT_MIDDLEWARE=results_queue
+      - OUTPUT_QUEUE=results_queue
       - EXPECTED_EOFS=2
       - QUERY_ID=4
       - MAX_BATCH_SIZE=500
       - MAX_BATCH_BYTES=65536
+      - PERSIST_PATH=/var/bkp/q4_filter_account_seen_0
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -533,11 +626,14 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - INPUT_MIDDLEWARE_PREFIX=Q4_AcumAccounts
-      - OUTPUT_MIDDLEWARE=results_queue
+      - OUTPUT_QUEUE=results_queue
       - EXPECTED_EOFS=2
       - QUERY_ID=4
       - MAX_BATCH_SIZE=500
       - MAX_BATCH_BYTES=65536
+      - PERSIST_PATH=/var/bkp/q4_filter_account_seen_1
+      - PERSIST_BATCH_SIZE=100
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -559,12 +655,21 @@ services:
       - ID=0
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_EXCHANGE=Q1234_filtered_exchange
-      - INPUT_QUEUE=Q3_filter_range_in
-      - INPUT_ROUTING_KEYS=Q1234_filtered_key
-      - OUTPUT_QUEUES=Q3_transfers_avg_period_q,Q3_transfers_filter_period_q
-      - FILTER_AMOUNT=2
+      - INPUT_MIDDLEWARE_PREFIX=Q3_filtered
+      - AVG_OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_exchange
+      - AVG_OUTPUT_AMOUNT=2
+      - FILTER_OUTPUT_MIDDLEWARE_PREFIX=Q3_filter_exchange
+      - FILTER_OUTPUT_AMOUNT=2
+      - EXPECTED_EOFS=2
       - QUERY_ID=3
+      - PERSIST_PATH=/var/bkp/q3_filter_range_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q3_filter_range_1:
     build:
@@ -578,12 +683,21 @@ services:
       - ID=1
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_EXCHANGE=Q1234_filtered_exchange
-      - INPUT_QUEUE=Q3_filter_range_in
-      - INPUT_ROUTING_KEYS=Q1234_filtered_key
-      - OUTPUT_QUEUES=Q3_transfers_avg_period_q,Q3_transfers_filter_period_q
-      - FILTER_AMOUNT=2
+      - INPUT_MIDDLEWARE_PREFIX=Q3_filtered
+      - AVG_OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_exchange
+      - AVG_OUTPUT_AMOUNT=2
+      - FILTER_OUTPUT_MIDDLEWARE_PREFIX=Q3_filter_exchange
+      - FILTER_OUTPUT_AMOUNT=2
+      - EXPECTED_EOFS=2
       - QUERY_ID=3
+      - PERSIST_PATH=/var/bkp/q3_filter_range_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q3_sum_0:
     build:
@@ -595,12 +709,23 @@ services:
         condition: service_healthy
     environment:
       - ID=0
-      - SUM_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=Q3_transfers_avg_period_q
-      - OUTPUT_QUEUES=Q3_sum_aggregate_0,Q3_sum_aggregate_1
+      - INPUT_MIDDLEWARE_PREFIX=Q3_avg_exchange
+      - OUTPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
+      - OUTPUT_AMOUNT=2
+      - EXPECTED_EOFS=2
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
       - QUERY_ID=3
+      - PERSIST_PATH=/var/bkp/q3_sum_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q3_sum_1:
     build:
@@ -612,12 +737,23 @@ services:
         condition: service_healthy
     environment:
       - ID=1
-      - SUM_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=Q3_transfers_avg_period_q
-      - OUTPUT_QUEUES=Q3_sum_aggregate_0,Q3_sum_aggregate_1
+      - INPUT_MIDDLEWARE_PREFIX=Q3_avg_exchange
+      - OUTPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
+      - OUTPUT_AMOUNT=2
+      - EXPECTED_EOFS=2
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
       - QUERY_ID=3
+      - PERSIST_PATH=/var/bkp/q3_sum_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q3_aggregate_0:
     build:
@@ -629,10 +765,10 @@ services:
         condition: service_healthy
     environment:
       - ID=0
-      - AGGREGATE_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=Q3_sum_aggregate_0
+      - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
+      - EXPECTED_EOFS=2
       - OUTPUT_QUEUES=Q3_filter2_avg_0,Q3_filter2_avg_1
       - QUERY_ID=3
 
@@ -646,10 +782,10 @@ services:
         condition: service_healthy
     environment:
       - ID=1
-      - AGGREGATE_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=Q3_sum_aggregate_1
+      - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
+      - EXPECTED_EOFS=2
       - OUTPUT_QUEUES=Q3_filter2_avg_0,Q3_filter2_avg_1
       - QUERY_ID=3
 
@@ -706,16 +842,20 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - ID=0
-      - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
-      - INPUT_QUEUE=Q5_transfers_queue
-      - OUTPUT_EXCHANGE=Q5_filtered_exchange
-      - OUTPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
-      - FILTER_AMOUNT=2
-      - FILTER_TYPE=DATE_RANGE_AND_PAYMENT
+      - INPUT_MIDDLEWARE_PREFIX=Q5_filter
+      - OUTPUT_CLUSTERS=Q5_filtered:1
+      - EXPECTED_EOFS=1
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - PAYMENT_FORMATS=ACH,Wire
       - QUERY_ID=5
+      - PERSIST_PATH=/var/bkp/q5_filter_date_and_payment_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q5_filter_date_and_payment_1:
     build:
@@ -729,16 +869,20 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - ID=1
-      - INPUT_EXCHANGE=transfers_exchange
-      - INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
-      - INPUT_QUEUE=Q5_transfers_queue
-      - OUTPUT_EXCHANGE=Q5_filtered_exchange
-      - OUTPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
-      - FILTER_AMOUNT=2
-      - FILTER_TYPE=DATE_RANGE_AND_PAYMENT
+      - INPUT_MIDDLEWARE_PREFIX=Q5_filter
+      - OUTPUT_CLUSTERS=Q5_filtered:1
+      - EXPECTED_EOFS=1
       - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00
       - PAYMENT_FORMATS=ACH,Wire
       - QUERY_ID=5
+      - PERSIST_PATH=/var/bkp/q5_filter_date_and_payment_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q5_fetcher:
     build:
@@ -774,7 +918,6 @@ services:
       - INPUT_QUEUE=Q5_fetcher_output
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
-      - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
       - QUERY_ID=5
       - QUOTE=US Dollar
 
@@ -794,7 +937,6 @@ services:
       - INPUT_QUEUE=Q5_fetcher_output
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
-      - FILTER_TYPE=CONVERTED_AMOUNT_FILTER
       - QUERY_ID=5
       - QUOTE=US Dollar
 
@@ -835,7 +977,7 @@ services:
     environment:
       - ID=0
       - AMOUNT=3
-      - NODES=q1234_filter_currency_0 q1234_filter_currency_1 q1_filter_amount_0 q1_filter_amount_1 q2_reducer_0 q2_reducer_1 q2_filter_bank_distinct_0 q2_filter_bank_distinct_1 q2_join_0 q2_join_1 q4_filter_and_splitter_0 q4_filter_and_splitter_1 q4_join_accounts_0 q4_join_accounts_1 q4_acum_accounts_0 q4_acum_accounts_1 q4_filter_account_seen_0 q4_filter_account_seen_1 q3_filter_range_0 q3_filter_range_1 q3_sum_0 q3_sum_1 q3_aggregate_0 q3_aggregate_1 q3_average_filter_0 q3_average_filter_1 q5_filter_date_and_payment_0 q5_filter_date_and_payment_1 q5_filter_amount_0 q5_filter_amount_1 watchdog_0 watchdog_1 watchdog_2 q5_fetcher q5_count_reducer
+      - NODES=gateway q1234_filter_currency_0 q1234_filter_currency_1 q1_filter_amount_0 q1_filter_amount_1 q2_reducer_0 q2_reducer_1 q2_filter_bank_distinct_0 q2_filter_bank_distinct_1 q2_join_0 q2_join_1 q4_filter_and_splitter_0 q4_filter_and_splitter_1 q4_join_accounts_0 q4_join_accounts_1 q4_join_accounts_2 q4_join_accounts_3 q4_join_accounts_4 q4_acum_accounts_0 q4_acum_accounts_1 q4_filter_account_seen_0 q4_filter_account_seen_1 q3_filter_range_0 q3_filter_range_1 q3_sum_0 q3_sum_1 q3_aggregate_0 q3_aggregate_1 q3_average_filter_0 q3_average_filter_1 q5_filter_date_and_payment_0 q5_filter_date_and_payment_1 q5_filter_amount_0 q5_filter_amount_1 watchdog_0 watchdog_1 watchdog_2 q5_fetcher q5_count_reducer
       - INTERVAL=1s
       - TIMEOUT=1s
       - MAX_RETRIES=3
@@ -863,7 +1005,7 @@ services:
     environment:
       - ID=1
       - AMOUNT=3
-      - NODES=q1234_filter_currency_0 q1234_filter_currency_1 q1_filter_amount_0 q1_filter_amount_1 q2_reducer_0 q2_reducer_1 q2_filter_bank_distinct_0 q2_filter_bank_distinct_1 q2_join_0 q2_join_1 q4_filter_and_splitter_0 q4_filter_and_splitter_1 q4_join_accounts_0 q4_join_accounts_1 q4_acum_accounts_0 q4_acum_accounts_1 q4_filter_account_seen_0 q4_filter_account_seen_1 q3_filter_range_0 q3_filter_range_1 q3_sum_0 q3_sum_1 q3_aggregate_0 q3_aggregate_1 q3_average_filter_0 q3_average_filter_1 q5_filter_date_and_payment_0 q5_filter_date_and_payment_1 q5_filter_amount_0 q5_filter_amount_1 watchdog_0 watchdog_1 watchdog_2 q5_fetcher q5_count_reducer
+      - NODES=gateway q1234_filter_currency_0 q1234_filter_currency_1 q1_filter_amount_0 q1_filter_amount_1 q2_reducer_0 q2_reducer_1 q2_filter_bank_distinct_0 q2_filter_bank_distinct_1 q2_join_0 q2_join_1 q4_filter_and_splitter_0 q4_filter_and_splitter_1 q4_join_accounts_0 q4_join_accounts_1 q4_join_accounts_2 q4_join_accounts_3 q4_join_accounts_4 q4_acum_accounts_0 q4_acum_accounts_1 q4_filter_account_seen_0 q4_filter_account_seen_1 q3_filter_range_0 q3_filter_range_1 q3_sum_0 q3_sum_1 q3_aggregate_0 q3_aggregate_1 q3_average_filter_0 q3_average_filter_1 q5_filter_date_and_payment_0 q5_filter_date_and_payment_1 q5_filter_amount_0 q5_filter_amount_1 watchdog_0 watchdog_1 watchdog_2 q5_fetcher q5_count_reducer
       - INTERVAL=1s
       - TIMEOUT=1s
       - MAX_RETRIES=3
@@ -889,7 +1031,7 @@ services:
     environment:
       - ID=2
       - AMOUNT=3
-      - NODES=q1234_filter_currency_0 q1234_filter_currency_1 q1_filter_amount_0 q1_filter_amount_1 q2_reducer_0 q2_reducer_1 q2_filter_bank_distinct_0 q2_filter_bank_distinct_1 q2_join_0 q2_join_1 q4_filter_and_splitter_0 q4_filter_and_splitter_1 q4_join_accounts_0 q4_join_accounts_1 q4_acum_accounts_0 q4_acum_accounts_1 q4_filter_account_seen_0 q4_filter_account_seen_1 q3_filter_range_0 q3_filter_range_1 q3_sum_0 q3_sum_1 q3_aggregate_0 q3_aggregate_1 q3_average_filter_0 q3_average_filter_1 q5_filter_date_and_payment_0 q5_filter_date_and_payment_1 q5_filter_amount_0 q5_filter_amount_1 watchdog_0 watchdog_1 watchdog_2 q5_fetcher q5_count_reducer
+      - NODES=gateway q1234_filter_currency_0 q1234_filter_currency_1 q1_filter_amount_0 q1_filter_amount_1 q2_reducer_0 q2_reducer_1 q2_filter_bank_distinct_0 q2_filter_bank_distinct_1 q2_join_0 q2_join_1 q4_filter_and_splitter_0 q4_filter_and_splitter_1 q4_join_accounts_0 q4_join_accounts_1 q4_join_accounts_2 q4_join_accounts_3 q4_join_accounts_4 q4_acum_accounts_0 q4_acum_accounts_1 q4_filter_account_seen_0 q4_filter_account_seen_1 q3_filter_range_0 q3_filter_range_1 q3_sum_0 q3_sum_1 q3_aggregate_0 q3_aggregate_1 q3_average_filter_0 q3_average_filter_1 q5_filter_date_and_payment_0 q5_filter_date_and_payment_1 q5_filter_amount_0 q5_filter_amount_1 watchdog_0 watchdog_1 watchdog_2 q5_fetcher q5_count_reducer
       - INTERVAL=1s
       - TIMEOUT=1s
       - MAX_RETRIES=3

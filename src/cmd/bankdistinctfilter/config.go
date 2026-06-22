@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"tp-grupal-distribuidos/internal/common/filter"
-	"tp-grupal-distribuidos/internal/common/splitter"
 )
 
 func loadConfig() (filter.FilterConfig, error) {
@@ -27,22 +26,8 @@ func loadConfig() (filter.FilterConfig, error) {
 	}
 
 	inputQueue := os.Getenv("INPUT_QUEUE")
-	inputExchange := os.Getenv("INPUT_EXCHANGE")
-	inputRoutingKeysStr := os.Getenv("INPUT_ROUTING_KEYS")
-	inputRoutingKeys := []string{}
-	if inputRoutingKeysStr != "" {
-		inputRoutingKeys = splitter.Split(inputRoutingKeysStr, ",")
-	}
-
-	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
 
 	outputQueue := os.Getenv("OUTPUT_QUEUE")
-
-	outputRoutingKeysStr := os.Getenv("OUTPUT_ROUTING_KEYS")
-	outputRoutingKeys := []string{}
-	if outputRoutingKeysStr != "" {
-		outputRoutingKeys = strings.Split(outputRoutingKeysStr, ",")
-	}
 
 	filterAmount := os.Getenv("FILTER_AMOUNT")
 	if filterAmount == "" {
@@ -63,34 +48,17 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
 	}
 
-	rightInputExchange := os.Getenv("RIGHT_INPUT_EXCHANGE")
-	rightInputQueue := os.Getenv("RIGHT_INPUT_QUEUE")
-	leftInputQueue := os.Getenv("LEFT_INPUT_QUEUE")
-	rightInputRoutingKeysStr := os.Getenv("RIGHT_INPUT_ROUTING_KEYS")
-	rightInputRoutingKeys := []string{}
-	if rightInputRoutingKeysStr != "" {
-		rightInputRoutingKeys = splitter.Split(rightInputRoutingKeysStr, ",")
-	}
-
 	config := filter.FilterConfig{
-		Id:                    id,
-		MomHost:               momHost,
-		MomPort:               momPort,
-		InputQueue:            inputQueue,
-		InputExchange:         inputExchange,
-		InputRoutingKeys:      inputRoutingKeys,
-		OutputExchange:        outputExchange,
-		OutputQueue:           outputQueue,
-		OutputRoutingKeys:     outputRoutingKeys,
-		LeftInputQueue:        leftInputQueue,
-		RightInputQueue:       rightInputQueue,
-		FilterAmount:          filterAmountInt,
-		QueryId:               uint8(queryId),
-		RightInputExchange:    rightInputExchange,
-		RightInputRoutingKeys: rightInputRoutingKeys,
+		Id:           id,
+		MomHost:      momHost,
+		MomPort:      momPort,
+		InputQueue:   inputQueue,
+		OutputQueue:  outputQueue,
+		FilterAmount: filterAmountInt,
+		QueryID:      uint8(queryId),
 	}
 
-	if err := loadFilterTypeConfig(&config); err != nil {
+	if err := loadBankDistinctVenv(&config); err != nil {
 		return filter.FilterConfig{}, err
 	}
 
@@ -102,23 +70,8 @@ func loadConfig() (filter.FilterConfig, error) {
 func loadBankDistinctVenv(config *filter.FilterConfig) error {
 	outputQueues := os.Getenv("OUTPUT_QUEUES")
 	if outputQueues == "" {
-		return errors.New("OUTPUT_QUEUES environment variable is required if FILTER_TYPE is BANK_DISTINCT")
+		return errors.New("OUTPUT_QUEUES environment variable is required")
 	}
 	config.OutputQueues = strings.Split(outputQueues, ",")
-	return nil
-}
-
-func loadFilterTypeConfig(config *filter.FilterConfig) error {
-	filterTypeVenv := os.Getenv("FILTER_TYPE")
-	if filterTypeVenv == "" {
-		return errors.New("FILTER_TYPE environment variable is required")
-	}
-
-	config.Type = filter.FilterType(filterTypeVenv)
-
-	if err := loadBankDistinctVenv(config); err != nil {
-		return err
-	}
-
 	return nil
 }

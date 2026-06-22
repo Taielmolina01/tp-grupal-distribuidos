@@ -1,6 +1,7 @@
 package sendertracker
 
 import (
+	"log/slog"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/seqstore"
 )
@@ -8,7 +9,7 @@ import (
 type SenderTracker struct {
 	msgCount  map[int]uint64
 	expected  map[int]uint64
-	eofSet    map[int]struct{}
+	eofSet    map[int]uint64
 	seqStores map[int]*seqstore.SeqStore
 	capacity  uint64
 }
@@ -17,7 +18,7 @@ func New(seqCapacity uint64) *SenderTracker {
 	return &SenderTracker{
 		msgCount:  map[int]uint64{},
 		expected:  map[int]uint64{},
-		eofSet:    map[int]struct{}{},
+		eofSet:    map[int]uint64{},
 		seqStores: map[int]*seqstore.SeqStore{},
 		capacity:  seqCapacity,
 	}
@@ -40,13 +41,35 @@ func (t *SenderTracker) Claim(senderID int, seq uint64) {
 	store.Claim(seq)
 }
 
-func (t *SenderTracker) RegisterBatch(senderID int, count uint64) {
-	t.msgCount[senderID] += count
+func (t *SenderTracker) RegisterBatch(senderID int) uint64 {
+	//Esto lo podemos terminar moviendo al claim calculo, total se ejecutan juntos
+	t.msgCount[senderID]++
+	return t.msgCount[senderID]
 }
 
-func (t *SenderTracker) RegisterEOF(senderID int, total uint64) {
-	t.eofSet[senderID] = struct{}{}
+func (t *SenderTracker) RegisterEOF(senderID int, total uint64, seq uint64) {
+	slog.Info("EOF REGISTER", "seq", seq, "Sender", senderID, "total", total)
+	t.eofSet[senderID] = seq
 	t.expected[senderID] = total
+}
+
+func (t *SenderTracker) GetEOFSeq() uint64 {
+	for _, v := range t.eofSet {
+		return v
+	}
+	return 0
+}
+
+func (t *SenderTracker) GetMsgCount() uint32 {
+	var acum uint32
+	for _, v := range t.msgCount {
+		acum += uint32(int(v)) //ARREGLAR ESTO ACTUALIZANDO EL WIRE
+	}
+	return acum
+}
+
+func (t *SenderTracker) GetMsgCountByKey() map[int]uint64 {
+	return t.msgCount
 }
 
 func (t *SenderTracker) IsComplete(expectedSenders int) bool {
@@ -55,9 +78,11 @@ func (t *SenderTracker) IsComplete(expectedSenders int) bool {
 	}
 	for senderID, exp := range t.expected {
 		if t.msgCount[senderID] < exp {
+			slog.Info("Is Complete? FALSE 2", "msgCount", t.msgCount[senderID], "exp", exp)
 			return false
 		}
 	}
+	slog.Info("Is Complete? TRUE")
 	return true
 }
 
@@ -109,9 +134,9 @@ func Unmarshal(r *wire.Reader) (*SenderTracker, error) {
 		expected[int(r.Int32())] = r.Uint64()
 	}
 	n = r.Uint64()
-	eofSet := make(map[int]struct{}, n)
+	eofSet := make(map[int]uint64, n)
 	for range n {
-		eofSet[int(r.Int32())] = struct{}{}
+		eofSet[int(r.Int32())] = 0
 	}
 	n = r.Uint64()
 	seqStores := make(map[int]*seqstore.SeqStore, n)

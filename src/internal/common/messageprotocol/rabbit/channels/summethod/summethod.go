@@ -14,6 +14,10 @@ var codec = wire.Codec[transfer.SumByMethod]{
 	MinSize:   wire.Uint64Size + wire.Uint32Size + wire.Uint16Size,
 }
 
+func NewBatchBuilder(maxCount, maxBytes int) *batch.Builder[transfer.SumByMethod] {
+	return batch.NewBuilder(maxCount, maxBytes, codec)
+}
+
 func WriteBatch(clientID int, queryID uint8, senderID uint8, seq uint64, records []transfer.SumByMethod) []byte {
 	return batch.Write(clientID, queryID, senderID, seq, records, codec)
 }

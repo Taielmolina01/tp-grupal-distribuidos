@@ -2,11 +2,14 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"tp-grupal-distribuidos/internal/common/filter"
+	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/splitter"
 )
 
@@ -26,99 +29,88 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	inputQueue := os.Getenv("INPUT_QUEUE")
-	inputExchange := os.Getenv("INPUT_EXCHANGE")
-	inputRoutingKeysStr := os.Getenv("INPUT_ROUTING_KEYS")
-	inputRoutingKeys := []string{}
-	if inputRoutingKeysStr != "" {
-		inputRoutingKeys = splitter.Split(inputRoutingKeysStr, ",")
+	inputMiddlewarePrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
+	if inputMiddlewarePrefix == "" {
+		return filter.FilterConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
-
-	outputQueue := os.Getenv("OUTPUT_QUEUE")
-
-	outputRoutingKeysStr := os.Getenv("OUTPUT_ROUTING_KEYS")
-	outputRoutingKeys := []string{}
-	if outputRoutingKeysStr != "" {
-		outputRoutingKeys = strings.Split(outputRoutingKeysStr, ",")
-	}
-
-	filterAmount := os.Getenv("FILTER_AMOUNT")
-	if filterAmount == "" {
-		return filter.FilterConfig{}, errors.New("FILTER_AMOUNT environment variable is required")
-	}
-
-	filterAmountInt, err := strconv.Atoi(filterAmount)
+	filterAmountInt, err := strconv.Atoi(os.Getenv("EXPECTED_EOFS"))
 	if err != nil {
-		return filter.FilterConfig{}, errors.New("FILTER_AMOUNT environment variable must be a number")
+		return filter.FilterConfig{}, errors.New("EXPECTED_EOFS environment variable is required and must be a number")
 	}
 
-	queryIdStr := os.Getenv("QUERY_ID")
-	if queryIdStr == "" {
-		return filter.FilterConfig{}, errors.New("QUERY_ID environment variable is required")
-	}
-	queryId, err := strconv.Atoi(queryIdStr)
+	queryId, err := strconv.Atoi(os.Getenv("QUERY_ID"))
 	if err != nil {
 		return filter.FilterConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
 	}
 
-	rightInputExchange := os.Getenv("RIGHT_INPUT_EXCHANGE")
-	rightInputQueue := os.Getenv("RIGHT_INPUT_QUEUE")
-	leftInputQueue := os.Getenv("LEFT_INPUT_QUEUE")
-	rightInputRoutingKeysStr := os.Getenv("RIGHT_INPUT_ROUTING_KEYS")
-	rightInputRoutingKeys := []string{}
-	if rightInputRoutingKeysStr != "" {
-		rightInputRoutingKeys = splitter.Split(rightInputRoutingKeysStr, ",")
+	outputClusters, err := loadOutputClusters()
+	if err != nil {
+		return filter.FilterConfig{}, err
 	}
 
 	config := filter.FilterConfig{
 		Id:                    id,
 		MomHost:               momHost,
 		MomPort:               momPort,
-		InputQueue:            inputQueue,
-		InputExchange:         inputExchange,
-		InputRoutingKeys:      inputRoutingKeys,
-		OutputExchange:        outputExchange,
-		OutputQueue:           outputQueue,
-		OutputRoutingKeys:     outputRoutingKeys,
-		LeftInputQueue:        leftInputQueue,
-		RightInputQueue:       rightInputQueue,
+		InputMiddlewarePrefix: inputMiddlewarePrefix,
 		FilterAmount:          filterAmountInt,
-		QueryId:               uint8(queryId),
-		RightInputExchange:    rightInputExchange,
-		RightInputRoutingKeys: rightInputRoutingKeys,
+		QueryID:               uint8(queryId),
+		OutputClusters:        outputClusters,
 	}
 
-	if err := loadFilterTypeConfig(&config); err != nil {
+	if err := loadCurrenciesVenv(&config); err != nil {
 		return filter.FilterConfig{}, err
 	}
+
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return filter.FilterConfig{}, errors.New("PERSIST_PATH environment variable is required")
+	}
+	persistBatchSize, err := strconv.Atoi(os.Getenv("PERSIST_BATCH_SIZE"))
+	if err != nil {
+		return filter.FilterConfig{}, errors.New("PERSIST_BATCH_SIZE environment variable is required and must be a number")
+	}
+	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
+	if err != nil {
+		return filter.FilterConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
+	}
+	config.PersistPath = persistPath
+	config.PersistBatchSize = persistBatchSize
+	config.PersistFlushInterval = persistFlushInterval
 
 	return config, nil
 }
 
-// Helpers
+func loadOutputClusters() ([]shard.ClusterConfig, error) {
+	clustersStr := os.Getenv("OUTPUT_CLUSTERS")
+	if clustersStr == "" {
+		return nil, errors.New("OUTPUT_CLUSTERS environment variable is required")
+	}
+	parts := splitter.Split(clustersStr, ",")
+	clusters := make([]shard.ClusterConfig, 0, len(parts))
+	for _, part := range parts {
+		kv := strings.SplitN(part, ":", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid OUTPUT_CLUSTERS entry %q (expected prefix:N)", part)
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(kv[1]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid node count in OUTPUT_CLUSTERS entry %q: %w", part, err)
+		}
+		clusters = append(clusters, shard.ClusterConfig{
+			Prefix:    strings.TrimSpace(kv[0]),
+			NodeCount: n,
+		})
+	}
+	return clusters, nil
+}
 
 func loadCurrenciesVenv(config *filter.FilterConfig) error {
 	currencies := strings.Split(os.Getenv("CURRENCIES"), ",")
 	if len(currencies) < 1 {
-		return errors.New("CURRENCIES environment variable is required if FILTER_TYPE is CURRENCY")
+		return errors.New("CURRENCIES environment variable is required")
 	}
 	config.Currencies = currencies
-	return nil
-}
-
-func loadFilterTypeConfig(config *filter.FilterConfig) error {
-	filterTypeVenv := os.Getenv("FILTER_TYPE")
-	if filterTypeVenv == "" {
-		return errors.New("FILTER_TYPE environment variable is required")
-	}
-
-	config.Type = filter.FilterType(filterTypeVenv)
-
-	if err := loadCurrenciesVenv(config); err != nil {
-		return err
-	}
-
 	return nil
 }

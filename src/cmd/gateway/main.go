@@ -7,7 +7,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"tp-grupal-distribuidos/internal/common/pinger"
+	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/splitter"
 	"tp-grupal-distribuidos/internal/gateway"
 )
@@ -22,15 +25,9 @@ func loadConfig() (gateway.GatewayConfig, error) {
 
 	accountQueueList := splitter.Split(accountQueues, QUEUES_SEPARATOR)
 
-	transfersExchange := os.Getenv("TRANSFERS_EXCHANGE")
-	if transfersExchange == "" {
-		return gateway.GatewayConfig{}, errors.New("TRANSFERS_EXCHANGE environment variable is required")
-	}
-
-	transfersRoutingKeysStr := os.Getenv("TRANSFERS_ROUTING_KEYS")
-	transfersRoutingKeys := []string{}
-	if transfersRoutingKeysStr != "" {
-		transfersRoutingKeys = splitter.Split(transfersRoutingKeysStr, QUEUES_SEPARATOR)
+	transfersClusters, err := loadTransfersClusters()
+	if err != nil {
+		return gateway.GatewayConfig{}, err
 	}
 
 	resultsQueue := os.Getenv("RESULTS_QUEUE")
@@ -92,18 +89,77 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		return gateway.GatewayConfig{}, errors.New("QUERY_EOFS_EXPECTED must define at least one query")
 	}
 
+	sessionStorePath := os.Getenv("SESSION_STORE_PATH")
+	if sessionStorePath == "" {
+		sessionStorePath = "/data/gateway_sessions.bin"
+	}
+
+	var seqCheckpointEvery uint64 = 1
+	if v := os.Getenv("SEQ_CHECKPOINT_EVERY"); v != "" {
+		parsed, err := strconv.ParseUint(v, 10, 64)
+		if err != nil || parsed == 0 {
+			return gateway.GatewayConfig{}, errors.New("SEQ_CHECKPOINT_EVERY must be a positive integer")
+		}
+		seqCheckpointEvery = parsed
+	}
+
+	clientTimeout := 30 * time.Second
+	if v := os.Getenv("CLIENT_TIMEOUT_MS"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed <= 0 {
+			return gateway.GatewayConfig{}, errors.New("CLIENT_TIMEOUT_MS must be a positive integer")
+		}
+		clientTimeout = time.Duration(parsed) * time.Millisecond
+	}
+
+	reaperInterval := 5 * time.Second
+	if v := os.Getenv("REAPER_INTERVAL_MS"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed <= 0 {
+			return gateway.GatewayConfig{}, errors.New("REAPER_INTERVAL_MS must be a positive integer")
+		}
+		reaperInterval = time.Duration(parsed) * time.Millisecond
+	}
+
 	return gateway.GatewayConfig{
-		AccountQueues:        accountQueueList,
-		TransfersExchange:    transfersExchange,
-		TransfersRoutingKeys: transfersRoutingKeys,
-		ResultsQueue:         resultsQueue,
-		ServerHost:           serverHost,
-		ServerPort:           serverPort,
-		MomHost:              momHost,
-		MomPort:              momPort,
-		MaxBatchSize:         maxBatchSize,
-		QueryEOFsExpected:    queryEOFsExpected,
+		AccountQueues:      accountQueueList,
+		TransfersClusters:  transfersClusters,
+		ResultsQueue:       resultsQueue,
+		ServerHost:         serverHost,
+		ServerPort:         serverPort,
+		MomHost:            momHost,
+		MomPort:            momPort,
+		MaxBatchSize:       maxBatchSize,
+		QueryEOFsExpected:  queryEOFsExpected,
+		SessionStorePath:   sessionStorePath,
+		SeqCheckpointEvery: seqCheckpointEvery,
+		ClientTimeout:      clientTimeout,
+		ReaperInterval:     reaperInterval,
 	}, nil
+}
+
+func loadTransfersClusters() ([]shard.ClusterConfig, error) {
+	clustersStr := os.Getenv("TRANSFERS_CLUSTERS")
+	if clustersStr == "" {
+		return nil, errors.New("TRANSFERS_CLUSTERS environment variable is required")
+	}
+	parts := splitter.Split(clustersStr, QUEUES_SEPARATOR)
+	clusters := make([]shard.ClusterConfig, 0, len(parts))
+	for _, part := range parts {
+		kv := strings.SplitN(part, ":", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid TRANSFERS_CLUSTERS entry %q (expected prefix:N)", part)
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(kv[1]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid node count in TRANSFERS_CLUSTERS entry %q: %w", part, err)
+		}
+		clusters = append(clusters, shard.ClusterConfig{
+			Prefix:    strings.TrimSpace(kv[0]),
+			NodeCount: n,
+		})
+	}
+	return clusters, nil
 }
 
 func run() int {
@@ -118,6 +174,9 @@ func run() int {
 		slog.Error("While initializing gateway", "err", err)
 		return 1
 	}
+
+	healthPinger := pinger.Serve(":" + pinger.DefaultPort)
+	defer healthPinger.Close()
 
 	if err := server.Run(); err != nil {
 		slog.Error("Gateway stopped with error", "err", err)
