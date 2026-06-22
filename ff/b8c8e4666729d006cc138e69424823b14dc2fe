@@ -1,0 +1,66 @@
+src/internal/sum/types.go
+  s_cef398d530ed6a::t_29bc7f5e546bbd 4-10,16-21,25-31,38-40,46-52,54-56
+  s_cef398d530ed6a::t_3fc173895ecdde 22-24,41-45
+src/cmd/aggregate/config.go
+  s_cef398d530ed6a::t_a7e880ed0c6875 28,30,38-40,49-55
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_ccc80b5c5d2c1a::t_2cb04b7d367d17 86-87,152,244
+  s_ccc80b5c5d2c1a::t_509721f843e619 78-79
+src/internal/common/messageprotocol/rabbit/channels/summethod/summethod.go
+  s_cef398d530ed6a::t_e4675ad92b643d 17-20
+src/internal/sum/sum.go
+  s_cef398d530ed6a::t_61c0494e34f8b9 133
+  s_cef398d530ed6a::t_8bc64632b2b27d 152
+  s_cef398d530ed6a::t_f3bc0b5486b840 12,16,86-87,207-208,211-218,222-225,229,233-235,242-255
+  s_cef398d530ed6a::t_ba0ed1db1514fe 8,11,15,17,19,25,28-30,34-40,45-47,49,52,54,57,59,62-64,67-85,88-92,98-99,101,110-111,113-115,120-121,123-124,128-130,132,134-137,139-141,143-151,153,155-156,158-166,168-173,175-179,182-183,187-202,206,210,231-232,236-238
+  s_cef398d530ed6a::t_5af091e782b6b3 186
+src/internal/filter/filterandsplitter/persist.go
+  s_ccc80b5c5d2c1a::t_c982f75b5d71da 13
+  s_ccc80b5c5d2c1a::t_0345a3998a346e 23
+  s_ccc80b5c5d2c1a::t_46f8f994ed4c4c 32-33
+src/internal/sum/persist.go
+  s_cef398d530ed6a::t_608f4d69cd481c 1-59
+scripts/compose-gen/generator.go
+  s_cef398d530ed6a::t_7f7288e211e83e 533-534
+  s_cef398d530ed6a::t_7f121c6ca482c8 558-559
+  s_cef398d530ed6a::t_d7849b06898d72 529-532,536-539
+src/internal/filter/filterandsplitter/types.go
+  s_ccc80b5c5d2c1a::t_fe2f6aa344ffbc 57-58
+src/internal/aggregate/types.go
+  s_cef398d530ed6a::t_39e92a2378338e 5,7,12-20,37-39,45
+src/cmd/sum/config.go
+  s_cef398d530ed6a::t_65d55b8c3fb98e 53-62,87-88
+  s_cef398d530ed6a::t_d698167fd7eb82 7,28,30,38-40,43-52,63-75,79-86,89-91
+src/internal/aggregate/aggregate.go
+  s_cef398d530ed6a::t_4c6d52eff5aa0f 8,14,23-24,27-29,41-43,48-50,52,57,68-75,89,92,102-103,108-109,118,178,183-187
+  h_3c9b41718876fe 132-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "ffb8c8e4666729d006cc138e69424823b14dc2fe",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_ccc80b5c5d2c1a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a57f0394-7ef0-4af9-bcfc-9651cc4e0585",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    },
+    "s_cef398d530ed6a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "64d1c46b-ee78-464b-8fbe-95f04d816a3e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
