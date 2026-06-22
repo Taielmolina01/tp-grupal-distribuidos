@@ -709,12 +709,23 @@ services:
         condition: service_healthy
     environment:
       - ID=0
-      - SUM_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=Q3_transfers_avg_period_q
-      - OUTPUT_QUEUES=Q3_sum_aggregate_0,Q3_sum_aggregate_1
+      - INPUT_MIDDLEWARE_PREFIX=Q3_avg_exchange
+      - OUTPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
+      - OUTPUT_AMOUNT=2
+      - EXPECTED_EOFS=2
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
       - QUERY_ID=3
+      - PERSIST_PATH=/var/bkp/q3_sum_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q3_sum_1:
     build:
@@ -726,12 +737,23 @@ services:
         condition: service_healthy
     environment:
       - ID=1
-      - SUM_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=Q3_transfers_avg_period_q
-      - OUTPUT_QUEUES=Q3_sum_aggregate_0,Q3_sum_aggregate_1
+      - INPUT_MIDDLEWARE_PREFIX=Q3_avg_exchange
+      - OUTPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
+      - OUTPUT_AMOUNT=2
+      - EXPECTED_EOFS=2
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
       - QUERY_ID=3
+      - PERSIST_PATH=/var/bkp/q3_sum_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q3_aggregate_0:
     build:
@@ -743,12 +765,10 @@ services:
         condition: service_healthy
     environment:
       - ID=0
-      - SUM_AMOUNT=2
-      - AGGREGATE_AMOUNT=2
-      - SUM_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=Q3_sum_aggregate_0
+      - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
+      - EXPECTED_EOFS=2
       - OUTPUT_QUEUES=Q3_filter2_avg_0,Q3_filter2_avg_1
       - QUERY_ID=3
 
@@ -762,12 +782,10 @@ services:
         condition: service_healthy
     environment:
       - ID=1
-      - SUM_AMOUNT=2
-      - AGGREGATE_AMOUNT=2
-      - SUM_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=Q3_sum_aggregate_1
+      - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
+      - EXPECTED_EOFS=2
       - OUTPUT_QUEUES=Q3_filter2_avg_0,Q3_filter2_avg_1
       - QUERY_ID=3
 

@@ -515,8 +515,6 @@ func writeFilterRangeQ3(b *strings.Builder, cfg *Config) {
 }
 
 func writeSumQ3(b *strings.Builder, cfg *Config) {
-	outputQueues := queues("Q3_sum_aggregate", cfg.AggregateQ3)
-
 	for i := range cfg.SumQ3 {
 		fmt.Fprintf(b, "  q3_sum_%d:\n", i)
 		b.WriteString("    build:\n")
@@ -526,12 +524,19 @@ func writeSumQ3(b *strings.Builder, cfg *Config) {
 		rabbitmqDepends(b)
 		b.WriteString("    environment:\n")
 		fmt.Fprintf(b, "      - ID=%d\n", i)
-		fmt.Fprintf(b, "      - SUM_AMOUNT=%d\n", cfg.SumQ3)
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
-		b.WriteString("      - INPUT_QUEUE=Q3_transfers_avg_period_q\n")
-		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q3_avg_exchange\n")
+		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate\n")
+		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.AggregateQ3)
+		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterRangeQ3)
+		b.WriteString("      - MAX_BATCH_SIZE=500\n")
+		b.WriteString("      - MAX_BATCH_BYTES=65536\n")
 		b.WriteString("      - QUERY_ID=3\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_sum_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }
@@ -548,12 +553,10 @@ func writeAggregateQ3(b *strings.Builder, cfg *Config) {
 		rabbitmqDepends(b)
 		b.WriteString("    environment:\n")
 		fmt.Fprintf(b, "      - ID=%d\n", i)
-		fmt.Fprintf(b, "      - SUM_AMOUNT=%d\n", cfg.SumQ3)
-		fmt.Fprintf(b, "      - AGGREGATE_AMOUNT=%d\n", cfg.AggregateQ3)
-		fmt.Fprintf(b, "      - SUM_AMOUNT=%d\n", cfg.SumQ3)
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
-		fmt.Fprintf(b, "      - INPUT_QUEUE=Q3_sum_aggregate_%d\n", i)
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate\n")
+		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.SumQ3)
 		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
 		b.WriteString("      - QUERY_ID=3\n")
 		b.WriteString("\n")

@@ -1,34 +1,57 @@
 package sum
 
 import (
-	"sync"
-	"tp-grupal-distribuidos/internal/common/eofring"
-	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"time"
+
+	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/shard"
+	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
 type SumConfig struct {
 	Id           int
-	SumAmount    int
-	MomHost      string
-	MomPort      int
-	InputQueue   string
-	OutputQueues []string
-	QueryID      uint8
+	ExpectedEOFs int
+
+	InputMiddlewarePrefix  string
+	OutputMiddlewarePrefix string
+	OutputAmount           int
+
+	MaxBatchSize  int
+	MaxBatchBytes int
+
+	MomHost string
+	MomPort int
+	QueryID uint8
+
+	PersistPath          string
+	PersistBatchSize     int
+	PersistFlushInterval time.Duration
 }
 
 type SumByPaymentFormat struct {
 	id      int
 	queryID uint8
 
-	inputQueue   middleware.Middleware
-	outputQueues []middleware.Middleware
-	eofInput     middleware.Middleware
-	eofOutput    middleware.Middleware
-	eofHandler   eofring.EofRingAlgorithm
-	msgMonitor   msgmonitor.MessageMonitor
+	inputMiddleware  newmiddleware.Middleware
+	outputMiddleware newmiddleware.Middleware
 
-	mu           sync.Mutex
-	acumuladores map[int]map[string]transfer.SumByMethod
+	prevNodeAmt   int
+	outputAmount  int
+	hasher        shard.Hasher
+	maxBatchSize  int
+	maxBatchBytes int
+
+	states     statemap.StateMap[clientState]
+	checkpoint *checkpoint.Checkpoint[clientState]
+
+	persistBatchSize     int
+	persistFlushInterval time.Duration
+}
+
+type clientState struct {
+	tracker      *sendertracker.SenderTracker
+	acumuladores map[string]transfer.SumByMethod
 }

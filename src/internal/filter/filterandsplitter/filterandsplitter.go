@@ -75,16 +75,16 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 
 	states := statemap.New(func() *clientState {
 		return &clientState{
-			transferTracker: sendertracker.New(10_000_000),
-			outputTracker:   outputtracker.New(),
+			tracker:       sendertracker.New(10_000_000),
+			outputTracker: outputtracker.New(),
 		}
 	})
 	for clientID, state := range recovered {
 		states.Set(clientID, state)
 		slog.Info("DEBUG recovered client state",
 			"clientID", clientID,
-			"processed", state.transferTracker.GetMsgCount(),
-			"expected", state.transferTracker.TotalInput(),
+			"processed", state.tracker.GetMsgCount(),
+			"expected", state.tracker.TotalInput(),
 		)
 	}
 
@@ -149,7 +149,7 @@ func (f *FilterAndSplitter) handleBatch(msgs []newmiddleware.Message, ack func()
 
 		clientID := input.ClientID
 		state := f.states.For(clientID)
-		tracker := state.transferTracker
+		tracker := state.tracker
 
 		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
 			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
@@ -241,7 +241,7 @@ func (f *FilterAndSplitter) processBatch(input batch.Msg[transfer.TransferAfterC
 }
 
 func (f *FilterAndSplitter) finishTransfersStep(clientID int, state *clientState) error {
-	eofSeq := state.transferTracker.GetEOFSeq()
+	eofSeq := state.tracker.GetEOFSeq()
 	var sendErr error
 	for i := range f.outputAmount {
 		if sendErr != nil {

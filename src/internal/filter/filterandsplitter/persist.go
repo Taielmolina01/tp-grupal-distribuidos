@@ -10,7 +10,7 @@ import (
 
 func marshalClientState(s *clientState) []byte {
 	w := wire.NewWriter()
-	s.transferTracker.Marshal(w)
+	s.tracker.Marshal(w)
 	s.outputTracker.Marshal(w)
 	return w.Bytes()
 }
@@ -20,7 +20,7 @@ func unmarshalClientState(data []byte) (*clientState, error) {
 
 	tracker, err := sendertracker.Unmarshal(r)
 	if err != nil {
-		return nil, fmt.Errorf("filterandsplitter: unmarshal transferTracker: %w", err)
+		return nil, fmt.Errorf("filterandsplitter: unmarshal tracker: %w", err)
 	}
 
 	outTracker, err := outputtracker.Unmarshal(r)
@@ -29,7 +29,7 @@ func unmarshalClientState(data []byte) (*clientState, error) {
 	}
 
 	return &clientState{
-		transferTracker: tracker,
-		outputTracker:   outTracker,
+		tracker:       tracker,
+		outputTracker: outTracker,
 	}, nil
 }

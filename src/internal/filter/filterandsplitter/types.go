@@ -54,6 +54,6 @@ type FilterAndSplitter struct {
 }
 
 type clientState struct {
-	transferTracker *sendertracker.SenderTracker
-	outputTracker   *outputtracker.OutputTracker
+	tracker       *sendertracker.SenderTracker
+	outputTracker *outputtracker.OutputTracker
 }
