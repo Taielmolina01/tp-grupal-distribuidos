@@ -44,7 +44,7 @@ func newCountReducer(
 	return &CountReducer{
 		inputQueue:        inputQueue,
 		outputQueue:       out,
-		queryId:           config.QueryId,
+		queryId:           config.QueryID,
 		countByClient:     map[int]uint32{},
 		eofsByClient:      map[int]uint32{},
 		inputEofsExpected: uint32(config.InputEofsExpected),

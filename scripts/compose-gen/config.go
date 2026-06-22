@@ -11,6 +11,8 @@ import (
 type Config struct {
 	Clients int `yaml:"clients"`
 
+	MaxBatchKB int `yaml:"max_batch_kb"`
+
 	// Query 1-4
 	FilterCurrency int `yaml:"filter_currency"`
 
@@ -52,6 +54,9 @@ func loadConfig(path string) (*Config, error) {
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("error unmarshalling cfg file: %w", err)
+	}
+	if cfg.MaxBatchKB == 0 {
+		cfg.MaxBatchKB = 128
 	}
 
 	return &cfg, nil

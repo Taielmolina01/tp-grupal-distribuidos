@@ -1,48 +1,33 @@
 package filter
 
-import "time"
+import (
+	"time"
 
-type FilterType string
-
-const (
-	CURRENCY                FilterType = "CURRENCY"
-	AMOUNT                  FilterType = "AMOUNT"
-	DATE_RANGE              FilterType = "DATE_RANGE"
-	DATE_RANGE_AND_PAYMENT  FilterType = "DATE_RANGE_AND_PAYMENT"
-	DATE_RANGE_AND_SPLITTER FilterType = "DATE_RANGE_AND_SPLITTER"
-	AVERAGE_FILTER          FilterType = "AVERAGE_FILTER"
-	COUNT_AND_FILTER        FilterType = "COUNT_AND_FILTER"
-	TRANSFER_DISTINCT       FilterType = "TRANSFER_DISTINCT"
-	BANK_DISTINCT           FilterType = "BANK_DISTINCT"
-	CONVERTED_AMOUNT_FILTER FilterType = "CONVERTED_AMOUNT_FILTER"
+	"tp-grupal-distribuidos/internal/common/shard"
 )
 
 type FilterConfig struct {
-	Type                  FilterType
-	Id                    int
-	MomHost               string
-	MomPort               int
-	InputExchange         string
-	InputQueue            string
-	InputRoutingKeys      []string
-	OutputExchange        string
-	OutputQueue           string
-	OutputRoutingKeys     []string
-	LeftInputQueue        string
-	RightInputQueue       string
-	RightInputExchange    string
-	RightInputRoutingKeys []string
-	Amount                float64
-	StartDateRange        time.Time
-	EndDateRange          time.Time
-	Currencies            []string
-	AmountTreshold        int
-	FilterAmount          int
-	OutputQueues          []string
-	QueryId               uint8
-	PaymentFormats        []string
-	Quote                 string
-}
+	Id      int
+	MomHost string
+	MomPort int
 
-type FilterAndSplitter struct {
+	InputMiddlewarePrefix string
+	InputQueue            string
+
+	OutputQueue    string
+	OutputQueues   []string
+	OutputClusters []shard.ClusterConfig
+
+	Amount         float64
+	StartDateRange time.Time
+	EndDateRange   time.Time
+	Currencies     []string
+	FilterAmount   int
+	QueryID        uint8
+	PaymentFormats []string
+	Quote          string
+
+	PersistPath          string
+	PersistBatchSize     int
+	PersistFlushInterval time.Duration
 }

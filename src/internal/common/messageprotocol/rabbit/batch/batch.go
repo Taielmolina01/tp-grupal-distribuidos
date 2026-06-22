@@ -10,6 +10,9 @@ import (
 const (
 	typeBatch uint8 = iota + 1
 	typeEOF
+	typeAbort
+
+	HeaderSize = envelope.HeaderSize + wire.Uint16Size
 )
 
 type Builder[T any] struct {
@@ -24,9 +27,14 @@ func NewBuilder[T any](maxCount, maxBytes int, codec wire.Codec[T]) *Builder[T] 
 	return &Builder[T]{
 		w:        wire.NewWriter(),
 		maxCount: maxCount,
-		maxBytes: maxBytes,
+		maxBytes: maxBytes - int(HeaderSize),
 		codec:    codec,
 	}
+}
+
+func (b *Builder[T]) Add(record *T) {
+	b.codec.Marshal(b.w, record)
+	b.count++
 }
 
 func (b *Builder[T]) TryAdd(record *T) bool {
@@ -63,6 +71,7 @@ type Info struct {
 	ClientID int
 	QueryID  uint8
 	EOF      bool
+	Abort    bool
 	Total    uint32
 	SenderID uint8
 	Seq      uint64
@@ -92,6 +101,12 @@ func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uin
 	return w.Bytes()
 }
 
+func WriteAbort(clientID int, senderID uint8) []byte {
+	w := wire.NewWriter()
+	envelope.Header{ClientID: clientID, Type: typeAbort, SenderID: senderID, Seq: 0}.WriteTo(w)
+	return w.Bytes()
+}
+
 func ReadHeader(body []byte) (*wire.Reader, Info, error) {
 	r := wire.NewReader(body)
 	h := envelope.ReadFrom(r)
@@ -105,6 +120,8 @@ func ReadHeader(body []byte) (*wire.Reader, Info, error) {
 			return r, Info{}, err
 		}
 		return r, Info{ClientID: h.ClientID, QueryID: h.QueryID, EOF: true, Total: total, SenderID: h.SenderID, Seq: h.Seq}, nil
+	case typeAbort:
+		return r, Info{ClientID: h.ClientID, Abort: true, SenderID: h.SenderID, Seq: h.Seq}, r.Err()
 	default:
 		return r, Info{}, fmt.Errorf("batch: unknown message type %d", h.Type)
 	}

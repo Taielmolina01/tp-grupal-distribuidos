@@ -4,9 +4,10 @@ import (
 	"errors"
 	"os"
 	"strconv"
-	"strings"
+	"time"
 
 	"tp-grupal-distribuidos/internal/aggregate"
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 )
 
 func loadConfig() (aggregate.AggregateConfig, error) {
@@ -25,9 +26,9 @@ func loadConfig() (aggregate.AggregateConfig, error) {
 		return aggregate.AggregateConfig{}, errors.New("ID environment variable is required and must be a number")
 	}
 
-	aggregateAmount, err := strconv.Atoi(os.Getenv("AGGREGATE_AMOUNT"))
+	expectedEOFs, err := strconv.Atoi(os.Getenv("EXPECTED_EOFS"))
 	if err != nil {
-		return aggregate.AggregateConfig{}, errors.New("AGGREGATE_AMOUNT environment variable is required and must be a number")
+		return aggregate.AggregateConfig{}, errors.New("EXPECTED_EOFS environment variable is required and must be a number")
 	}
 
 	queryID, err := strconv.Atoi(os.Getenv("QUERY_ID"))
@@ -35,29 +36,59 @@ func loadConfig() (aggregate.AggregateConfig, error) {
 		return aggregate.AggregateConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
 	}
 
-	inputQueue := os.Getenv("INPUT_QUEUE")
-	if inputQueue == "" {
-		return aggregate.AggregateConfig{}, errors.New("INPUT_QUEUE environment variable is required")
+	inputPrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
+	if inputPrefix == "" {
+		return aggregate.AggregateConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	outputQueues := os.Getenv("OUTPUT_QUEUES")
-	if outputQueues == "" {
-		return aggregate.AggregateConfig{}, errors.New("OUTPUT_QUEUES environment variable is required")
+	outputPrefix := os.Getenv("OUTPUT_MIDDLEWARE_PREFIX")
+	if outputPrefix == "" {
+		return aggregate.AggregateConfig{}, errors.New("OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	sumAmount, err := strconv.Atoi(os.Getenv("SUM_AMOUNT"))
+	outputAmount, err := strconv.Atoi(os.Getenv("OUTPUT_AMOUNT"))
 	if err != nil {
-		return aggregate.AggregateConfig{}, errors.New("SUM_AMOUNT environment variable is required and must be a number")
+		return aggregate.AggregateConfig{}, errors.New("OUTPUT_AMOUNT environment variable is required and must be a number")
+	}
+
+	maxBatchSize, err := strconv.Atoi(os.Getenv("MAX_BATCH_SIZE"))
+	if err != nil {
+		return aggregate.AggregateConfig{}, errors.New("MAX_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	maxBatchBytes, err := commonconfig.ParseMaxBatchBytes()
+	if err != nil {
+		return aggregate.AggregateConfig{}, err
+	}
+
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return aggregate.AggregateConfig{}, errors.New("PERSIST_PATH environment variable is required")
+	}
+
+	persistBatchSize, err := strconv.Atoi(os.Getenv("PERSIST_BATCH_SIZE"))
+	if err != nil {
+		return aggregate.AggregateConfig{}, errors.New("PERSIST_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
+	if err != nil {
+		return aggregate.AggregateConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
 	}
 
 	return aggregate.AggregateConfig{
-		Id:              id,
-		AggregateAmount: aggregateAmount,
-		SumAmount:       sumAmount,
-		MomHost:         momHost,
-		MomPort:         momPort,
-		QueryID:         uint8(queryID),
-		InputQueue:      inputQueue,
-		OutputQueues:    strings.Split(outputQueues, ","),
+		Id:                     id,
+		ExpectedEOFs:           expectedEOFs,
+		MomHost:                momHost,
+		MomPort:                momPort,
+		QueryID:                uint8(queryID),
+		InputMiddlewarePrefix:  inputPrefix,
+		OutputMiddlewarePrefix: outputPrefix,
+		OutputAmount:           outputAmount,
+		MaxBatchSize:           maxBatchSize,
+		MaxBatchBytes:          maxBatchBytes,
+		PersistPath:            persistPath,
+		PersistBatchSize:       persistBatchSize,
+		PersistFlushInterval:   persistFlushInterval,
 	}, nil
 }

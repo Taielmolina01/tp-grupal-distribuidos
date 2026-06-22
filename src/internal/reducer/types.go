@@ -20,7 +20,7 @@ type ReducerConfig struct {
 	MomHost           string
 	MomPort           int
 	InputExchange     string
-	QueryId           uint8
+	QueryID           uint8
 	InputQueue        string
 	OutputQueues      []string
 	InputRoutingKeys  []string

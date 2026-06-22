@@ -3,6 +3,7 @@ package newmiddleware
 import (
 	"fmt"
 	"log/slog"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -52,11 +53,92 @@ func (b *baseMiddleware) StartConsuming(callbackFunc func(msg Message, ack func(
 					}
 				},
 				func() {
-					if err := d.Nack(false, false); err != nil {
+					if err := d.Nack(false, true); err != nil {
 						slog.Error("nack failed", "err", err)
 					}
 				},
 			)
+		case <-stopCh:
+			return nil
+		case <-connClosed:
+			return ErrDisconnected
+		case <-channelClosed:
+			return ErrDisconnected
+		}
+	}
+}
+
+func (b *baseMiddleware) StartConsumingBatch(batchSize int, flushInterval time.Duration, fn func(msgs []Message, ack func(), nack func())) error {
+	if !b.areConnsUp() {
+		return ErrDisconnected
+	}
+	if b.queue.Name == "" {
+		return ErrNoInputQueue
+	}
+
+	b.stopConsuming = make(chan struct{})
+	stopCh := b.stopConsuming
+
+	msgs, err := b.channel.Consume(b.queue.Name, "", false, false, false, false, nil)
+	if err != nil {
+		return ErrDisconnected
+	}
+
+	connClosed := b.connection.NotifyClose(make(chan *amqp.Error, 1))
+	channelClosed := b.channel.NotifyClose(make(chan *amqp.Error, 1))
+
+	batch := make([]Message, 0, batchSize)
+	var deliveries []amqp.Delivery
+
+	timer := time.NewTimer(flushInterval)
+	defer timer.Stop()
+
+	flush := func() {
+		last := deliveries[len(deliveries)-1]
+		fn(
+			batch,
+			func() {
+				if err := last.Ack(true); err != nil {
+					slog.Error("batch ack failed", "err", err)
+				}
+			},
+			func() {
+				if err := last.Nack(true, true); err != nil {
+					slog.Error("batch nack failed", "err", err)
+				}
+			},
+		)
+		batch = batch[:0]
+		deliveries = deliveries[:0]
+	}
+
+	resetTimer := func() {
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(flushInterval)
+	}
+
+	for {
+		select {
+		case d, ok := <-msgs:
+			if !ok {
+				return ErrDisconnected
+			}
+			batch = append(batch, Message{Body: d.Body, RoutingKey: d.RoutingKey})
+			deliveries = append(deliveries, d)
+			if len(batch) >= batchSize {
+				flush()
+				resetTimer()
+			}
+		case <-timer.C:
+			if len(batch) > 0 {
+				flush()
+			}
+			timer.Reset(flushInterval)
 		case <-stopCh:
 			return nil
 		case <-connClosed:
@@ -128,7 +210,7 @@ func startReturnHandler(ch *amqp.Channel) {
 	returned := ch.NotifyReturn(make(chan amqp.Return, 10))
 	go func() {
 		for msg := range returned {
-			slog.Warn("message not delivered", "message_id", msg.MessageId, "reply_code", msg.ReplyCode)
+			slog.Warn("message not delivered", "message_id", msg.MessageId, "reply_code", msg.ReplyCode, "ReplyText", msg.ReplyText, "RK", msg.RoutingKey)
 		}
 	}()
 }

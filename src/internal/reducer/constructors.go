@@ -27,7 +27,7 @@ func CreateReducerMaxAmountFromBank(config ReducerConfig) (worker.Worker, error)
 		transfer.ProjectForQ2,
 		records.TransferAfterCurrencyCodec,
 		records.TransferForQ2Codec,
-		config.QueryId,
+		config.QueryID,
 	)
 }
 

@@ -5,130 +5,100 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
-	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
-	"tp-grupal-distribuidos/internal/common/eofring"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/daterange"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/summethod"
-	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
+	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-const eofRingPrefix = "SUM_"
-
 func NewSumByPaymentFormat(config SumConfig) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputQueue   middleware.Middleware
-		outputQueues []middleware.Middleware
-		eofInput     middleware.Middleware
-		eofOutput    middleware.Middleware
-		err          error
+		inputMiddleware  newmiddleware.Middleware
+		outputMiddleware newmiddleware.Middleware
+		err              error
 	)
 
 	defer func() {
-		if err == nil {
-			return
-		}
-		if eofOutput != nil {
-			if err := eofOutput.Close(); err != nil {
-				slog.Error("While closing EOF output", "id", config.Id, "err", err)
-			}
-		}
-		if eofInput != nil {
-			if err := eofInput.Close(); err != nil {
-				slog.Error("While closing EOF input", "id", config.Id, "err", err)
-			}
-		}
-		for _, q := range outputQueues {
-			if err := q.Close(); err != nil {
-				slog.Error("While closing output queue", "id", config.Id, "err", err)
-			}
-		}
-		if inputQueue != nil {
-			if err := inputQueue.Close(); err != nil {
-				slog.Error("While closing input queue", "id", config.Id, "err", err)
+		if err != nil {
+			for _, m := range []newmiddleware.Middleware{outputMiddleware, inputMiddleware} {
+				if m != nil {
+					if closeErr := m.Close(); closeErr != nil {
+						slog.Error("While closing middleware", "err", closeErr)
+					}
+				}
 			}
 		}
 	}()
 
-	inputQueue, err = middleware.CreateQueueMiddleware(config.InputQueue, connSettings)
+	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	shardKey := fmt.Sprintf("shard-%d", config.Id)
+	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
 	if err != nil {
-		return nil, fmt.Errorf("creating input queue: %w", err)
+		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputQueues = make([]middleware.Middleware, 0, len(config.OutputQueues))
-	for _, q := range config.OutputQueues {
-		m, e := middleware.CreateQueueMiddleware(q, connSettings)
-		if e != nil {
-			err = fmt.Errorf("creating output queue %s: %w", q, e)
-			return nil, err
+	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
+	if err != nil {
+		return nil, fmt.Errorf("creating output middleware: %w", err)
+	}
+
+	ckpt, err := checkpoint.New(config.PersistPath, marshalClientState, unmarshalClientState)
+	if err != nil {
+		return nil, fmt.Errorf("creating checkpoint: %w", err)
+	}
+
+	recovered, err := ckpt.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading checkpoint: %w", err)
+	}
+
+	states := statemap.New(func() *clientState {
+		return &clientState{
+			tracker:      sendertracker.New(10_000_000),
+			acumuladores: map[string]transfer.SumByMethod{},
 		}
-		outputQueues = append(outputQueues, m)
+	})
+	for clientID, state := range recovered {
+		states.Set(clientID, state)
+		slog.Info("recovered client state", "clientID", clientID)
 	}
 
-	eofInputQueueName, eofOutputQueueName := eofring.GetInputAndOutputQueueNames(
-		config.Id,
-		config.SumAmount,
-		eofRingPrefix,
-		eofRingPrefix,
-	)
-
-	eofInput, err = middleware.CreateQueueMiddleware(
-		eofInputQueueName,
-		connSettings,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("creating EOF input queue: %w", err)
-	}
-
-	eofOutput, err = middleware.CreateQueueMiddleware(
-		eofOutputQueueName,
-		connSettings,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("creating EOF output queue: %w", err)
-	}
-
-	msgMonitor := msgmonitor.NewMessageMonitor()
-
-	s := &SumByPaymentFormat{
-		id:           config.Id,
-		queryID:      config.QueryID,
-		inputQueue:   inputQueue,
-		outputQueues: outputQueues,
-		eofInput:     eofInput,
-		eofOutput:    eofOutput,
-		msgMonitor:   msgMonitor,
-		acumuladores: map[int]map[string]transfer.SumByMethod{},
-	}
-
-	s.eofHandler = eofring.CreateEofRingAlgorithm(
-		eofInput,
-		eofOutput,
-		config.SumAmount,
-		uint32(config.Id),
-		msgMonitor,
-		s.onRingConverged,
-		config.QueryID,
-	)
-
-	return s, nil
+	return &SumByPaymentFormat{
+		id:                   config.Id,
+		queryID:              config.QueryID,
+		inputMiddleware:      inputMiddleware,
+		outputMiddleware:     outputMiddleware,
+		prevNodeAmt:          config.ExpectedEOFs,
+		outputAmount:         config.OutputAmount,
+		hasher:               shard.New(config.OutputAmount),
+		maxBatchSize:         config.MaxBatchSize,
+		maxBatchBytes:        config.MaxBatchBytes,
+		states:               states,
+		checkpoint:           ckpt,
+		persistBatchSize:     config.PersistBatchSize,
+		persistFlushInterval: config.PersistFlushInterval,
+	}, nil
 }
 
 func (s *SumByPaymentFormat) Run() {
 	defer s.close()
 	slog.Info("Starting sum-by-payment-format consumers", "sum_id", s.id)
-	go s.eofHandler.Run()
-	if err := s.inputQueue.StartConsuming(func(msg middleware.Message, ack, _ func()) {
-		s.handleInput(msg, ack)
+	if err := s.inputMiddleware.StartConsumingBatch(s.persistBatchSize, s.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		s.handleBatch(msgs, ack, nack)
 	}); err != nil {
-		slog.Error("While consuming from input queue", "err", err)
+		slog.Error("While consuming from input middleware", "err", err)
 	}
 }
 
@@ -137,122 +107,149 @@ func (s *SumByPaymentFormat) HandleSignals() {
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
+	s.stopConsuming()
+}
 
-	if err := s.inputQueue.StopConsuming(); err != nil {
-		slog.Error("While stopping input queue consumer", "sum_id", s.id, "err", err)
-	}
-	if err := s.eofInput.StopConsuming(); err != nil {
-		slog.Error("While stopping EOF input consumer", "sum_id", s.id, "err", err)
+func (s *SumByPaymentFormat) stopConsuming() {
+	if err := s.inputMiddleware.StopConsuming(); err != nil {
+		slog.Error("While stopping input consumer", "sum_id", s.id, "err", err)
 	}
 }
 
 func (s *SumByPaymentFormat) close() {
-	if err := s.inputQueue.Close(); err != nil {
-		slog.Error("While closing input queue", "sum_id", s.id, "err", err)
+	if err := s.inputMiddleware.Close(); err != nil {
+		slog.Error("While closing input middleware", "sum_id", s.id, "err", err)
 	}
-	if err := s.eofInput.Close(); err != nil {
-		slog.Error("While closing EOF input", "sum_id", s.id, "err", err)
+	if err := s.outputMiddleware.Close(); err != nil {
+		slog.Error("While closing output middleware", "sum_id", s.id, "err", err)
 	}
-	if err := s.eofOutput.Close(); err != nil {
-		slog.Error("While closing EOF output", "sum_id", s.id, "err", err)
+}
+
+func (s *SumByPaymentFormat) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {
+	modified := make(map[int]*clientState)
+	completed := make(map[int]struct{})
+
+	for _, msg := range msgs {
+		input, err := daterange.Read(msg.Body)
+		if err != nil {
+			slog.Error("decode failed", "err", err)
+			continue
+		}
+
+		clientID := input.ClientID
+		state := s.states.For(clientID)
+		tracker := state.tracker
+
+		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
+			continue
+		}
+
+		if input.EOF {
+			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+		} else {
+			tracker.RegisterBatch(int(input.SenderID))
+			s.processRecords(input.Records, state)
+		}
+
+		tracker.Claim(int(input.SenderID), input.Seq)
+		modified[clientID] = state
+
+		if tracker.IsComplete(s.prevNodeAmt) {
+			if err := s.finishStep(clientID, state); err != nil {
+				slog.Error("finish step failed", "err", err)
+				nack()
+				s.stopConsuming()
+				return
+			}
+			completed[clientID] = struct{}{}
+		}
 	}
-	for _, q := range s.outputQueues {
-		if err := q.Close(); err != nil {
-			slog.Error("While closing output queue", "sum_id", s.id, "err", err)
+
+	for clientID, state := range modified {
+		if _, done := completed[clientID]; done {
+			s.states.Delete(clientID)
+			s.checkpoint.DeleteClient(clientID)
+			continue
+		}
+		if err := s.checkpoint.SaveClient(clientID, state); err != nil {
+			slog.Error("persist failed, stopping", "err", err)
+			nack()
+			s.stopConsuming()
+			return
+		}
+	}
+
+	ack()
+}
+
+func (s *SumByPaymentFormat) processRecords(records []transfer.TransferForQ3Avg, state *clientState) {
+	for _, t := range records {
+		method := t.PaymentFormat
+		existing, ok := state.acumuladores[method]
+		if !ok {
+			state.acumuladores[method] = transfer.SumByMethod{
+				Sum:    t.AmountPaid,
+				Amount: 1,
+				Method: method,
+			}
+		} else {
+			state.acumuladores[method] = transfer.SumByMethod{
+				Sum:    existing.Sum + t.AmountPaid,
+				Amount: existing.Amount + 1,
+				Method: method,
+			}
 		}
 	}
 }
 
-func (s *SumByPaymentFormat) handleInput(msg middleware.Message, ack func()) {
-	defer ack()
+func (s *SumByPaymentFormat) finishStep(clientID int, state *clientState) error {
+	ot := outputtracker.New()
+	builders := make(map[string]*batch.Builder[transfer.SumByMethod])
 
-	input, err := daterange.Read(msg.Body)
-	if err != nil {
-		slog.Error("While deserializing input batch", "err", err)
-		return
-	}
-
-	if input.EOF {
-		s.handleEOF(input.ClientID, input.Total)
-		return
-	}
-
-	for i := range input.Records {
-		s.handleRecord(input.ClientID, input.Records[i])
-	}
-}
-
-func (s *SumByPaymentFormat) handleRecord(clientID int, t transfer.TransferForQ3Avg) {
-	method := t.PaymentFormat
-
-	s.mu.Lock()
-	if s.acumuladores[clientID] == nil {
-		s.acumuladores[clientID] = map[string]transfer.SumByMethod{}
-	}
-	existing, ok := s.acumuladores[clientID][method]
-	if !ok {
-		s.acumuladores[clientID][method] = transfer.SumByMethod{
-			Sum:    t.AmountPaid,
-			Amount: 1,
-			Method: method,
-		}
-		s.msgMonitor.AddForwardedMessagesAmountByClientId(clientID, 1)
-	} else {
-		s.acumuladores[clientID][method] = transfer.SumByMethod{
-			Sum:    existing.Sum + t.AmountPaid,
-			Amount: existing.Amount + 1,
-			Method: method,
+	for method, partial := range state.acumuladores {
+		rk := fmt.Sprintf("shard-%d", s.hasher.ShardFor(clientID, method))
+		b := s.builderFor(builders, rk)
+		if !b.TryAdd(&partial) {
+			seq := ot.RegisterBatch(rk)
+			if err := s.flushBatch(clientID, rk, seq, b); err != nil {
+				return err
+			}
+			b.TryAdd(&partial)
 		}
 	}
-	s.mu.Unlock()
-	s.msgMonitor.AddProcessedMessagesAmountByClientId(clientID, 1)
-}
 
-func (s *SumByPaymentFormat) handleEOF(clientID int, total uint32) {
-	ringMsg := eofmessagetypes.EofRingMessage{
-		RealAmount:     total,
-		ActualAmount:   s.msgMonitor.GetProcessedMessagesAmountByClientId(clientID),
-		ClientId:       clientID,
-		CoordinatorId:  uint32(s.id),
-		FilteredAmount: s.msgMonitor.GetForwardedMessagesAmountByClientId(clientID),
+	for rk, b := range builders {
+		if !b.IsEmpty() {
+			seq := ot.RegisterBatch(rk)
+			if err := s.flushBatch(clientID, rk, seq, b); err != nil {
+				return err
+			}
+		}
 	}
-	if err := s.eofOutput.Send(middleware.Message{Body: eofring.SerializeRingMessage(ringMsg)}); err != nil {
-		slog.Error("While sending EOF message to EOF ring", "err", err)
-		return
-	}
-}
 
-func (s *SumByPaymentFormat) onRingConverged(clientID int, _ uint64, total uint32, isCoordinator bool) error {
-	s.mu.Lock()
-	byMethod := s.acumuladores[clientID]
-	delete(s.acumuladores, clientID)
-	s.mu.Unlock()
-
-	byShard := make(map[int][]transfer.SumByMethod)
-	for method, partial := range byMethod {
-		idx := shard.CalculateIndexForShard(clientID, method, len(s.outputQueues))
-		byShard[idx] = append(byShard[idx], partial)
-	}
-	for idx, group := range byShard {
-		body := summethod.WriteBatch(clientID, s.queryID, 0, 0, group)
-		if err := s.outputQueues[idx].Send(middleware.Message{Body: body}); err != nil {
+	for i := range s.outputAmount {
+		rk := fmt.Sprintf("shard-%d", i)
+		total := ot.CountFor(rk)
+		seq := ot.RegisterBatch(rk)
+		eofBody := summethod.WriteEOF(clientID, s.queryID, uint8(s.id), seq, uint32(total))
+		if err := s.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}
-
-	for i, q := range s.outputQueues {
-		if i >= len(byShard) {
-			body := summethod.WriteEOF(clientID, s.queryID, 0, 0, 0)
-			if err := q.Send(middleware.Message{Body: body}); err != nil {
-				return err
-			}
-		} else {
-			eofBody := summethod.WriteEOF(clientID, s.queryID, 0, 0, uint32(len(byShard[i])))
-			if err := q.Send(middleware.Message{Body: eofBody}); err != nil {
-				return err
-			}
-		}
-
-	}
 	return nil
+}
+
+func (s *SumByPaymentFormat) builderFor(builders map[string]*batch.Builder[transfer.SumByMethod], rk string) *batch.Builder[transfer.SumByMethod] {
+	b := builders[rk]
+	if b == nil {
+		b = summethod.NewBatchBuilder(s.maxBatchSize, s.maxBatchBytes)
+		builders[rk] = b
+	}
+	return b
+}
+
+func (s *SumByPaymentFormat) flushBatch(clientID int, rk string, seq uint64, b *batch.Builder[transfer.SumByMethod]) error {
+	body := b.Flush(clientID, s.queryID, uint8(s.id), seq)
+	return s.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk})
 }

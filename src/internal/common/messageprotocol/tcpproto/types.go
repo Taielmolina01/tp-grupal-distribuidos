@@ -8,4 +8,14 @@ const (
 	EndOfRecords
 	ResultBatch
 	QueryEOF
+	Hello
+	Welcome
+)
+
+type Phase uint8
+
+const (
+	PhaseAccounts Phase = iota + 1
+	PhaseTransfers
+	PhaseResults
 )

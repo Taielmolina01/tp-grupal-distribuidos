@@ -4,7 +4,9 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"time"
 
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/joinaccounts"
 )
 
@@ -64,9 +66,29 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		return joinaccounts.JoinAccountsConfig{}, errors.New("MAX_BATCH_SIZE environment variable is required and must be a number")
 	}
 
-	maxBatchBytes, err := strconv.Atoi(os.Getenv("MAX_BATCH_BYTES"))
+	maxBatchBytes, err := commonconfig.ParseMaxBatchBytes()
 	if err != nil {
-		return joinaccounts.JoinAccountsConfig{}, errors.New("MAX_BATCH_BYTES environment variable is required and must be a number")
+		return joinaccounts.JoinAccountsConfig{}, err
+	}
+
+	expectedEOFs, err := strconv.Atoi(os.Getenv("EXPECTED_EOFS"))
+	if err != nil {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("EXPECTED_EOFS environment variable is required and must be a number")
+	}
+
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("PERSIST_PATH environment variable is required")
+	}
+
+	persistBatchSize, err := strconv.Atoi(os.Getenv("PERSIST_BATCH_SIZE"))
+	if err != nil {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("PERSIST_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
+	if err != nil {
+		return joinaccounts.JoinAccountsConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required")
 	}
 
 	return joinaccounts.JoinAccountsConfig{
@@ -82,5 +104,9 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		QueryID:                queryID,
 		MaxBatchSize:           maxBatchSize,
 		MaxBatchBytes:          maxBatchBytes,
+		ExpectedEOFs:           expectedEOFs,
+		PersistPath:            persistPath,
+		PersistBatchSize:       persistBatchSize,
+		PersistFlushInterval:   persistFlushInterval,
 	}, nil
 }

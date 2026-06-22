@@ -46,7 +46,7 @@ func NewDistinctFilter[T comparable, S comparable](
 		keyFunc:       keyFunc,
 		shardCriteria: shardCriteria,
 		codec:         codec,
-		queryId:       config.QueryId,
+		queryId:       config.QueryID,
 	}, nil
 }
 

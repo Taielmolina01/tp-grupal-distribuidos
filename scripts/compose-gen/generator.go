@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+func writeMaxBatchConfig(b *strings.Builder, cfg *Config) {
+	b.WriteString("      - MAX_BATCH_SIZE=1000\n")
+	fmt.Fprintf(b, "      - MAX_BATCH_KB=%d\n", cfg.MaxBatchKB)
+}
+
 func generateCompose(cfg *Config) string {
 	var b strings.Builder
 
@@ -55,6 +60,8 @@ func workerNodes(cfg *Config) []string {
 			nodes = append(nodes, fmt.Sprintf("%s_%d", prefix, i))
 		}
 	}
+
+	nodes = append(nodes, "gateway")
 
 	add("q1234_filter_currency", cfg.FilterCurrency)
 	add("q1_filter_amount", cfg.FilterAmount)
@@ -161,8 +168,9 @@ func writeGateway(b *strings.Builder, cfg *Config) {
 	rabbitmqDepends(b)
 	b.WriteString("    environment:\n")
 	fmt.Fprintf(b, "      - ACCOUNT_QUEUES=%s\n", accountQueues)
-	b.WriteString("      - TRANSFERS_EXCHANGE=transfers_exchange\n")
-	b.WriteString("      - TRANSFERS_ROUTING_KEYS=Q5_TRANSFERS_KEY,Q1234_TRANSFERS_KEY\n")
+	transfersClusters := fmt.Sprintf("Q1234_filter_currency:%d,Q5_filter:%d",
+		cfg.FilterCurrency, cfg.FilterDateAndPayment)
+	fmt.Fprintf(b, "      - TRANSFERS_CLUSTERS=%s\n", transfersClusters)
 	b.WriteString("      - RESULTS_QUEUE=results_queue\n")
 	b.WriteString("      - MOM_HOST=rabbitmq\n")
 	b.WriteString("      - MOM_PORT=5672\n")
@@ -227,6 +235,7 @@ func writeClients(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - INPUT_FILE_TRANS=/input/transactions_%d.csv\n", i)
 		fmt.Fprintf(b, "      - OUTPUT_FILE_PREFIX=/output/output_%d\n", i)
 		b.WriteString("      - MAX_BATCH_SIZE=1000\n")
+		fmt.Fprintf(b, "      - MAX_BATCH_KB=%d\n", cfg.MaxBatchKB)
 		b.WriteString("    volumes:\n")
 		b.WriteString("      - ./input:/input\n")
 		b.WriteString("      - ./output:/output\n")
@@ -234,8 +243,10 @@ func writeClients(b *strings.Builder, cfg *Config) {
 	}
 }
 
-// Q1234 — shared currency pre-filter for queries 1, 2, 3 and 4
 func writeFilterCurrency(b *strings.Builder, cfg *Config) {
+	outputClusters := fmt.Sprintf("Q1_filtered:%d,Q2_filtered:%d,Q3_filtered:%d,Q4_filtered:%d",
+		cfg.FilterAmount, cfg.ReducerQ2, cfg.FilterRangeQ3, cfg.FilterAndSplitterQ4)
+
 	for i := range cfg.FilterCurrency {
 		fmt.Fprintf(b, "  q1234_filter_currency_%d:\n", i)
 		b.WriteString("    build:\n")
@@ -247,16 +258,14 @@ func writeFilterCurrency(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - ID=%d\n", i)
 		b.WriteString("      - MOM_PORT=5672\n")
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
-		b.WriteString("      - INPUT_EXCHANGE=transfers_exchange\n")
-		b.WriteString("      - INPUT_QUEUE=Q1234_transfers_queue\n")
-		b.WriteString("      - INPUT_ROUTING_KEYS=Q1234_TRANSFERS_KEY\n")
-		b.WriteString("      - OUTPUT_EXCHANGE=Q1234_filtered_exchange\n")
-		b.WriteString("      - OUTPUT_QUEUE=Q1234_filtered_q\n")
-		b.WriteString("      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key\n")
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q1234_filter_currency\n")
+		fmt.Fprintf(b, "      - OUTPUT_CLUSTERS=%s\n", outputClusters)
 		b.WriteString("      - CURRENCIES=US Dollar\n")
-		b.WriteString("      - FILTER_TYPE=CURRENCY\n")
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterCurrency)
+		b.WriteString("      - EXPECTED_EOFS=1\n")
 		b.WriteString("      - QUERY_ID=1\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q1234_filter_currency_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -274,16 +283,14 @@ func writeFilterAmount(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - ID=%d\n", i)
 		b.WriteString("      - MOM_PORT=5672\n")
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
-		b.WriteString("      - INPUT_EXCHANGE=Q1234_filtered_exchange\n")
-		b.WriteString("      - INPUT_QUEUE=Q1234_filtered_q\n")
-		b.WriteString("      - INPUT_ROUTING_KEYS=Q1234_filtered_key\n")
-		b.WriteString("      - OUTPUT_EXCHANGE=results_queue\n")
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q1_filtered\n")
 		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
-		b.WriteString("      - OUTPUT_ROUTING_KEYS=results_queue\n")
 		b.WriteString("      - AMOUNT=50.0\n")
-		b.WriteString("      - FILTER_TYPE=AMOUNT\n")
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterAmount)
+		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterCurrency)
 		b.WriteString("      - QUERY_ID=1\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q1_filter_amount_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -305,10 +312,9 @@ func writeReducerQ2(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
 		b.WriteString("      - INPUT_EXCHANGE=Q1234_filtered_exchange\n")
-		b.WriteString("      - INPUT_QUEUE=Q2_reducer_in_q\n")
-		b.WriteString("      - INPUT_ROUTING_KEYS=Q1234_filtered_key\n")
+		fmt.Fprintf(b, "      - INPUT_QUEUE=Q2_reducer_in_q_%d\n", i)
+		fmt.Fprintf(b, "      - INPUT_ROUTING_KEYS=Q2_filtered_shard-%d\n", i)
 		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
-		b.WriteString("      - OUTPUT_ROUTING_KEYS=Q1234_filtered_key\n")
 		b.WriteString("      - QUERY_ID=2\n")
 		b.WriteString("      - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK\n")
 		jsonFileLogging(b)
@@ -333,7 +339,6 @@ func writeFilterBankIdAlreadySeen(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - INPUT_QUEUE=Q2_accounts_%d\n", i)
 		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
 		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterBankIdAlreadySeen)
-		b.WriteString("      - FILTER_TYPE=BANK_DISTINCT\n")
 		b.WriteString("      - QUERY_ID=2\n")
 		b.WriteString("\n")
 	}
@@ -355,7 +360,6 @@ func writeJoinQ2(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_%d\n", i)
 		b.WriteString("      - OUTPUT_EXCHANGE=results_queue\n")
 		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
-		b.WriteString("      - OUTPUT_ROUTING_KEYS=results_queue\n")
 		fmt.Fprintf(b, "      - LEFT_EOFS_EXPECTED=%d\n", cfg.ReducerQ2)
 		fmt.Fprintf(b, "      - RIGHT_EOFS_EXPECTED=%d\n", cfg.FilterBankIdAlreadySeen)
 		fmt.Fprintf(b, "      - JOIN_AMOUNT=%d\n", cfg.JoinQ2)
@@ -393,16 +397,15 @@ func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - ID=%d\n", i)
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterAndSplitterQ4)
+		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterCurrency)
 		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.JoinAccountsQ4)
 		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter\n")
-		b.WriteString("      - INPUT_EXCHANGE=Q1234_filtered_exchange\n")
-		b.WriteString("      - INPUT_QUEUE=Q4_filter_range_in\n")
-		b.WriteString("      - INPUT_ROUTING_KEYS=Q1234_filtered_key\n")
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q4_filtered\n")
 		b.WriteString("      - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00\n")
 		b.WriteString("      - QUERY_ID=4\n")
-		b.WriteString("      - MONITOR_PERSIST_PATH=/var/bkp/monitor.bin\n")
-		b.WriteString("      - SEQ_STORE_QUEUE=Q4_filter_splitter_seqstore\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_filter_and_splitter_%d.bin\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=100\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -423,12 +426,15 @@ func writeJoinAccountsQ4(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.AcumAccountsQ4)
 		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q4_JoinAccounts\n")
 		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q4_FilterSplitter\n")
+		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterAndSplitterQ4)
 		b.WriteString("      - QUALIFIED_EXCHANGE=Q4_qualified_accounts\n")
 		fmt.Fprintf(b, "      - PEER_AMOUNT=%d\n", cfg.JoinAccountsQ4)
 		b.WriteString("      - THRESHOLD=5\n")
 		b.WriteString("      - QUERY_ID=4\n")
-		b.WriteString("      - MAX_BATCH_SIZE=500\n")
-		b.WriteString("      - MAX_BATCH_BYTES=65536\n")
+		writeMaxBatchConfig(b, cfg)
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_join_accounts_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=100\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -452,6 +458,9 @@ func writeAcumAccountsQ4(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.JoinAccountsQ4)
 		b.WriteString("      - REQUIRED_AMT=5\n")
 		b.WriteString("      - QUERY_ID=4\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_acum_accounts_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=100\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -470,11 +479,13 @@ func writeFilterAccountSeenQ4(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
 		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q4_AcumAccounts\n")
-		b.WriteString("      - OUTPUT_MIDDLEWARE=results_queue\n")
+		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.AcumAccountsQ4)
 		b.WriteString("      - QUERY_ID=4\n")
-		b.WriteString("      - MAX_BATCH_SIZE=500\n")
-		b.WriteString("      - MAX_BATCH_BYTES=65536\n")
+		writeMaxBatchConfig(b, cfg)
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_filter_account_seen_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=100\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -492,19 +503,22 @@ func writeFilterRangeQ3(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - ID=%d\n", i)
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
-		b.WriteString("      - INPUT_EXCHANGE=Q1234_filtered_exchange\n")
-		b.WriteString("      - INPUT_QUEUE=Q3_filter_range_in\n")
-		b.WriteString("      - INPUT_ROUTING_KEYS=Q1234_filtered_key\n")
-		b.WriteString("      - OUTPUT_QUEUES=Q3_transfers_avg_period_q,Q3_transfers_filter_period_q\n")
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterRangeQ3)
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q3_filtered\n")
+		b.WriteString("      - AVG_OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_exchange\n")
+		fmt.Fprintf(b, "      - AVG_OUTPUT_AMOUNT=%d\n", cfg.SumQ3)
+		b.WriteString("      - FILTER_OUTPUT_MIDDLEWARE_PREFIX=Q3_filter_exchange\n")
+		fmt.Fprintf(b, "      - FILTER_OUTPUT_AMOUNT=%d\n", cfg.AverageFilterQ3)
+		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterCurrency)
 		b.WriteString("      - QUERY_ID=3\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_filter_range_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }
 
 func writeSumQ3(b *strings.Builder, cfg *Config) {
-	outputQueues := queues("Q3_sum_aggregate", cfg.AggregateQ3)
-
 	for i := range cfg.SumQ3 {
 		fmt.Fprintf(b, "  q3_sum_%d:\n", i)
 		b.WriteString("    build:\n")
@@ -514,19 +528,23 @@ func writeSumQ3(b *strings.Builder, cfg *Config) {
 		rabbitmqDepends(b)
 		b.WriteString("    environment:\n")
 		fmt.Fprintf(b, "      - ID=%d\n", i)
-		fmt.Fprintf(b, "      - SUM_AMOUNT=%d\n", cfg.SumQ3)
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
-		b.WriteString("      - INPUT_QUEUE=Q3_transfers_avg_period_q\n")
-		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q3_avg_exchange\n")
+		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate\n")
+		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.AggregateQ3)
+		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterRangeQ3)
+		writeMaxBatchConfig(b, cfg)
 		b.WriteString("      - QUERY_ID=3\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_sum_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }
 
 func writeAggregateQ3(b *strings.Builder, cfg *Config) {
-	outputQueues := queues("Q3_filter2_avg", cfg.AverageFilterQ3)
-
 	for i := range cfg.AggregateQ3 {
 		fmt.Fprintf(b, "  q3_aggregate_%d:\n", i)
 		b.WriteString("    build:\n")
@@ -536,12 +554,18 @@ func writeAggregateQ3(b *strings.Builder, cfg *Config) {
 		rabbitmqDepends(b)
 		b.WriteString("    environment:\n")
 		fmt.Fprintf(b, "      - ID=%d\n", i)
-		fmt.Fprintf(b, "      - AGGREGATE_AMOUNT=%d\n", cfg.AggregateQ3)
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
-		fmt.Fprintf(b, "      - INPUT_QUEUE=Q3_sum_aggregate_%d\n", i)
-		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate\n")
+		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output\n")
+		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.AverageFilterQ3)
+		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.SumQ3)
+		writeMaxBatchConfig(b, cfg)
 		b.WriteString("      - QUERY_ID=3\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_aggregate_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }
@@ -558,9 +582,9 @@ func writeAverageFilterQ3(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - ID=%d\n", i)
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.AverageFilterQ3)
-		b.WriteString("      - INPUT_QUEUE=Q3_transfers_filter_period_q\n")
-		fmt.Fprintf(b, "      - AVG_INPUT_QUEUE=Q3_filter2_avg_%d\n", i)
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q3_filter_exchange\n")
+		b.WriteString("      - AVG_INPUT_MIDDLEWARE_PREFIX=Q3_avg_output\n")
+		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterRangeQ3)
 		fmt.Fprintf(b, "      - AVG_EXPECTED_EOFS=%d\n", cfg.AggregateQ3)
 		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
 		b.WriteString("      - QUERY_ID=3\n")
@@ -580,16 +604,16 @@ func writeFilterDateAndPayment(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
 		fmt.Fprintf(b, "      - ID=%d\n", i)
-		b.WriteString("      - INPUT_EXCHANGE=transfers_exchange\n")
-		b.WriteString("      - INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY\n")
-		b.WriteString("      - INPUT_QUEUE=Q5_transfers_queue\n")
-		b.WriteString("      - OUTPUT_EXCHANGE=Q5_filtered_exchange\n")
-		b.WriteString("      - OUTPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY\n")
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterDateAndPayment)
-		b.WriteString("      - FILTER_TYPE=DATE_RANGE_AND_PAYMENT\n")
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q5_filter\n")
+		b.WriteString("      - OUTPUT_CLUSTERS=Q5_filtered:1\n")
+		b.WriteString("      - EXPECTED_EOFS=1\n")
 		b.WriteString("      - DATE_RANGE=2022-09-01 00:00:00,2022-09-06 00:00:00\n")
 		b.WriteString("      - PAYMENT_FORMATS=ACH,Wire\n")
 		b.WriteString("      - QUERY_ID=5\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q5_filter_date_and_payment_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }
@@ -610,7 +634,6 @@ func writeFilterAmtQ5(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - INPUT_QUEUE=Q5_fetcher_output\n")
 		b.WriteString("      - OUTPUT_QUEUE=Q5_filtered_to_count_q\n")
 		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterAmtQ5)
-		b.WriteString("      - FILTER_TYPE=CONVERTED_AMOUNT_FILTER\n")
 		b.WriteString("      - QUERY_ID=5\n")
 		b.WriteString("      - QUOTE=US Dollar\n")
 		b.WriteString("\n")
