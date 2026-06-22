@@ -1,0 +1,41 @@
+src/internal/averagefilter/types.go
+  s_cef398d530ed6a::t_462e1b3938af28 6,8,14,19-21,23-24,33-35,39-40,47-56
+src/internal/aggregate/aggregate.go
+  s_cef398d530ed6a::t_4a8c59b533e365 11-12,16-19,28-30,34-40,52-54,57-60,62-64,67-75,78-92,98-99,110-111,113,115,123-124,128-130,132-137,139-141,143-146,148-153,155-156,158-165,169-179,183-184,186-199,201,203-205,207,211,214-223,226-230,235-241,244-258
+scripts/compose-gen/generator.go
+  s_cef398d530ed6a::t_0558227eadce7a 557-558,560-561,563-566
+  s_cef398d530ed6a::t_b87ff9e261ddc9 583-585
+src/internal/common/messageprotocol/rabbit/channels/avgmethod/avgmethod.go
+  s_cef398d530ed6a::t_5d0c28f5c7963a 17-20
+src/internal/aggregate/types.go
+  s_cef398d530ed6a::t_3c272fdb73861f 4,6,8-10,17-22,27-30,42-43,45-56,58-60
+src/cmd/averagefilter/config.go
+  s_cef398d530ed6a::t_02ed512d17be46 28-30,33-35,43,45,48,54-62
+src/internal/averagefilter/averagefilter.go
+  s_cef398d530ed6a::t_cecc7277a0f13b 20,30-31,34-37,49-51,54-56,61-63,65,68-70,72,75,80-90,97,105,118,121,133-134,136-137,153,202-207,212-213,216,273,277,279-280,282
+src/cmd/aggregate/config.go
+  s_cef398d530ed6a::t_d4867845cba5ed 7,43-75,79-91
+src/internal/aggregate/persist.go
+  s_cef398d530ed6a::t_4862d3d6ab7722 1-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "e0406011d06b1a3356029d3119e304fcadd4f988",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_cef398d530ed6a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "64d1c46b-ee78-464b-8fbe-95f04d816a3e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
