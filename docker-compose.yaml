@@ -768,9 +768,20 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
+      - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output
+      - OUTPUT_AMOUNT=2
       - EXPECTED_EOFS=2
-      - OUTPUT_QUEUES=Q3_filter2_avg_0,Q3_filter2_avg_1
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
       - QUERY_ID=3
+      - PERSIST_PATH=/var/bkp/q3_aggregate_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q3_aggregate_1:
     build:
@@ -785,9 +796,20 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
+      - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output
+      - OUTPUT_AMOUNT=2
       - EXPECTED_EOFS=2
-      - OUTPUT_QUEUES=Q3_filter2_avg_0,Q3_filter2_avg_1
+      - MAX_BATCH_SIZE=500
+      - MAX_BATCH_BYTES=65536
       - QUERY_ID=3
+      - PERSIST_PATH=/var/bkp/q3_aggregate_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q3_average_filter_0:
     build:
@@ -801,9 +823,9 @@ services:
       - ID=0
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - FILTER_AMOUNT=2
-      - INPUT_QUEUE=Q3_transfers_filter_period_q
-      - AVG_INPUT_QUEUE=Q3_filter2_avg_0
+      - INPUT_MIDDLEWARE_PREFIX=Q3_filter_exchange
+      - AVG_INPUT_MIDDLEWARE_PREFIX=Q3_avg_output
+      - EXPECTED_EOFS=2
       - AVG_EXPECTED_EOFS=2
       - OUTPUT_QUEUE=results_queue
       - QUERY_ID=3
@@ -820,9 +842,9 @@ services:
       - ID=1
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - FILTER_AMOUNT=2
-      - INPUT_QUEUE=Q3_transfers_filter_period_q
-      - AVG_INPUT_QUEUE=Q3_filter2_avg_1
+      - INPUT_MIDDLEWARE_PREFIX=Q3_filter_exchange
+      - AVG_INPUT_MIDDLEWARE_PREFIX=Q3_avg_output
+      - EXPECTED_EOFS=2
       - AVG_EXPECTED_EOFS=2
       - OUTPUT_QUEUE=results_queue
       - QUERY_ID=3

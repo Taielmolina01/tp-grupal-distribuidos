@@ -542,8 +542,6 @@ func writeSumQ3(b *strings.Builder, cfg *Config) {
 }
 
 func writeAggregateQ3(b *strings.Builder, cfg *Config) {
-	outputQueues := queues("Q3_filter2_avg", cfg.AverageFilterQ3)
-
 	for i := range cfg.AggregateQ3 {
 		fmt.Fprintf(b, "  q3_aggregate_%d:\n", i)
 		b.WriteString("    build:\n")
@@ -556,9 +554,16 @@ func writeAggregateQ3(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
 		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate\n")
+		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output\n")
+		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.AverageFilterQ3)
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.SumQ3)
-		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
+		b.WriteString("      - MAX_BATCH_SIZE=500\n")
+		b.WriteString("      - MAX_BATCH_BYTES=65536\n")
 		b.WriteString("      - QUERY_ID=3\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_aggregate_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }
@@ -575,9 +580,9 @@ func writeAverageFilterQ3(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - ID=%d\n", i)
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.AverageFilterQ3)
-		b.WriteString("      - INPUT_QUEUE=Q3_transfers_filter_period_q\n")
-		fmt.Fprintf(b, "      - AVG_INPUT_QUEUE=Q3_filter2_avg_%d\n", i)
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q3_filter_exchange\n")
+		b.WriteString("      - AVG_INPUT_MIDDLEWARE_PREFIX=Q3_avg_output\n")
+		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterRangeQ3)
 		fmt.Fprintf(b, "      - AVG_EXPECTED_EOFS=%d\n", cfg.AggregateQ3)
 		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
 		b.WriteString("      - QUERY_ID=3\n")

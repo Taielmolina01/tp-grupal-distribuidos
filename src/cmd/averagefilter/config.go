@@ -25,14 +25,14 @@ func loadConfig() (averagefilter.AverageFilterConfig, error) {
 		return averagefilter.AverageFilterConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	inputTransfersQueue := os.Getenv("INPUT_QUEUE")
-	if inputTransfersQueue == "" {
-		return averagefilter.AverageFilterConfig{}, errors.New("INPUT_QUEUE environment variable is required")
+	inputTransfersPrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
+	if inputTransfersPrefix == "" {
+		return averagefilter.AverageFilterConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	inputAvgsQueue := os.Getenv("AVG_INPUT_QUEUE")
-	if inputAvgsQueue == "" {
-		return averagefilter.AverageFilterConfig{}, errors.New("AVG_INPUT_QUEUE environment variable is required")
+	inputAvgsPrefix := os.Getenv("AVG_INPUT_MIDDLEWARE_PREFIX")
+	if inputAvgsPrefix == "" {
+		return averagefilter.AverageFilterConfig{}, errors.New("AVG_INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
 	outputQueue := os.Getenv("OUTPUT_QUEUE")
@@ -40,25 +40,25 @@ func loadConfig() (averagefilter.AverageFilterConfig, error) {
 		return averagefilter.AverageFilterConfig{}, errors.New("OUTPUT_QUEUE environment variable is required")
 	}
 
-	filterAmount, err := strconv.Atoi(os.Getenv("FILTER_AMOUNT"))
+	expectedTransfersEofs, err := strconv.Atoi(os.Getenv("EXPECTED_EOFS"))
 	if err != nil {
-		return averagefilter.AverageFilterConfig{}, errors.New("FILTER_AMOUNT environment variable is required and must be a number")
+		return averagefilter.AverageFilterConfig{}, errors.New("EXPECTED_EOFS environment variable is required and must be a number")
 	}
 
-	avgsExpectedEofs, err := strconv.Atoi(os.Getenv("AVG_EXPECTED_EOFS"))
+	expectedAvgEofs, err := strconv.Atoi(os.Getenv("AVG_EXPECTED_EOFS"))
 	if err != nil {
 		return averagefilter.AverageFilterConfig{}, errors.New("AVG_EXPECTED_EOFS environment variable is required and must be a number")
 	}
 
 	return averagefilter.AverageFilterConfig{
-		Id:                  id,
-		FilterAmount:        filterAmount,
-		MomHost:             momHost,
-		MomPort:             momPort,
-		InputTransfersQueue: inputTransfersQueue,
-		InputAvgsQueue:      inputAvgsQueue,
-		OutputQueue:         outputQueue,
-		AvgsExpectedEofs:    avgsExpectedEofs,
-		QueryID:             queryresult.Query3ID,
+		Id:                             id,
+		MomHost:                        momHost,
+		MomPort:                        momPort,
+		InputTransfersMiddlewarePrefix: inputTransfersPrefix,
+		InputAvgsMiddlewarePrefix:      inputAvgsPrefix,
+		OutputQueue:                    outputQueue,
+		ExpectedTransfersEofs:          expectedTransfersEofs,
+		ExpectedAvgEofs:                expectedAvgEofs,
+		QueryID:                        queryresult.Query3ID,
 	}, nil
 }

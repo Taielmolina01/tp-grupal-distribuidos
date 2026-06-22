@@ -4,7 +4,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
-	"strings"
+	"time"
 
 	"tp-grupal-distribuidos/internal/aggregate"
 )
@@ -40,18 +40,54 @@ func loadConfig() (aggregate.AggregateConfig, error) {
 		return aggregate.AggregateConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	outputQueues := os.Getenv("OUTPUT_QUEUES")
-	if outputQueues == "" {
-		return aggregate.AggregateConfig{}, errors.New("OUTPUT_QUEUES environment variable is required")
+	outputPrefix := os.Getenv("OUTPUT_MIDDLEWARE_PREFIX")
+	if outputPrefix == "" {
+		return aggregate.AggregateConfig{}, errors.New("OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
+	}
+
+	outputAmount, err := strconv.Atoi(os.Getenv("OUTPUT_AMOUNT"))
+	if err != nil {
+		return aggregate.AggregateConfig{}, errors.New("OUTPUT_AMOUNT environment variable is required and must be a number")
+	}
+
+	maxBatchSize, err := strconv.Atoi(os.Getenv("MAX_BATCH_SIZE"))
+	if err != nil {
+		return aggregate.AggregateConfig{}, errors.New("MAX_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	maxBatchBytes, err := strconv.Atoi(os.Getenv("MAX_BATCH_BYTES"))
+	if err != nil {
+		return aggregate.AggregateConfig{}, errors.New("MAX_BATCH_BYTES environment variable is required and must be a number")
+	}
+
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return aggregate.AggregateConfig{}, errors.New("PERSIST_PATH environment variable is required")
+	}
+
+	persistBatchSize, err := strconv.Atoi(os.Getenv("PERSIST_BATCH_SIZE"))
+	if err != nil {
+		return aggregate.AggregateConfig{}, errors.New("PERSIST_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
+	if err != nil {
+		return aggregate.AggregateConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
 	}
 
 	return aggregate.AggregateConfig{
-		Id:                    id,
-		ExpectedEOFs:          expectedEOFs,
-		MomHost:               momHost,
-		MomPort:               momPort,
-		QueryID:               uint8(queryID),
-		InputMiddlewarePrefix: inputPrefix,
-		OutputQueues:          strings.Split(outputQueues, ","),
+		Id:                     id,
+		ExpectedEOFs:           expectedEOFs,
+		MomHost:                momHost,
+		MomPort:                momPort,
+		QueryID:                uint8(queryID),
+		InputMiddlewarePrefix:  inputPrefix,
+		OutputMiddlewarePrefix: outputPrefix,
+		OutputAmount:           outputAmount,
+		MaxBatchSize:           maxBatchSize,
+		MaxBatchBytes:          maxBatchBytes,
+		PersistPath:            persistPath,
+		PersistBatchSize:       persistBatchSize,
+		PersistFlushInterval:   persistFlushInterval,
 	}, nil
 }
