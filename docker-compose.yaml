@@ -993,6 +993,10 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      watchdog_1:
+        condition: service_started
+      watchdog_2:
+        condition: service_started
     environment:
       - ID=0
       - AMOUNT=3
@@ -1019,6 +1023,8 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      watchdog_2:
+        condition: service_started
     environment:
       - ID=1
       - AMOUNT=3
