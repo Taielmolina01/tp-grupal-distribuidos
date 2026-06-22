@@ -35,6 +35,7 @@ func main() {
 	fmt.Printf("✓ docker-compose generated at: %s\n\n", cleanOutput)
 	fmt.Printf("Applied configuration:\n")
 	fmt.Printf("  clients:                     %d\n", cfg.Clients)
+	fmt.Printf("  max_batch_kb:                %d\n", cfg.MaxBatchKB)
 	fmt.Printf("  filter_currency (Q1):        %d\n", cfg.FilterCurrency)
 	fmt.Printf("  filter_amount (Q1):          %d\n", cfg.FilterAmount)
 	fmt.Printf("  reducer_q2 (Q2):             %d\n", cfg.ReducerQ2)

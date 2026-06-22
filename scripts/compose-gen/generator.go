@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+func writeMaxBatchConfig(b *strings.Builder, cfg *Config) {
+	b.WriteString("      - MAX_BATCH_SIZE=1000\n")
+	fmt.Fprintf(b, "      - MAX_BATCH_KB=%d\n", cfg.MaxBatchKB)
+}
+
 func generateCompose(cfg *Config) string {
 	var b strings.Builder
 
@@ -230,6 +235,7 @@ func writeClients(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - INPUT_FILE_TRANS=/input/transactions_%d.csv\n", i)
 		fmt.Fprintf(b, "      - OUTPUT_FILE_PREFIX=/output/output_%d\n", i)
 		b.WriteString("      - MAX_BATCH_SIZE=1000\n")
+		fmt.Fprintf(b, "      - MAX_BATCH_KB=%d\n", cfg.MaxBatchKB)
 		b.WriteString("    volumes:\n")
 		b.WriteString("      - ./input:/input\n")
 		b.WriteString("      - ./output:/output\n")
@@ -425,8 +431,7 @@ func writeJoinAccountsQ4(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PEER_AMOUNT=%d\n", cfg.JoinAccountsQ4)
 		b.WriteString("      - THRESHOLD=5\n")
 		b.WriteString("      - QUERY_ID=4\n")
-		b.WriteString("      - MAX_BATCH_SIZE=500\n")
-		b.WriteString("      - MAX_BATCH_BYTES=65536\n")
+		writeMaxBatchConfig(b, cfg)
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_join_accounts_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=100\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
@@ -477,8 +482,7 @@ func writeFilterAccountSeenQ4(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.AcumAccountsQ4)
 		b.WriteString("      - QUERY_ID=4\n")
-		b.WriteString("      - MAX_BATCH_SIZE=500\n")
-		b.WriteString("      - MAX_BATCH_BYTES=65536\n")
+		writeMaxBatchConfig(b, cfg)
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_filter_account_seen_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=100\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
@@ -530,8 +534,7 @@ func writeSumQ3(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate\n")
 		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.AggregateQ3)
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterRangeQ3)
-		b.WriteString("      - MAX_BATCH_SIZE=500\n")
-		b.WriteString("      - MAX_BATCH_BYTES=65536\n")
+		writeMaxBatchConfig(b, cfg)
 		b.WriteString("      - QUERY_ID=3\n")
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_sum_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
@@ -557,8 +560,7 @@ func writeAggregateQ3(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output\n")
 		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.AverageFilterQ3)
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.SumQ3)
-		b.WriteString("      - MAX_BATCH_SIZE=500\n")
-		b.WriteString("      - MAX_BATCH_BYTES=65536\n")
+		writeMaxBatchConfig(b, cfg)
 		b.WriteString("      - QUERY_ID=3\n")
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_aggregate_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")

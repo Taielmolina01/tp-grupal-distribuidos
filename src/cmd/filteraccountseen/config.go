@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/filter/filteraccountseen"
 )
 
@@ -50,9 +51,9 @@ func loadConfig() (filteraccountseen.FilterAccountSeenConfig, error) {
 		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("MAX_BATCH_SIZE environment variable is required and must be a number")
 	}
 
-	maxBatchBytes, err := strconv.Atoi(os.Getenv("MAX_BATCH_BYTES"))
+	maxBatchBytes, err := commonconfig.ParseMaxBatchBytes()
 	if err != nil {
-		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("MAX_BATCH_BYTES environment variable is required and must be a number")
+		return filteraccountseen.FilterAccountSeenConfig{}, err
 	}
 
 	persistPath := os.Getenv("PERSIST_PATH")

@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"tp-grupal-distribuidos/internal/client"
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 )
 
 func loadConfig() (client.ClientConfig, error) {
@@ -44,6 +45,11 @@ func loadConfig() (client.ClientConfig, error) {
 		maxBatchSize = parsed
 	}
 
+	maxBatchBytes, err := commonconfig.ParseMaxBatchBytes()
+	if err != nil {
+		return client.ClientConfig{}, err
+	}
+
 	connectionAttempts := 3
 	if v := os.Getenv("CONNECTION_ATTEMPTS"); v != "" {
 		parsed, err := strconv.Atoi(v)
@@ -72,6 +78,7 @@ func loadConfig() (client.ClientConfig, error) {
 		InputFileTrans:           inputFileTrans,
 		OutputFilePrefix:         outputFilePrefix,
 		MaxBatchSize:             maxBatchSize,
+		MaxBatchBytes:            maxBatchBytes,
 		ConnectionAttempts:       connectionAttempts,
 		ConnectionAttemptDelayMs: connectionAttemptDelayMs,
 	}, nil

@@ -51,6 +51,7 @@ services:
       - INPUT_FILE_TRANS=/input/transactions_0.csv
       - OUTPUT_FILE_PREFIX=/output/output_0
       - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
     volumes:
       - ./input:/input
       - ./output:/output
@@ -397,8 +398,8 @@ services:
       - PEER_AMOUNT=5
       - THRESHOLD=5
       - QUERY_ID=4
-      - MAX_BATCH_SIZE=500
-      - MAX_BATCH_BYTES=65536
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
       - PERSIST_PATH=/var/bkp/q4_join_accounts_0
       - PERSIST_BATCH_SIZE=100
       - PERSIST_FLUSH_INTERVAL=1s
@@ -428,8 +429,8 @@ services:
       - PEER_AMOUNT=5
       - THRESHOLD=5
       - QUERY_ID=4
-      - MAX_BATCH_SIZE=500
-      - MAX_BATCH_BYTES=65536
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
       - PERSIST_PATH=/var/bkp/q4_join_accounts_1
       - PERSIST_BATCH_SIZE=100
       - PERSIST_FLUSH_INTERVAL=1s
@@ -459,8 +460,8 @@ services:
       - PEER_AMOUNT=5
       - THRESHOLD=5
       - QUERY_ID=4
-      - MAX_BATCH_SIZE=500
-      - MAX_BATCH_BYTES=65536
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
       - PERSIST_PATH=/var/bkp/q4_join_accounts_2
       - PERSIST_BATCH_SIZE=100
       - PERSIST_FLUSH_INTERVAL=1s
@@ -490,8 +491,8 @@ services:
       - PEER_AMOUNT=5
       - THRESHOLD=5
       - QUERY_ID=4
-      - MAX_BATCH_SIZE=500
-      - MAX_BATCH_BYTES=65536
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
       - PERSIST_PATH=/var/bkp/q4_join_accounts_3
       - PERSIST_BATCH_SIZE=100
       - PERSIST_FLUSH_INTERVAL=1s
@@ -521,8 +522,8 @@ services:
       - PEER_AMOUNT=5
       - THRESHOLD=5
       - QUERY_ID=4
-      - MAX_BATCH_SIZE=500
-      - MAX_BATCH_BYTES=65536
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
       - PERSIST_PATH=/var/bkp/q4_join_accounts_4
       - PERSIST_BATCH_SIZE=100
       - PERSIST_FLUSH_INTERVAL=1s
@@ -602,8 +603,8 @@ services:
       - OUTPUT_QUEUE=results_queue
       - EXPECTED_EOFS=2
       - QUERY_ID=4
-      - MAX_BATCH_SIZE=500
-      - MAX_BATCH_BYTES=65536
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
       - PERSIST_PATH=/var/bkp/q4_filter_account_seen_0
       - PERSIST_BATCH_SIZE=100
       - PERSIST_FLUSH_INTERVAL=1s
@@ -629,8 +630,8 @@ services:
       - OUTPUT_QUEUE=results_queue
       - EXPECTED_EOFS=2
       - QUERY_ID=4
-      - MAX_BATCH_SIZE=500
-      - MAX_BATCH_BYTES=65536
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
       - PERSIST_PATH=/var/bkp/q4_filter_account_seen_1
       - PERSIST_BATCH_SIZE=100
       - PERSIST_FLUSH_INTERVAL=1s
@@ -715,8 +716,8 @@ services:
       - OUTPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
       - OUTPUT_AMOUNT=2
       - EXPECTED_EOFS=2
-      - MAX_BATCH_SIZE=500
-      - MAX_BATCH_BYTES=65536
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
       - QUERY_ID=3
       - PERSIST_PATH=/var/bkp/q3_sum_0
       - PERSIST_BATCH_SIZE=50
@@ -743,8 +744,8 @@ services:
       - OUTPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
       - OUTPUT_AMOUNT=2
       - EXPECTED_EOFS=2
-      - MAX_BATCH_SIZE=500
-      - MAX_BATCH_BYTES=65536
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
       - QUERY_ID=3
       - PERSIST_PATH=/var/bkp/q3_sum_1
       - PERSIST_BATCH_SIZE=50
@@ -771,8 +772,8 @@ services:
       - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output
       - OUTPUT_AMOUNT=2
       - EXPECTED_EOFS=2
-      - MAX_BATCH_SIZE=500
-      - MAX_BATCH_BYTES=65536
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
       - QUERY_ID=3
       - PERSIST_PATH=/var/bkp/q3_aggregate_0
       - PERSIST_BATCH_SIZE=50
@@ -799,8 +800,8 @@ services:
       - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output
       - OUTPUT_AMOUNT=2
       - EXPECTED_EOFS=2
-      - MAX_BATCH_SIZE=500
-      - MAX_BATCH_BYTES=65536
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
       - QUERY_ID=3
       - PERSIST_PATH=/var/bkp/q3_aggregate_1
       - PERSIST_BATCH_SIZE=50

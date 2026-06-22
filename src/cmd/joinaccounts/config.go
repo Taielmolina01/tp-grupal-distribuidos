@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/joinaccounts"
 )
 
@@ -65,9 +66,9 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		return joinaccounts.JoinAccountsConfig{}, errors.New("MAX_BATCH_SIZE environment variable is required and must be a number")
 	}
 
-	maxBatchBytes, err := strconv.Atoi(os.Getenv("MAX_BATCH_BYTES"))
+	maxBatchBytes, err := commonconfig.ParseMaxBatchBytes()
 	if err != nil {
-		return joinaccounts.JoinAccountsConfig{}, errors.New("MAX_BATCH_BYTES environment variable is required and must be a number")
+		return joinaccounts.JoinAccountsConfig{}, err
 	}
 
 	expectedEOFs, err := strconv.Atoi(os.Getenv("EXPECTED_EOFS"))

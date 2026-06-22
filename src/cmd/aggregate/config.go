@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"tp-grupal-distribuidos/internal/aggregate"
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 )
 
 func loadConfig() (aggregate.AggregateConfig, error) {
@@ -55,9 +56,9 @@ func loadConfig() (aggregate.AggregateConfig, error) {
 		return aggregate.AggregateConfig{}, errors.New("MAX_BATCH_SIZE environment variable is required and must be a number")
 	}
 
-	maxBatchBytes, err := strconv.Atoi(os.Getenv("MAX_BATCH_BYTES"))
+	maxBatchBytes, err := commonconfig.ParseMaxBatchBytes()
 	if err != nil {
-		return aggregate.AggregateConfig{}, errors.New("MAX_BATCH_BYTES environment variable is required and must be a number")
+		return aggregate.AggregateConfig{}, err
 	}
 
 	persistPath := os.Getenv("PERSIST_PATH")

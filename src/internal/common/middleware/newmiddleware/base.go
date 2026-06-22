@@ -207,10 +207,10 @@ func setupConn(settings ConnSettings) (*amqp.Connection, *amqp.Channel, error) {
 }
 
 func startReturnHandler(ch *amqp.Channel) {
-	// returned := ch.NotifyReturn(make(chan amqp.Return, 10))
-	// go func() {
-	// 	// for msg := range returned {
-	// 	// 	// slog.Warn("message not delivered", "message_id", msg.MessageId, "reply_code", msg.ReplyCode, "ReplyText", msg.ReplyText, "RK", msg.RoutingKey)
-	// 	// }
-	// }()
+	returned := ch.NotifyReturn(make(chan amqp.Return, 10))
+	go func() {
+		for msg := range returned {
+			slog.Warn("message not delivered", "message_id", msg.MessageId, "reply_code", msg.ReplyCode, "ReplyText", msg.ReplyText, "RK", msg.RoutingKey)
+		}
+	}()
 }

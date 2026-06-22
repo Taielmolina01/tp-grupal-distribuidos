@@ -2,6 +2,8 @@ package envelope
 
 import "tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 
+const HeaderSize = wire.Uint32Size + 3*wire.Uint8Size + wire.Uint64Size
+
 type Header struct {
 	ClientID int
 	QueryID  uint8

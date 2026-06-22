@@ -31,6 +31,7 @@ type ClientConfig struct {
 	InputFileTrans           string
 	OutputFilePrefix         string
 	MaxBatchSize             int
+	MaxBatchBytes            int
 	ConnectionAttempts       int
 	ConnectionAttemptDelayMs int
 }
@@ -209,7 +210,7 @@ func (client *Client) sendAccountRecords(conn net.Conn, seq *uint64, skip bool, 
 		}
 	}()
 
-	builder := tcpproto.NewAccountBatchBuilder(client.config.MaxBatchSize)
+	builder := tcpproto.NewAccountBatchBuilder(client.config.MaxBatchSize, client.config.MaxBatchBytes)
 	scanner := bufio.NewScanner(file)
 
 	flush := func() error {
@@ -269,7 +270,7 @@ func (client *Client) sendTransRecords(conn net.Conn, seq *uint64, skip bool, re
 		}
 	}()
 
-	builder := tcpproto.NewTransBatchBuilder(client.config.MaxBatchSize)
+	builder := tcpproto.NewTransBatchBuilder(client.config.MaxBatchSize, client.config.MaxBatchBytes)
 	scanner := bufio.NewScanner(file)
 
 	flush := func() error {

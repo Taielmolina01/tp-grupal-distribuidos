@@ -11,6 +11,8 @@ const (
 	typeBatch uint8 = iota + 1
 	typeEOF
 	typeAbort
+
+	HeaderSize = envelope.HeaderSize + wire.Uint16Size
 )
 
 type Builder[T any] struct {
@@ -25,7 +27,7 @@ func NewBuilder[T any](maxCount, maxBytes int, codec wire.Codec[T]) *Builder[T] 
 	return &Builder[T]{
 		w:        wire.NewWriter(),
 		maxCount: maxCount,
-		maxBytes: maxBytes,
+		maxBytes: maxBytes - int(HeaderSize),
 		codec:    codec,
 	}
 }

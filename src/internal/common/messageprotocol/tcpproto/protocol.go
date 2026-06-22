@@ -1,6 +1,7 @@
 package tcpproto
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -131,9 +132,18 @@ func ReadAccountBatch(reader io.Reader) (uint64, []account.Account, error) {
 	if err != nil {
 		return 0, nil, err
 	}
+	payloadSize, err := readUint32(reader)
+	if err != nil {
+		return 0, nil, err
+	}
+	payload, err := safeio.ReadAll(reader, payloadSize)
+	if err != nil {
+		return 0, nil, err
+	}
+	payloadReader := bytes.NewReader(payload)
 	accounts := make([]account.Account, 0, count)
 	for range count {
-		acc, err := deserializeAccountRecord(reader)
+		acc, err := deserializeAccountRecord(payloadReader)
 		if err != nil {
 			return 0, nil, err
 		}

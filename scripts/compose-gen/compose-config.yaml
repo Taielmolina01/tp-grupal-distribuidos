@@ -1,4 +1,5 @@
 clients: 1
+max_batch_kb: 128
 
 # Query 1-4:
 filter_currency: 2

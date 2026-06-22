@@ -9,21 +9,23 @@ import (
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
-const maxBatchBytes = 64 * 1024
+const (
+	batchHeaderSize = wire.Uint8Size + wire.Uint64Size + wire.Uint16Size + wire.Uint32Size
+)
 
 type BatchBuilder[T any] struct {
-	buf             []byte
-	count           int
-	maxCount        int
-	msgType         uint8
-	withPayloadSize bool
-	marshal         func([]byte, *T) []byte
+	buf      []byte
+	count    int
+	maxCount int
+	maxBytes int
+	msgType  uint8
+	marshal  func([]byte, *T) []byte
 }
 
 func (b *BatchBuilder[T]) TryAdd(record T) bool {
 	start := len(b.buf)
 	b.buf = b.marshal(b.buf, &record)
-	if b.count > 0 && (b.count >= b.maxCount || len(b.buf) > maxBatchBytes) {
+	if b.count > 0 && (b.count >= b.maxCount || len(b.buf) > b.maxBytes) {
 		b.buf = b.buf[:start]
 		return false
 	}
@@ -40,12 +42,7 @@ func (b *BatchBuilder[T]) Reset() {
 
 func (b *BatchBuilder[T]) Flush(w io.Writer, seq uint64) error {
 	var hdr [15]byte
-	h := wire.AppendUint8(hdr[:0], b.msgType)
-	h = wire.AppendUint64(h, seq)
-	h = wire.AppendUint16(h, uint16(b.count))
-	if b.withPayloadSize {
-		h = wire.AppendUint32(h, uint32(len(b.buf)))
-	}
+	h := writeBatchHeader(hdr[:0], b.msgType, seq, uint16(b.count), uint32(len(b.buf)))
 	if err := safeio.WriteAll(w, h); err != nil {
 		return err
 	}
@@ -57,20 +54,36 @@ func (b *BatchBuilder[T]) Flush(w io.Writer, seq uint64) error {
 	return nil
 }
 
-func NewAccountBatchBuilder(maxCount int) *BatchBuilder[account.Account] {
+func writeBatchHeader(dst []byte, msgType uint8, seq uint64, count uint16, payloadSize uint32) []byte {
+	dst = wire.AppendUint8(dst, msgType)
+	dst = wire.AppendUint64(dst, seq)
+	dst = wire.AppendUint16(dst, count)
+	return wire.AppendUint32(dst, payloadSize)
+}
+
+func maxPayloadBytes(maxBytes int, headerSize uint32) int {
+	maxPayloadBytes := maxBytes - int(headerSize)
+	if maxPayloadBytes < 0 {
+		return 0
+	}
+	return maxPayloadBytes
+}
+
+func NewAccountBatchBuilder(maxCount, maxBytes int) *BatchBuilder[account.Account] {
 	return &BatchBuilder[account.Account]{
+		maxBytes: maxBytes - int(batchHeaderSize),
 		maxCount: maxCount,
 		msgType:  uint8(AccountBatch),
 		marshal:  marshalAccountRecord,
 	}
 }
 
-func NewTransBatchBuilder(maxCount int) *BatchBuilder[transfer.Transfer] {
+func NewTransBatchBuilder(maxCount, maxBytes int) *BatchBuilder[transfer.Transfer] {
 	return &BatchBuilder[transfer.Transfer]{
-		maxCount:        maxCount,
-		msgType:         uint8(TransBatch),
-		withPayloadSize: true,
-		marshal:         marshalTransRecord,
+		maxBytes: maxBytes - int(batchHeaderSize),
+		maxCount: maxCount,
+		msgType:  uint8(TransBatch),
+		marshal:  marshalTransRecord,
 	}
 }
 
