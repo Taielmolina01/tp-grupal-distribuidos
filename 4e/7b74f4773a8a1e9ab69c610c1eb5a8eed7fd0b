@@ -1,0 +1,72 @@
+scripts/compose-gen/config.go
+  s_ae3bea5bd464ca::t_13ab35419e5c2b 14,58-59
+  s_ae3bea5bd464ca::t_76442c74414551 15
+scripts/compose-gen/main.go
+  s_ae3bea5bd464ca::t_13ab35419e5c2b 38
+src/internal/common/messageprotocol/rabbit/batch/batch.go
+  h_3c9b41718876fe 30
+  s_ae3bea5bd464ca::t_76442c74414551 14-15
+src/cmd/aggregate/config.go
+  s_ae3bea5bd464ca::t_fdb0314f77201c 10
+  s_ae3bea5bd464ca::t_6ea4f86709995b 61
+  h_3c9b41718876fe 59
+src/cmd/joinaccounts/config.go
+  s_ae3bea5bd464ca::t_6ea4f86709995b 71
+  s_ae3bea5bd464ca::t_fdb0314f77201c 9
+  h_3c9b41718876fe 69
+src/internal/common/messageprotocol/tcpproto/protocol.go
+  s_ae3bea5bd464ca::t_ef1f09a642508b 4,135-143,146
+src/internal/common/messageprotocol/tcpproto/batch.go
+  h_3c9b41718876fe 74,83
+  s_ae3bea5bd464ca::t_e096bffd285414 58-59,61-64
+  s_ae3bea5bd464ca::t_ef1f09a642508b 13,17-22,45,57,60,84-86
+  s_ae3bea5bd464ca::t_e1fb9aaa734dfc 12,14,28,65-72,81
+scripts/compose-gen/generator.go
+  s_ae3bea5bd464ca::t_6affca2ede354a 8,11-12,434,485,537,563
+  s_ae3bea5bd464ca::t_13ab35419e5c2b 10,238
+  h_3c9b41718876fe 9
+scripts/compose-gen/compose-config.yaml
+  h_3c9b41718876fe 2
+src/internal/common/messageprotocol/rabbit/envelope/envelope.go
+  s_ae3bea5bd464ca::t_76442c74414551 5-6
+docker-compose.yaml
+  h_3c9b41718876fe 401,432,463,494,525,606,633,719,747,775,803
+src/internal/common/config/batch.go
+  h_3c9b41718876fe 11,23
+  s_ae3bea5bd464ca::t_fdb0314f77201c 1-10,12-22,24
+src/cmd/filteraccountseen/config.go
+  s_ae3bea5bd464ca::t_6ea4f86709995b 56
+  h_3c9b41718876fe 54
+  s_ae3bea5bd464ca::t_fdb0314f77201c 9
+src/internal/client/client.go
+  s_ae3bea5bd464ca::t_c38e8d1d830603 34,213,273
+src/cmd/sum/config.go
+  s_ae3bea5bd464ca::t_6ea4f86709995b 61
+  s_ae3bea5bd464ca::t_fdb0314f77201c 9
+  h_3c9b41718876fe 59
+src/cmd/client/main.go
+  h_3c9b41718876fe 48
+  s_ae3bea5bd464ca::t_fdb0314f77201c 10
+  s_ae3bea5bd464ca::t_c38e8d1d830603 49-52,81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "4e7b74f4773a8a1e9ab69c610c1eb5a8eed7fd0b",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_ae3bea5bd464ca": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eed24-22e6-73a0-b57d-c0a963e29972",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
