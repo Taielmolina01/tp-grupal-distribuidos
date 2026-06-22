@@ -1,7 +1,9 @@
 package fetcher
 
 import (
+	"time"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/priorityqueue"
 )
 
 type FetcherConfig struct {
@@ -16,12 +18,18 @@ type FetcherConfig struct {
 }
 
 type Fetcher struct {
-	inputQueue  middleware.Middleware
-	outputQueue middleware.Middleware
-	queryId     uint8
-	quote       string
-	ratesCache  map[string]float64
-	forwarded   uint32
+	inputQueue     middleware.Middleware
+	outputQueue    middleware.Middleware
+	queryId        uint8
+	quote          string
+	ratesCache     map[string]float64
+	forwarded      uint32
+	ratesCacheHeap priorityqueue.PriorityQueue[heapDTO]
+}
+
+type heapDTO struct {
+	time time.Time
+	rate *apiResponseRate
 }
 
 type apiResponseRate struct {

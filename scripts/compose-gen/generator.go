@@ -81,12 +81,19 @@ func writeWatchdogs(b *strings.Builder, cfg *Config) {
 	nodes := strings.Join(workerNodes(cfg), " ")
 
 	for i := range cfg.Watchdogs {
+		ids := []int{}
+		for j := range cfg.Watchdogs {
+			if j > i {
+				ids = append(ids, j)
+			}
+		}
 		fmt.Fprintf(b, "  watchdog_%d:\n", i)
 		b.WriteString("    build:\n")
 		b.WriteString("      context: ./src/\n")
 		b.WriteString("      dockerfile: cmd/watchdog/Dockerfile\n")
 		fmt.Fprintf(b, "    container_name: watchdog_%d\n", i)
 		rabbitmqDepends(b)
+		watchdogDepends(b, ids)
 		b.WriteString("    environment:\n")
 		fmt.Fprintf(b, "      - ID=%d\n", i)
 		fmt.Fprintf(b, "      - AMOUNT=%d\n", cfg.Watchdogs)
@@ -124,6 +131,13 @@ func rabbitmqDepends(b *strings.Builder) {
 	b.WriteString("    depends_on:\n")
 	b.WriteString("      rabbitmq:\n")
 	b.WriteString("        condition: service_healthy\n")
+}
+
+func watchdogDepends(b *strings.Builder, watchdogs []int) {
+	for _, node := range watchdogs {
+		fmt.Fprintf(b, "      watchdog_%d:\n", node)
+		b.WriteString("        condition: service_started\n")
+	}
 }
 
 func writeRabbitmq(b *strings.Builder) {

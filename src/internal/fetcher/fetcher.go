@@ -8,10 +8,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/priorityqueue"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -75,6 +77,15 @@ func createFetcherImpl(config FetcherConfig) (worker.Worker, error) {
 		queryId:     config.QueryId,
 		quote:       config.Quote,
 		ratesCache:  make(map[string]float64),
+		ratesCacheHeap: priorityqueue.NewHeap(func(a, b heapDTO) int {
+			if a.time.Before(b.time) {
+				return 1
+			} else if a.time.After(b.time) {
+				return -1
+			} else {
+				return 0
+			}
+		}),
 	}, nil
 }
 
@@ -129,14 +140,21 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 				continue
 			}
 			if len(fetcher.ratesCache) >= CACHE_MAX_SIZE {
-				toDelete := ""
-				for key := range fetcher.ratesCache {
-					toDelete = key
-					break // me quedo con el primero del iterador, que es "random"
+				if !fetcher.ratesCacheHeap.IsEmpty() {
+					oldest := fetcher.ratesCacheHeap.Dequeue()
+					delete(fetcher.ratesCache, oldest.rate.Date+":"+oldest.rate.Base)
 				}
-				delete(fetcher.ratesCache, toDelete)
 			}
 			fetcher.ratesCache[cacheKey] = rate
+			fetcher.ratesCacheHeap.Enqueue(heapDTO{
+				time: time.Now(),
+				rate: &apiResponseRate{
+					Date:  dateKey,
+					Base:  base,
+					Rate:  rate,
+					Quote: fetcher.quote,
+				},
+			})
 		}
 		responses = append(responses, fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * rate})
 	}
