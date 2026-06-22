@@ -76,7 +76,7 @@ func createFetcherImpl(config FetcherConfig) (worker.Worker, error) {
 		outputQueue: outputQueue,
 		queryId:     config.QueryId,
 		quote:       config.Quote,
-		ratesCache:  make(map[string]float64),
+		ratesCache:  make(map[mapTypeDTO]float64),
 		ratesCacheHeap: priorityqueue.NewHeap(func(a, b heapDTO) int {
 			if a.time.Before(b.time) {
 				return 1
@@ -129,8 +129,10 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 			responses = append(responses, fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid})
 			continue
 		}
-		dateKey := t.Timestamp.Format(DATE_LAYOUT)
-		cacheKey := dateKey + ":" + base
+		cacheKey := mapTypeDTO{
+			time: t.Timestamp,
+			base: base,
+		}
 		rate, ok := fetcher.ratesCache[cacheKey]
 		if !ok {
 			var err error
@@ -139,22 +141,20 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 				slog.Error("while fetching exchange rate", "err", err)
 				continue
 			}
-			if len(fetcher.ratesCache) >= CACHE_MAX_SIZE {
-				if !fetcher.ratesCacheHeap.IsEmpty() {
-					oldest := fetcher.ratesCacheHeap.Dequeue()
-					delete(fetcher.ratesCache, oldest.rate.Date+":"+oldest.rate.Base)
-				}
+			if len(fetcher.ratesCache) >= CACHE_MAX_SIZE && !fetcher.ratesCacheHeap.IsEmpty() {
+				oldest := fetcher.ratesCacheHeap.Dequeue()
+				delete(fetcher.ratesCache, oldest.cacheKey)
 			}
 			fetcher.ratesCache[cacheKey] = rate
 			fetcher.ratesCacheHeap.Enqueue(heapDTO{
-				time: time.Now(),
-				rate: &apiResponseRate{
-					Date:  dateKey,
-					Base:  base,
-					Rate:  rate,
-					Quote: fetcher.quote,
-				},
+				time:     time.Now(),
+				cacheKey: cacheKey,
 			})
+		} else {
+			fetcher.ratesCacheHeap.Update(
+				heapDTO{time: cacheKey.time, cacheKey: cacheKey},
+				heapDTO{time: time.Now(), cacheKey: cacheKey},
+			)
 		}
 		responses = append(responses, fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * rate})
 	}

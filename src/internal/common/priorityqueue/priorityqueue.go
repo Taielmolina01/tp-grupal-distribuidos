@@ -8,6 +8,8 @@ type PriorityQueue[T comparable] interface {
 	// Encolar Agrega un elemento al heap.
 	Enqueue(T)
 
+	Update(T, T)
+
 	// VerMax devuelve el elemento con máxima prioridad. Si está vacía, entra en pánico con un mensaje
 	// "La cola está vacia".
 	GetMax() T

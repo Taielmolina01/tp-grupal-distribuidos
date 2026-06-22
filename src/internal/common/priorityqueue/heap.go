@@ -52,6 +52,27 @@ func (heap *heap[T]) Dequeue() T {
 	return datoADevolver
 }
 
+func (heap *heap[T]) Update(oldVal, newVal T) {
+	pos := -1
+	// puede hacerse O(log n) con un mapa pero se me va un poco de scope para el tp.
+	for i := 0; i < heap.len; i++ {
+		if heap.datos[i] == oldVal {
+			pos = i
+			break
+		}
+	}
+	if pos == -1 {
+		return
+	}
+	heap.datos[pos] = newVal
+	cmp := heap.comparador(newVal, oldVal)
+	if cmp > 0 {
+		upHeap(heap.datos, heap.comparador, pos)
+	} else if cmp < 0 {
+		downHeap(heap.datos, heap.comparador, pos, heap.len)
+	}
+}
+
 func (heap *heap[T]) Len() int {
 	return heap.len
 }

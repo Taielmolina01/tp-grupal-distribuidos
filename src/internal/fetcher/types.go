@@ -22,14 +22,19 @@ type Fetcher struct {
 	outputQueue    middleware.Middleware
 	queryId        uint8
 	quote          string
-	ratesCache     map[string]float64
+	ratesCache     map[mapTypeDTO]float64
 	forwarded      uint32
 	ratesCacheHeap priorityqueue.PriorityQueue[heapDTO]
 }
 
 type heapDTO struct {
+	time     time.Time
+	cacheKey mapTypeDTO
+}
+
+type mapTypeDTO struct {
 	time time.Time
-	rate *apiResponseRate
+	base string
 }
 
 type apiResponseRate struct {
