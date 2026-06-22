@@ -10,14 +10,18 @@ import (
 	"tp-grupal-distribuidos/internal/common/diskstore"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
 )
 
 const nextClientIDKey = "next"
 const pendingAbortsKey = "aborts"
 
+const seqStoreCapacity uint64 = 10_000_000
+
 type sessionState struct {
 	phase        tcpproto.Phase
-	eofSenders   map[uint8]map[uint8]struct{}
+	trackers     map[uint8]*sendertracker.SenderTracker
+	reported     map[uint8]struct{}
 	confirmedSeq map[tcpproto.Phase]uint64
 }
 
@@ -53,7 +57,8 @@ func (s *sessionStore) allocateClient() (int, error) {
 	clientID := int(s.nextClientID)
 	s.sessions[clientID] = &sessionState{
 		phase:        tcpproto.PhaseAccounts,
-		eofSenders:   map[uint8]map[uint8]struct{}{},
+		trackers:     map[uint8]*sendertracker.SenderTracker{},
+		reported:     map[uint8]struct{}{},
 		confirmedSeq: map[tcpproto.Phase]uint64{},
 	}
 	return clientID, s.persist()
@@ -94,30 +99,92 @@ func (s *sessionStore) advanceConfirmedSeq(clientID int, phase tcpproto.Phase, s
 	return s.persist()
 }
 
-func (s *sessionStore) incEOF(clientID int, queryID uint8, senderID uint8) (map[uint8]int, error) {
+func (s *sessionStore) trackerFor(state *sessionState, queryID uint8) *sendertracker.SenderTracker {
+	t, ok := state.trackers[queryID]
+	if !ok {
+		t = sendertracker.New(seqStoreCapacity)
+		state.trackers[queryID] = t
+	}
+	return t
+}
+
+func (s *sessionStore) isDuplicateResult(clientID int, queryID uint8, senderID uint8, seq uint64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state, ok := s.sessions[clientID]
 	if !ok {
-		return nil, nil
+		return false
 	}
-	senders, ok := state.eofSenders[queryID]
+	t, ok := state.trackers[queryID]
 	if !ok {
-		senders = map[uint8]struct{}{}
-		state.eofSenders[queryID] = senders
+		return false
 	}
-	_, already := senders[senderID]
-	if !already {
-		senders[senderID] = struct{}{}
+	return t.IsDuplicate(int(senderID), seq)
+}
+
+func (s *sessionStore) claimResult(clientID int, queryID uint8, senderID uint8, seq uint64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[clientID]
+	if !ok {
+		return nil
 	}
-	snapshot := make(map[uint8]int, len(state.eofSenders))
-	for q, set := range state.eofSenders {
-		snapshot[q] = len(set)
+	t := s.trackerFor(state, queryID)
+	if t.IsDuplicate(int(senderID), seq) {
+		return nil
 	}
-	if already {
-		return snapshot, nil
+	t.Claim(int(senderID), seq)
+	t.RegisterBatch(int(senderID))
+	return s.persist()
+}
+
+func (s *sessionStore) registerEOFResult(clientID int, queryID uint8, senderID uint8, total uint32, seq uint64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[clientID]
+	if !ok {
+		return nil
 	}
-	return snapshot, s.persist()
+	t := s.trackerFor(state, queryID)
+	t.RegisterEOF(int(senderID), uint64(total), seq)
+	return s.persist()
+}
+
+func (s *sessionStore) queryReported(clientID int, queryID uint8) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[clientID]
+	if !ok {
+		return false
+	}
+	_, reported := state.reported[queryID]
+	return reported
+}
+
+func (s *sessionStore) queryComplete(clientID int, queryID uint8, expectedSenders int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[clientID]
+	if !ok {
+		return false
+	}
+	t, ok := state.trackers[queryID]
+	if !ok {
+		return false
+	}
+	return t.IsComplete(expectedSenders)
+}
+
+func (s *sessionStore) markReported(clientID int, queryID uint8, totalQueries int) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[clientID]
+	if !ok {
+		return false, nil
+	}
+	state.reported[queryID] = struct{}{}
+	allReported := len(state.reported) >= totalQueries
+	return allReported, s.persist()
 }
 
 func (s *sessionStore) removeClient(clientID int) error {
@@ -180,14 +247,18 @@ func (s *sessionStore) persist() error {
 	for clientID, state := range s.sessions {
 		var w wire.Writer
 		w.Uint8(uint8(state.phase))
-		w.Uint32(uint32(len(state.eofSenders)))
-		for queryID, senders := range state.eofSenders {
+
+		w.Uint32(uint32(len(state.reported)))
+		for queryID := range state.reported {
 			w.Uint8(queryID)
-			w.Uint32(uint32(len(senders)))
-			for senderID := range senders {
-				w.Uint8(senderID)
-			}
 		}
+
+		w.Uint32(uint32(len(state.trackers)))
+		for queryID, tracker := range state.trackers {
+			w.Uint8(queryID)
+			tracker.Marshal(&w)
+		}
+
 		w.Uint32(uint32(len(state.confirmedSeq)))
 		for phase, seq := range state.confirmedSeq {
 			w.Uint8(uint8(phase))
@@ -240,41 +311,48 @@ func (s *sessionStore) load() error {
 
 		r := wire.NewReader(raw)
 		phase := tcpproto.Phase(r.Uint8())
-		eofLen := r.Uint32()
+
+		reportedLen := r.Uint32()
 		if r.Err() != nil {
 			return r.Err()
 		}
-		eofSenders := make(map[uint8]map[uint8]struct{}, eofLen)
-		for range eofLen {
+		reported := make(map[uint8]struct{}, reportedLen)
+		for range reportedLen {
+			reported[r.Uint8()] = struct{}{}
+		}
+		if r.Err() != nil {
+			return r.Err()
+		}
+
+		trackersLen := r.Uint32()
+		if r.Err() != nil {
+			return r.Err()
+		}
+		trackers := make(map[uint8]*sendertracker.SenderTracker, trackersLen)
+		for range trackersLen {
 			queryID := r.Uint8()
-			nSenders := r.Uint32()
-			set := make(map[uint8]struct{}, nSenders)
-			for range nSenders {
-				set[r.Uint8()] = struct{}{}
+			tracker, err := sendertracker.Unmarshal(r)
+			if err != nil {
+				return err
 			}
-			eofSenders[queryID] = set
-		}
-		if r.Err() != nil {
-			return r.Err()
+			trackers[queryID] = tracker
 		}
 
 		confirmedSeq := map[tcpproto.Phase]uint64{}
-		if r.Remaining() > 0 {
-			seqLen := r.Uint32()
-			if r.Err() != nil {
-				return r.Err()
-			}
-			for range seqLen {
-				p := tcpproto.Phase(r.Uint8())
-				seq := r.Uint64()
-				confirmedSeq[p] = seq
-			}
-			if r.Err() != nil {
-				return r.Err()
-			}
+		seqLen := r.Uint32()
+		if r.Err() != nil {
+			return r.Err()
+		}
+		for range seqLen {
+			p := tcpproto.Phase(r.Uint8())
+			seq := r.Uint64()
+			confirmedSeq[p] = seq
+		}
+		if r.Err() != nil {
+			return r.Err()
 		}
 
-		s.sessions[clientID] = &sessionState{phase: phase, eofSenders: eofSenders, confirmedSeq: confirmedSeq}
+		s.sessions[clientID] = &sessionState{phase: phase, trackers: trackers, reported: reported, confirmedSeq: confirmedSeq}
 	}
 	return nil
 }
