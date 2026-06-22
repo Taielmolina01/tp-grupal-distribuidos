@@ -484,23 +484,50 @@ func (gateway *Gateway) deliverResult(client clientregistry.ClientState, body []
 	}
 
 	if info.EOF {
-		shouldWrite, shouldClose, err := gateway.markQueryEOF(info.ClientID, info.QueryID, info.SenderID)
-		if err != nil {
+		if err := gateway.sessions.registerEOFResult(info.ClientID, info.QueryID, info.SenderID, info.Total, info.Seq); err != nil {
 			return err
 		}
-		if !shouldWrite {
-			return nil
-		}
-		if err := tcpproto.WriteQueryEOF(client.Conn, info.QueryID); err != nil {
-			return err
-		}
-		if shouldClose {
-			gateway.closeClient(info.ClientID)
-		}
-		return nil
+		return gateway.maybeCompleteQuery(client, info.QueryID)
 	}
 
-	return gateway.forwardResult(client, info, reader)
+	if !gateway.sessions.isDuplicateResult(info.ClientID, info.QueryID, info.SenderID, info.Seq) {
+		if err := gateway.forwardResult(client, info, reader); err != nil {
+			return err
+		}
+		if err := gateway.sessions.claimResult(info.ClientID, info.QueryID, info.SenderID, info.Seq); err != nil {
+			return err
+		}
+	}
+	return gateway.maybeCompleteQuery(client, info.QueryID)
+}
+
+func (gateway *Gateway) maybeCompleteQuery(client clientregistry.ClientState, queryID uint8) error {
+	if gateway.sessions.queryReported(client.ID, queryID) {
+		return nil
+	}
+	if !gateway.sessions.queryComplete(client.ID, queryID, gateway.expectedSenders(queryID)) {
+		return nil
+	}
+	if err := tcpproto.WriteQueryEOF(client.Conn, queryID); err != nil {
+		return err
+	}
+	allReported, err := gateway.sessions.markReported(client.ID, queryID, len(gateway.queryEOFsExpected))
+	if err != nil {
+		return err
+	}
+	slog.Info("Query completed", "client_id", client.ID, "query_id", queryID)
+	if allReported {
+		gateway.closeClient(client.ID)
+	}
+	return nil
+}
+
+func (gateway *Gateway) expectedSenders(queryID uint8) int {
+	expected := gateway.queryEOFsExpected[queryID]
+	if expected == 0 {
+		expected = 1
+	}
+	return expected
 }
 
 func (gateway *Gateway) forwardResult(client clientregistry.ClientState, info batch.Info, r *wire.Reader) error {
@@ -543,39 +570,6 @@ func (gateway *Gateway) forwardResult(client clientregistry.ClientState, info ba
 	}
 
 	return tcpproto.WriteResultBatch(client.Conn, info.QueryID, info.SenderID, info.Seq, uint16(count), payload)
-}
-
-func (gateway *Gateway) markQueryEOF(clientID int, queryID uint8, senderID uint8) (shouldWrite bool, shouldClose bool, err error) {
-	counts, err := gateway.sessions.incEOF(clientID, queryID, senderID)
-	if err != nil {
-		return false, false, err
-	}
-	if counts == nil {
-		return false, false, nil
-	}
-
-	expected := gateway.queryEOFsExpected[queryID]
-	if expected == 0 {
-		expected = 1
-	}
-	count := counts[queryID]
-	slog.Info("Received QueryEOF", "client_id", clientID, "query_id", queryID,
-		"count", count, "expected", expected)
-
-	shouldWrite = count == expected
-
-	completed := 0
-	for q, c := range counts {
-		exp := gateway.queryEOFsExpected[q]
-		if exp == 0 {
-			exp = 1
-		}
-		if c >= exp {
-			completed++
-		}
-	}
-	shouldClose = completed >= len(gateway.queryEOFsExpected)
-	return shouldWrite, shouldClose, nil
 }
 
 func (gateway *Gateway) closeClient(clientID int) {
