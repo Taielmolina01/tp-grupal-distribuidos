@@ -8,14 +8,14 @@ import (
 
 type Msg = batch.Msg[transfer.TransferForQ3Filter]
 
-var codec = wire.Codec[transfer.TransferForQ3Filter]{
+var Codec = wire.Codec[transfer.TransferForQ3Filter]{
 	Marshal:   marshalRecord,
 	Unmarshal: unmarshalRecord,
 	MinSize:   3*wire.Uint16Size + wire.Uint64Size,
 }
 
 func WriteBatch(clientID int, queryID uint8, senderID uint8, seq uint64, records []transfer.TransferForQ3Filter) []byte {
-	return batch.Write(clientID, queryID, senderID, seq, records, codec)
+	return batch.Write(clientID, queryID, senderID, seq, records, Codec)
 }
 
 func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uint32) []byte {
@@ -23,7 +23,7 @@ func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uin
 }
 
 func Read(body []byte) (Msg, error) {
-	return batch.Read(body, codec)
+	return batch.Read(body, Codec)
 }
 
 func marshalRecord(w *wire.Writer, t *transfer.TransferForQ3Filter) {

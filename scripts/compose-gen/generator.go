@@ -558,7 +558,6 @@ func writeAggregateQ3(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - MOM_PORT=5672\n")
 		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate\n")
 		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output\n")
-		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.AverageFilterQ3)
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.SumQ3)
 		writeMaxBatchConfig(b, cfg)
 		b.WriteString("      - QUERY_ID=3\n")
@@ -587,7 +586,12 @@ func writeAverageFilterQ3(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterRangeQ3)
 		fmt.Fprintf(b, "      - AVG_EXPECTED_EOFS=%d\n", cfg.AggregateQ3)
 		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
+		writeMaxBatchConfig(b, cfg)
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_average_filter_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		b.WriteString("      - QUERY_ID=3\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }

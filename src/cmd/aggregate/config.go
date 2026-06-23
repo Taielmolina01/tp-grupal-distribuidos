@@ -46,11 +46,6 @@ func loadConfig() (aggregate.AggregateConfig, error) {
 		return aggregate.AggregateConfig{}, errors.New("OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	outputAmount, err := strconv.Atoi(os.Getenv("OUTPUT_AMOUNT"))
-	if err != nil {
-		return aggregate.AggregateConfig{}, errors.New("OUTPUT_AMOUNT environment variable is required and must be a number")
-	}
-
 	maxBatchSize, err := strconv.Atoi(os.Getenv("MAX_BATCH_SIZE"))
 	if err != nil {
 		return aggregate.AggregateConfig{}, errors.New("MAX_BATCH_SIZE environment variable is required and must be a number")
@@ -84,7 +79,6 @@ func loadConfig() (aggregate.AggregateConfig, error) {
 		QueryID:                uint8(queryID),
 		InputMiddlewarePrefix:  inputPrefix,
 		OutputMiddlewarePrefix: outputPrefix,
-		OutputAmount:           outputAmount,
 		MaxBatchSize:           maxBatchSize,
 		MaxBatchBytes:          maxBatchBytes,
 		PersistPath:            persistPath,

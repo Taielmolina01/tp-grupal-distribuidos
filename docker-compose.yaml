@@ -770,7 +770,6 @@ services:
       - MOM_PORT=5672
       - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
       - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output
-      - OUTPUT_AMOUNT=2
       - EXPECTED_EOFS=2
       - MAX_BATCH_SIZE=1000
       - MAX_BATCH_KB=128
@@ -798,7 +797,6 @@ services:
       - MOM_PORT=5672
       - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
       - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output
-      - OUTPUT_AMOUNT=2
       - EXPECTED_EOFS=2
       - MAX_BATCH_SIZE=1000
       - MAX_BATCH_KB=128
@@ -829,7 +827,17 @@ services:
       - EXPECTED_EOFS=2
       - AVG_EXPECTED_EOFS=2
       - OUTPUT_QUEUE=results_queue
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
+      - PERSIST_PATH=/var/bkp/q3_average_filter_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
       - QUERY_ID=3
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q3_average_filter_1:
     build:
@@ -848,7 +856,17 @@ services:
       - EXPECTED_EOFS=2
       - AVG_EXPECTED_EOFS=2
       - OUTPUT_QUEUE=results_queue
+      - MAX_BATCH_SIZE=1000
+      - MAX_BATCH_KB=128
+      - PERSIST_PATH=/var/bkp/q3_average_filter_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
       - QUERY_ID=3
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
 
   # Query 5
