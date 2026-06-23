@@ -12,14 +12,8 @@ import (
 func CreateBankDistinctFilter(config filter.FilterConfig) (worker.Worker, error) {
 	return commondistinctfilter.NewDistinctFilter(
 		config,
-		func(ac1 account.Account, ac2 account.Account) bool {
-			return ac1.BankId == ac2.BankId
-		},
 		func(ac account.Account) string {
 			return normalizer.NormalizeBankID(ac.BankId)
-		},
-		func(t account.Account) string {
-			return normalizer.NormalizeBankID(t.BankId)
 		},
 		records.AccountCodec,
 	)

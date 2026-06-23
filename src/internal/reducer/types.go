@@ -1,10 +1,15 @@
 package reducer
 
 import (
-	"tp-grupal-distribuidos/internal/common/eofring"
+	"time"
+
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
+	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
 type ReducerType string
@@ -15,37 +20,47 @@ const (
 )
 
 type ReducerConfig struct {
-	Id                int
-	ReducerAmount     int
-	MomHost           string
-	MomPort           int
-	InputExchange     string
-	QueryID           uint8
+	Id          int
+	MomHost     string
+	MomPort     int
+	QueryID     uint8
+	ReducerType ReducerType
+
+	InputMiddlewarePrefix string
+	ExpectedEOFs          int
+	OutputQueues          []string
+	PersistPath           string
+	PersistBatchSize      int
+	PersistFlushInterval  time.Duration
+
 	InputQueue        string
-	OutputQueues      []string
-	InputRoutingKeys  []string
 	InputEofsExpected int
-	JoinsAmount       int
-	ReducerType       ReducerType
 }
 
-type Reducer[T, O comparable] struct {
-	id                int
-	inputExchange     middleware.Middleware
-	outputQueues      []middleware.Middleware
-	reducerMonitor    ReducerMonitor[T]
-	reducerFunction   func(T, T) T
-	keyFunc           func(T) string
-	projectFunc       func(T) O
-	eofHandler        eofring.EofRingAlgorithm
-	handlerMessages   msgmonitor.MessageMonitor
-	outputQueueEof    middleware.Middleware
-	queryId           uint8
-	inputEofsExpected int
-	inputEofCount     map[int]int
-	totalRealAmount   map[int]uint32
-	inputCodec        wire.Codec[T]
-	outputCodec       wire.Codec[O]
+type Reducer struct {
+	id      int
+	queryID uint8
+
+	inputMiddleware newmiddleware.Middleware
+	outputQueues    []middleware.Middleware
+
+	prevNodeAmt int
+
+	reducerFunction func(transfer.TransferAfterCurrency, transfer.TransferAfterCurrency) transfer.TransferAfterCurrency
+	keyFunc         func(transfer.TransferAfterCurrency) string
+	projectFunc     func(transfer.TransferAfterCurrency) transfer.TransferForQ2
+	outputCodec     wire.Codec[transfer.TransferForQ2]
+
+	states     statemap.StateMap[clientState]
+	checkpoint *checkpoint.Checkpoint[clientState]
+
+	persistBatchSize     int
+	persistFlushInterval time.Duration
+}
+
+type clientState struct {
+	tracker   *sendertracker.SenderTracker
+	maxByBank map[string]transfer.TransferAfterCurrency
 }
 
 type CountReducer struct {
