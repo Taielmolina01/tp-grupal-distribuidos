@@ -197,10 +197,13 @@ func (af *AverageFilter) handleTransferBatch(msgs []newmiddleware.Message, ack, 
 		modified[input.ClientID] = state
 
 		if tracker.IsComplete(af.expectedTransfersEofs) {
-
 			//TODO: Try finalize (verificando que el otro tb haya terminado)
+			if state.avgsTracker.IsComplete(af.avgsExpectedEofs) {
+				if err := af.finalize(state); err != nil {
 
-			completed[clientID] = struct{}{}
+				}
+				completed[clientID] = struct{}{}
+			}
 		}
 	}
 
@@ -264,6 +267,12 @@ func (af *AverageFilter) handleAvgBatch(msg newmiddleware.Message, ack, nack fun
 
 	if tracker.IsComplete(af.avgsExpectedEofs) {
 		//TODO: Try finalize (verificando que el otro tb haya terminado)
+		if state.transfersTracker.IsComplete(af.expectedTransfersEofs) {
+			if err := af.finalize(state); err != nil {
+
+			}
+		}
+
 	}
 
 	// for clientID, state := range modified {
@@ -284,12 +293,43 @@ func (af *AverageFilter) handleAvgBatch(msg newmiddleware.Message, ack, nack fun
 }
 
 func (af *AverageFilter) processAvgBatch(input batch.Msg[transfer.AvgByMethod], state *clientState) error {
-	//TODO: Actualizar mapa prom x metodo del estado
 	for _, record := range input.Records {
 		state.avgs[record.Method] = record.Avg
 	}
-	slog.Info("INPUT RECIBIDO", "records", input.Records)
 	return nil
 }
 
-//TODO: En finalize se instancia un outputtracker
+func (af *AverageFilter) finalize(state *clientState) error {
+	// ot := outputtracker.New()
+	// builder := batch.NewBuilder(af.maxBatchSize, af.maxBatchBytes, records.Query3ResultCodec)
+
+	// TODO: Abrir el archivo del cliente y empezar a iterar
+	// Esto es el ejemplo del filteraccountseen
+	// for acc := range state.seenAccounts {
+	// 	result := queryresult.Query4Result{
+	// 		BankId:        acc.BankID,
+	// 		AccountNumber: acc.AccountNumber,
+	// 	}
+	// 	if !builder.TryAdd(&result) {
+	// 		seq := ot.RegisterBatch("")
+	// 		body := builder.Flush(clientID, uint8(af.queryID), uint8(af.id), seq)
+	// 		if err := af.outputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
+	// 			return err
+	// 		}
+	// 		builder.TryAdd(&result)
+	// 	}
+	// }
+
+	// if !builder.IsEmpty() {
+	// 	seq := ot.RegisterBatch("")
+	// 	body := builder.Flush(clientID, uint8(af.queryID), uint8(af.id), seq)
+	// 	if err := af.outputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
+	// 		return err
+	// 	}
+	// }
+
+	// total := ot.CountFor("")
+	// eofBody := batch.WriteEOF(clientID, uint8(af.queryID), uint8(af.id), total+1, uint32(total))
+	// return f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody})
+	return nil
+}
