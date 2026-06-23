@@ -112,6 +112,7 @@ func NewAverageFilter(config AverageFilterConfig) (worker.Worker, error) {
 		persistBatchSize:         config.PersistBatchSize,
 		persistFlushInterval:     config.PersistFlushInterval,
 		transferLogDir:           filepath.Join(config.PersistPath, "transfers"),
+		transferLogs:             map[int]*appendlog.Log[transfer.TransferForQ3Filter]{},
 	}, nil
 }
 
@@ -153,6 +154,15 @@ func (af *AverageFilter) stopConsuming() {
 }
 
 func (af *AverageFilter) close() {
+	af.lock.Lock()
+	for clientID, log := range af.transferLogs {
+		if err := log.Close(); err != nil {
+			slog.Error("While closing transfer append log", "clientID", clientID, "err", err)
+		}
+		delete(af.transferLogs, clientID)
+	}
+	af.lock.Unlock()
+
 	if err := af.inputTransfersMiddleware.Close(); err != nil {
 		slog.Error("While closing input transfers middleware", "filter_id", af.id, "err", err)
 	}
@@ -237,17 +247,33 @@ func (af *AverageFilter) processTransferBatch(
 	seq uint64,
 	records []transfer.TransferForQ3Filter,
 ) error {
-	log, err := appendlog.Open(af.transferLogPath(clientID), q3filter.Codec)
+	log, err := af.transferLog(clientID)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := log.Close(); err != nil {
-			slog.Error("While closing transfer append log", "clientID", clientID, "err", err)
-		}
-	}()
-
 	return log.Append(senderID, seq, records)
+}
+
+func (af *AverageFilter) transferLog(clientID int) (*appendlog.Log[transfer.TransferForQ3Filter], error) {
+	log := af.transferLogs[clientID]
+	if log != nil {
+		return log, nil
+	}
+	log, err := appendlog.Open(af.transferLogPath(clientID), q3filter.Codec)
+	if err != nil {
+		return nil, err
+	}
+	af.transferLogs[clientID] = log
+	return log, nil
+}
+
+func (af *AverageFilter) closeTransferLog(clientID int) error {
+	log := af.transferLogs[clientID]
+	if log == nil {
+		return nil
+	}
+	delete(af.transferLogs, clientID)
+	return log.Close()
 }
 
 func (af *AverageFilter) transferLogPath(clientID int) string {
@@ -331,6 +357,9 @@ func (af *AverageFilter) tryFinalize(clientID int, state *clientState) (bool, er
 }
 
 func (af *AverageFilter) finalize(clientID int, state *clientState) error {
+	if err := af.closeTransferLog(clientID); err != nil {
+		return fmt.Errorf("closing transfer log before replay: %w", err)
+	}
 	log, err := appendlog.Open(af.transferLogPath(clientID), q3filter.Codec)
 	if err != nil {
 		return err

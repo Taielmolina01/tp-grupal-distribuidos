@@ -4,10 +4,12 @@ import (
 	"sync"
 	"time"
 
+	"tp-grupal-distribuidos/internal/common/appendlog"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
+	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
 type AverageFilterConfig struct {
@@ -53,6 +55,7 @@ type AverageFilter struct {
 	persistBatchSize     int
 	persistFlushInterval time.Duration
 	transferLogDir       string
+	transferLogs         map[int]*appendlog.Log[transfer.TransferForQ3Filter]
 
 	lock sync.Mutex
 }
