@@ -1,0 +1,19 @@
+src/internal/averagefilter/averagefilter.go
+  s_a7e3a9e880e83a::t_c8167c265313ee 369,371,378-382,399
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "459e9aaf788c8cac3231a312d6bbc9063176bede",
+  "prompts": {},
+  "sessions": {
+    "s_a7e3a9e880e83a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef6c8-6ece-7a92-9ac0-3f81aaceca39",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
