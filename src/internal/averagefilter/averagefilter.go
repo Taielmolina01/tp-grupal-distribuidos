@@ -366,13 +366,19 @@ func (af *AverageFilter) finalize(clientID int, state *clientState) error {
 
 	replayTracker := sendertracker.New(10_000_000)
 	ot := outputtracker.New()
+	builder := batch.NewBuilder(af.maxBatchSize, af.maxBatchBytes, records.Query3ResultCodec)
 	if err := log.ReadUnique(replayTracker, func(entry appendlog.Entry[transfer.TransferForQ3Filter]) error {
-		if err := af.emitTransferResults(clientID, state, ot, entry.Records); err != nil {
+		if err := af.emitTransferResults(clientID, state, builder, ot, entry.Records); err != nil {
 			return err
 		}
 		return nil
 	}); err != nil {
 		return err
+	}
+	if !builder.IsEmpty() {
+		if err := af.flushResultBatch(clientID, builder, ot); err != nil {
+			return err
+		}
 	}
 
 	total := ot.CountFor("")
@@ -390,11 +396,10 @@ func (af *AverageFilter) finalize(clientID int, state *clientState) error {
 func (af *AverageFilter) emitTransferResults(
 	clientID int,
 	state *clientState,
+	builder *batch.Builder[queryresult.Query3Result],
 	ot *outputtracker.OutputTracker,
 	transfers []transfer.TransferForQ3Filter,
 ) error {
-	builder := batch.NewBuilder(af.maxBatchSize, af.maxBatchBytes, records.Query3ResultCodec)
-
 	for _, transfer := range transfers {
 		result, ok := af.resultForTransfer(state, transfer)
 		if !ok {
@@ -406,10 +411,6 @@ func (af *AverageFilter) emitTransferResults(
 			}
 			builder.TryAdd(&result)
 		}
-	}
-
-	if !builder.IsEmpty() {
-		return af.flushResultBatch(clientID, builder, ot)
 	}
 	return nil
 }
