@@ -1,0 +1,19 @@
+scripts/compose-gen/generator.go
+  s_54cd30e61ddd92::t_3eaf50d6348634 370-371
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "f11ff8fa3cfbdad421891922c273433c17cd146a",
+  "prompts": {},
+  "sessions": {
+    "s_54cd30e61ddd92": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef168-ac9f-79c1-8813-8e141f4f8167",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
