@@ -14,6 +14,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -212,6 +213,8 @@ func (r *Reducer) processRecords(recordsBatch []transfer.TransferAfterCurrency, 
 }
 
 func (r *Reducer) finishStep(clientID int, state *clientState) error {
+	ot := outputtracker.New()
+
 	byShard := make(map[int][]transfer.TransferForQ2)
 	for _, v := range state.maxByBank {
 		idx := shard.CalculateIndexForShard(clientID, r.keyFunc(v), len(r.outputQueues))
@@ -219,14 +222,18 @@ func (r *Reducer) finishStep(clientID int, state *clientState) error {
 	}
 
 	for idx, group := range byShard {
-		body := batch.Write(clientID, r.queryID, 0, 0, group, r.outputCodec)
+		seq := ot.RegisterBatch(strconv.Itoa(idx))
+		body := batch.Write(clientID, r.queryID, uint8(r.id), seq, group, r.outputCodec)
 		if err := r.outputQueues[idx].Send(middleware.Message{Body: body}); err != nil {
 			return err
 		}
 	}
 
-	eofBody := batch.WriteEOF(clientID, r.queryID, 0, 0, 0)
-	for _, q := range r.outputQueues {
+	for idx, q := range r.outputQueues {
+		rk := strconv.Itoa(idx)
+		total := ot.CountFor(rk)
+		seq := ot.RegisterBatch(rk)
+		eofBody := batch.WriteEOF(clientID, r.queryID, uint8(r.id), seq, uint32(total))
 		if err := q.Send(middleware.Message{Body: eofBody}); err != nil {
 			return err
 		}
