@@ -203,7 +203,32 @@ func setupConn(settings ConnSettings) (*amqp.Connection, *amqp.Channel, error) {
 		return nil, nil, ErrDisconnected
 	}
 
+	if err := ch.Confirm(false); err != nil {
+		if err := ch.Close(); err != nil {
+			slog.Error("While closing channel on Confirm failure", "err", err)
+		}
+		if err := conn.Close(); err != nil {
+			slog.Error("While closing connection on Confirm failure", "err", err)
+		}
+		return nil, nil, ErrDisconnected
+	}
+
 	return conn, ch, nil
+}
+
+func publishPersistent(ch *amqp.Channel, exchange, routingKey string, mandatory bool, publishing amqp.Publishing) error {
+	publishing.DeliveryMode = amqp.Persistent
+	if publishing.ContentType == "" {
+		publishing.ContentType = "application/octet-stream"
+	}
+	confirmation, err := ch.PublishWithDeferredConfirm(exchange, routingKey, mandatory, false, publishing)
+	if err != nil {
+		return ErrSend
+	}
+	if !confirmation.Wait() {
+		return ErrSend
+	}
+	return nil
 }
 
 func startReturnHandler(ch *amqp.Channel) {

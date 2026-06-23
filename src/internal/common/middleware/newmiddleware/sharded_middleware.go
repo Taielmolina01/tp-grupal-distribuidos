@@ -17,7 +17,7 @@ func NewShardedMiddleware(settings ConnSettings, exchange string, inputQueue str
 		return nil, err
 	}
 
-	if err := ch.ExchangeDeclare(exchange, amqp.ExchangeDirect, false, false, false, false, nil); err != nil {
+	if err := ch.ExchangeDeclare(exchange, amqp.ExchangeDirect, true, false, false, false, nil); err != nil {
 		if err := ch.Close(); err != nil {
 			slog.Error("while closing channel after exchange declare failure", "err", err)
 		}
@@ -36,7 +36,7 @@ func NewShardedMiddleware(settings ConnSettings, exchange string, inputQueue str
 	}
 
 	if inputQueue != "" {
-		q, err := ch.QueueDeclare(inputQueue, false, false, false, false, nil)
+		q, err := ch.QueueDeclare(inputQueue, true, false, false, false, nil)
 		if err != nil {
 			if err := ch.Close(); err != nil {
 				slog.Error("while closing channel after queue declare failure", "err", err)
@@ -76,10 +76,7 @@ func (s *shardedMiddleware) Send(msg Message) error {
 		return ErrSend
 	}
 
-	if err := s.channel.Publish(s.exchange, msg.RoutingKey, true, false, amqp.Publishing{
-		ContentType: "text/plain",
-		Body:        msg.Body,
-	}); err != nil {
+	if err := publishPersistent(s.channel, s.exchange, msg.RoutingKey, true, amqp.Publishing{Body: msg.Body}); err != nil {
 		return ErrSend
 	}
 
