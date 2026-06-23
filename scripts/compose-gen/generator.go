@@ -29,7 +29,6 @@ func generateCompose(cfg *Config) string {
 	writeJoinQ2(&b, cfg)
 
 	b.WriteString("\n  # Query 4\n\n")
-	writeSeqStoreQ4FilterSplitter(&b)
 	writeFilterAndSplitterQ4(&b, cfg)
 	writeJoinAccountsQ4(&b, cfg)
 	writeAcumAccountsQ4(&b, cfg)
@@ -374,22 +373,6 @@ func writeJoinQ2(b *strings.Builder, cfg *Config) {
 	}
 }
 
-func writeSeqStoreQ4FilterSplitter(b *strings.Builder) {
-	b.WriteString("  q4_filter_splitter_seqstore:\n")
-	b.WriteString("    build:\n")
-	b.WriteString("      context: ./src/\n")
-	b.WriteString("      dockerfile: cmd/seqstorenode/Dockerfile\n")
-	b.WriteString("    container_name: q4_filter_splitter_seqstore\n")
-	rabbitmqDepends(b)
-	b.WriteString("    environment:\n")
-	b.WriteString("      - MOM_HOST=rabbitmq\n")
-	b.WriteString("      - MOM_PORT=5672\n")
-	b.WriteString("      - PERSIST_PATH=/var/bkp/Q4_filter_splitter_seqstore.bin\n")
-	b.WriteString("      - REQUEST_QUEUE=Q4_filter_splitter_seqstore\n")
-	jsonFileLogging(b)
-	b.WriteString("\n")
-}
-
 func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 	for i := range cfg.FilterAndSplitterQ4 {
 		fmt.Fprintf(b, "  q4_filter_and_splitter_%d:\n", i)
@@ -563,7 +546,6 @@ func writeAggregateQ3(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - MOM_PORT=5672\n")
 		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate\n")
 		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output\n")
-		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.AverageFilterQ3)
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.SumQ3)
 		writeMaxBatchConfig(b, cfg)
 		b.WriteString("      - QUERY_ID=3\n")
@@ -592,7 +574,12 @@ func writeAverageFilterQ3(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterRangeQ3)
 		fmt.Fprintf(b, "      - AVG_EXPECTED_EOFS=%d\n", cfg.AggregateQ3)
 		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
+		writeMaxBatchConfig(b, cfg)
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_average_filter_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		b.WriteString("      - QUERY_ID=3\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }

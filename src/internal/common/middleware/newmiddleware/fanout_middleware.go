@@ -17,7 +17,7 @@ func NewFanoutMiddleware(settings ConnSettings, exchange string, inputQueue stri
 		return nil, err
 	}
 
-	if err := ch.ExchangeDeclare(exchange, amqp.ExchangeFanout, false, false, false, false, nil); err != nil {
+	if err := ch.ExchangeDeclare(exchange, amqp.ExchangeFanout, true, false, false, false, nil); err != nil {
 		if err := ch.Close(); err != nil {
 			slog.Error("while closing channel after exchange declare failure", "err", err)
 		}
@@ -36,7 +36,7 @@ func NewFanoutMiddleware(settings ConnSettings, exchange string, inputQueue stri
 	}
 
 	if inputQueue != "" {
-		q, err := ch.QueueDeclare(inputQueue, false, false, false, false, nil)
+		q, err := ch.QueueDeclare(inputQueue, true, false, false, false, nil)
 		if err != nil {
 			if err := ch.Close(); err != nil {
 				slog.Error("while closing channel after queue declare failure", "err", err)
@@ -70,10 +70,7 @@ func (f *fanoutMiddleware) Send(msg Message) error {
 		return ErrDisconnected
 	}
 
-	err := f.channel.Publish(f.exchange, "", true, false, amqp.Publishing{
-		ContentType: "text/plain",
-		Body:        msg.Body,
-	})
+	err := publishPersistent(f.channel, f.exchange, "", true, amqp.Publishing{Body: msg.Body})
 	if err != nil {
 		return ErrSend
 	}

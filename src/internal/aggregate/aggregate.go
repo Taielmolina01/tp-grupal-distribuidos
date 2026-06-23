@@ -15,7 +15,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
-	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -49,7 +48,7 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
+	outputMiddleware, err = newmiddleware.NewFanoutMiddleware(connSettings, config.OutputMiddlewarePrefix, "")
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
@@ -81,8 +80,6 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 		inputMiddleware:      inputMiddleware,
 		outputMiddleware:     outputMiddleware,
 		prevNodeAmt:          config.ExpectedEOFs,
-		outputAmount:         config.OutputAmount,
-		hasher:               shard.New(config.OutputAmount),
 		maxBatchSize:         config.MaxBatchSize,
 		maxBatchBytes:        config.MaxBatchBytes,
 		states:               states,
@@ -202,7 +199,7 @@ func (a *AvgAggregator) processRecords(records []transfer.SumByMethod, state *cl
 
 func (a *AvgAggregator) finishStep(clientID int, state *clientState) error {
 	ot := outputtracker.New()
-	builders := make(map[string]*batch.Builder[transfer.AvgByMethod])
+	builder := avgmethod.NewBatchBuilder(a.maxBatchSize, a.maxBatchBytes)
 
 	for method, p := range state.acumuladores {
 		if p.totalCount == 0 {
@@ -212,48 +209,32 @@ func (a *AvgAggregator) finishStep(clientID int, state *clientState) error {
 			Method: method,
 			Avg:    p.totalSum / float64(p.totalCount),
 		}
-		rk := fmt.Sprintf("shard-%d", a.hasher.ShardFor(clientID, method))
-		b := a.builderFor(builders, rk)
-		if !b.TryAdd(&avg) {
-			seq := ot.RegisterBatch(rk)
-			if err := a.flushBatch(clientID, rk, seq, b); err != nil {
+		if !builder.TryAdd(&avg) {
+			seq := ot.RegisterBatch("")
+			if err := a.flushBatch(clientID, seq, builder); err != nil {
 				return err
 			}
-			b.TryAdd(&avg)
+			builder.TryAdd(&avg)
 		}
 	}
 
-	for rk, b := range builders {
-		if !b.IsEmpty() {
-			seq := ot.RegisterBatch(rk)
-			if err := a.flushBatch(clientID, rk, seq, b); err != nil {
-				return err
-			}
-		}
-	}
-
-	for i := range a.outputAmount {
-		rk := fmt.Sprintf("shard-%d", i)
-		total := ot.CountFor(rk)
-		seq := ot.RegisterBatch(rk)
-		eofBody := avgmethod.WriteEOF(clientID, a.queryID, uint8(a.id), seq, uint32(total))
-		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+	if !builder.IsEmpty() {
+		seq := ot.RegisterBatch("")
+		if err := a.flushBatch(clientID, seq, builder); err != nil {
 			return err
 		}
+	}
+
+	total := ot.CountFor("")
+	seq := ot.RegisterBatch("")
+	eofBody := avgmethod.WriteEOF(clientID, a.queryID, uint8(a.id), seq, uint32(total))
+	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (a *AvgAggregator) builderFor(builders map[string]*batch.Builder[transfer.AvgByMethod], rk string) *batch.Builder[transfer.AvgByMethod] {
-	b := builders[rk]
-	if b == nil {
-		b = avgmethod.NewBatchBuilder(a.maxBatchSize, a.maxBatchBytes)
-		builders[rk] = b
-	}
-	return b
-}
-
-func (a *AvgAggregator) flushBatch(clientID int, rk string, seq uint64, b *batch.Builder[transfer.AvgByMethod]) error {
+func (a *AvgAggregator) flushBatch(clientID int, seq uint64, b *batch.Builder[transfer.AvgByMethod]) error {
 	body := b.Flush(clientID, a.queryID, uint8(a.id), seq)
-	return a.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk})
+	return a.outputMiddleware.Send(newmiddleware.Message{Body: body})
 }

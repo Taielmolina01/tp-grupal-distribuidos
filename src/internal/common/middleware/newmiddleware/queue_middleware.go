@@ -16,7 +16,7 @@ func NewQueueMiddleware(settings ConnSettings, queueName string) (Middleware, er
 		return nil, err
 	}
 
-	q, err := ch.QueueDeclare(queueName, false, false, false, false, nil)
+	q, err := ch.QueueDeclare(queueName, true, false, false, false, nil)
 	if err != nil {
 		if err := ch.Close(); err != nil {
 			slog.Error("while closing channel after queue declare failure", "err", err)
@@ -43,9 +43,8 @@ func (q *queueMiddleware) Send(msg Message) error {
 		return ErrDisconnected
 	}
 
-	err := q.channel.Publish("", q.queue.Name, true, false, amqp.Publishing{
-		ContentType: "text/plain",
-		Body:        msg.Body,
+	err := publishPersistent(q.channel, "", q.queue.Name, true, amqp.Publishing{
+		Body: msg.Body,
 	})
 	if err != nil {
 		return ErrSend

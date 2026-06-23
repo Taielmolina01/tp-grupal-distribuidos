@@ -4,8 +4,10 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"time"
 
 	"tp-grupal-distribuidos/internal/averagefilter"
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 )
 
@@ -50,6 +52,31 @@ func loadConfig() (averagefilter.AverageFilterConfig, error) {
 		return averagefilter.AverageFilterConfig{}, errors.New("AVG_EXPECTED_EOFS environment variable is required and must be a number")
 	}
 
+	maxBatchSize, err := strconv.Atoi(os.Getenv("MAX_BATCH_SIZE"))
+	if err != nil {
+		return averagefilter.AverageFilterConfig{}, errors.New("MAX_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	maxBatchBytes, err := commonconfig.ParseMaxBatchBytes()
+	if err != nil {
+		return averagefilter.AverageFilterConfig{}, err
+	}
+
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return averagefilter.AverageFilterConfig{}, errors.New("PERSIST_PATH environment variable is required")
+	}
+
+	persistBatchSize, err := strconv.Atoi(os.Getenv("PERSIST_BATCH_SIZE"))
+	if err != nil {
+		return averagefilter.AverageFilterConfig{}, errors.New("PERSIST_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
+	if err != nil {
+		return averagefilter.AverageFilterConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required and must be a valid duration")
+	}
+
 	return averagefilter.AverageFilterConfig{
 		Id:                             id,
 		MomHost:                        momHost,
@@ -59,6 +86,11 @@ func loadConfig() (averagefilter.AverageFilterConfig, error) {
 		OutputQueue:                    outputQueue,
 		ExpectedTransfersEofs:          expectedTransfersEofs,
 		ExpectedAvgEofs:                expectedAvgEofs,
+		MaxBatchSize:                   maxBatchSize,
+		MaxBatchBytes:                  maxBatchBytes,
+		PersistPath:                    persistPath,
+		PersistBatchSize:               persistBatchSize,
+		PersistFlushInterval:           persistFlushInterval,
 		QueryID:                        queryresult.Query3ID,
 	}, nil
 }

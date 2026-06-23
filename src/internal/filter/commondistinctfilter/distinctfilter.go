@@ -56,6 +56,7 @@ func NewDistinctFilter[T comparable](
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
+	// TODO: esto tendríamos q meterlo en el archivo persist.go como hacemos ne los demas
 	for _, name := range config.OutputQueues {
 		var m middleware.Middleware
 		m, err = middleware.CreateQueueMiddleware(name, legacyConn)
