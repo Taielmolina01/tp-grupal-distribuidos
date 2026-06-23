@@ -68,19 +68,36 @@ func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func(
 
 	if !input.EOF {
 		count.countByClient[input.ClientID] += uint32(len(input.Records))
+		slog.Info("received data batch")
 		return
 	}
 
-	if count.eofsByClient[input.ClientID]++; count.eofsByClient[input.ClientID] < count.inputEofsExpected {
+	count.eofsByClient[input.ClientID]++
+	slog.Info("received EOF",
+		"clientID", input.ClientID,
+		"senderID", input.SenderID,
+		"seq", input.Seq,
+		"total", input.Total,
+		"eofsReceived", count.eofsByClient[input.ClientID],
+		"eofsExpected", count.inputEofsExpected,
+	)
+
+	if count.eofsByClient[input.ClientID] < count.inputEofsExpected {
 		return
 	}
+
+	total := count.countByClient[input.ClientID]
+	slog.Info("all EOFs received, sending result",
+		"clientID", input.ClientID,
+		"totalCount", total,
+	)
 
 	resultBody := batch.Write(
 		input.ClientID,
 		count.queryId,
 		0,
 		0,
-		[]queryresult.Query5Result{{Qty: count.countByClient[input.ClientID]}},
+		[]queryresult.Query5Result{{Qty: total}},
 		records.Query5ResultCodec,
 	)
 	if err := count.outputQueue.Send(middleware.Message{Body: resultBody}); err != nil {

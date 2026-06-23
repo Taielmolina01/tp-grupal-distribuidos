@@ -7,6 +7,7 @@ COPY go.mod .
 COPY go.sum .
 COPY internal/common ./internal/common
 COPY internal/filter/convertedamountfilter ./internal/filter/convertedamountfilter
+COPY internal/filter/commonfilter ./internal/filter/commonfilter
 COPY cmd/convertedamountfilter ./cmd/convertedamountfilter
 RUN go mod download
 # CGO_ENABLED must be disabled to run go binary in Alpine

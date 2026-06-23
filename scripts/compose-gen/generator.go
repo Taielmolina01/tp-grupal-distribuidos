@@ -634,9 +634,13 @@ func writeFilterAmtQ5(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - AMOUNT=1\n")
 		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q5_fetcher_output\n")
 		b.WriteString("      - OUTPUT_QUEUE=Q5_filtered_to_count_q\n")
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterAmtQ5)
+		b.WriteString("      - FILTER_AMOUNT=1\n")
 		b.WriteString("      - QUERY_ID=5\n")
 		b.WriteString("      - QUOTE=US Dollar\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q5_filter_amount_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }

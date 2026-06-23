@@ -88,11 +88,11 @@ func createFetcherImpl(config FetcherConfig) (worker.Worker, error) {
 	}
 
 	return &Fetcher{
-		inputQueue:     inputQueue,
-		outputClusters: outputClusters,
-		queryId:        config.QueryID,
-		quote:          config.Quote,
-		ratesCache:     make(map[string]float64),
+		inputQueue:      inputQueue,
+		outputClusters:  outputClusters,
+		queryId:         config.QueryID,
+		quote:           config.Quote,
+		ratesCache:      make(map[string]float64),
 		expectedSenders: config.ExpectedInputSenders,
 		states: statemap.New(func() *clientState {
 			return &clientState{
@@ -206,7 +206,7 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 
 	for ck, group := range byCluster {
 		cluster := fetcher.outputClusters[ck.index]
-		body := batch.Write(input.ClientID, fetcher.queryId, 0, 0, group, records.FetcherResponseCodec)
+		body := batch.Write(input.ClientID, fetcher.queryId, 0, input.Seq, group, records.FetcherResponseCodec)
 		if err := cluster.middleware.Send(newmiddleware.Message{Body: body, RoutingKey: ck.rk}); err != nil {
 			slog.Error("while publishing batch to output cluster", "err", err)
 		}

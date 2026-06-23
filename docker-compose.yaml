@@ -941,9 +941,17 @@ services:
       - AMOUNT=1
       - INPUT_MIDDLEWARE_PREFIX=Q5_fetcher_output
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
-      - FILTER_AMOUNT=2
+      - FILTER_AMOUNT=1
       - QUERY_ID=5
       - QUOTE=US Dollar
+      - PERSIST_PATH=/var/bkp/q5_filter_amount_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q5_filter_amount_1:
     build:
@@ -960,9 +968,17 @@ services:
       - AMOUNT=1
       - INPUT_MIDDLEWARE_PREFIX=Q5_fetcher_output
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
-      - FILTER_AMOUNT=2
+      - FILTER_AMOUNT=1
       - QUERY_ID=5
       - QUOTE=US Dollar
+      - PERSIST_PATH=/var/bkp/q5_filter_amount_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
 
   q5_count_reducer:
     build:
