@@ -1,0 +1,21 @@
+src/internal/averagefilter/types.go
+  s_54cd30e61ddd92::t_92fbafdda271e7 7,12,58
+src/internal/averagefilter/averagefilter.go
+  s_54cd30e61ddd92::t_58f26d0e03e38d 115,157-165,250,257-278,360-362
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "c3aa871c72ca7389021da707b185c1596996561c",
+  "prompts": {},
+  "sessions": {
+    "s_54cd30e61ddd92": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef168-ac9f-79c1-8813-8e141f4f8167",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
