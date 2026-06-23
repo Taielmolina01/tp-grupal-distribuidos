@@ -770,7 +770,6 @@ services:
       - MOM_PORT=5672
       - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
       - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output
-      - OUTPUT_AMOUNT=2
       - EXPECTED_EOFS=2
       - MAX_BATCH_SIZE=1000
       - MAX_BATCH_KB=128
@@ -798,7 +797,6 @@ services:
       - MOM_PORT=5672
       - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate
       - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output
-      - OUTPUT_AMOUNT=2
       - EXPECTED_EOFS=2
       - MAX_BATCH_SIZE=1000
       - MAX_BATCH_KB=128

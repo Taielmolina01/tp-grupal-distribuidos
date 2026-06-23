@@ -1,14 +1,11 @@
 package averagefilter
 
 import (
-	"os"
 	"sync"
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
-	"tp-grupal-distribuidos/internal/common/outputtracker"
-	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
 )
@@ -61,14 +58,8 @@ type AverageFilter struct {
 }
 
 type clientState struct {
-	avgs               map[string]float64
-	avgsReady          bool
-	expectedAvgRecords int
+	avgs map[string]float64
 
-	pending     []queryresult.Query3Result
-	bufferFiles map[string]*os.File
-
-	outputTracker    *outputtracker.OutputTracker
 	transfersTracker *sendertracker.SenderTracker
 	avgsTracker      *sendertracker.SenderTracker
 }
