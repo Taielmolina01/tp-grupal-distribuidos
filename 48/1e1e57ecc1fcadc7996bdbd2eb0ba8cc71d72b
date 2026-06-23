@@ -1,0 +1,53 @@
+src/cmd/averagefilter/config.go
+  s_54cd30e61ddd92::t_42f26cfa2a5884 10,60,62
+  s_54cd30e61ddd92::t_e5fd6baae4a315 7,55-59,61,63-79,89-93
+src/internal/averagefilter/averagefilter.go
+  s_54cd30e61ddd92::t_4a7936ad6e01e5 91-99
+  s_54cd30e61ddd92::t_920b084a5754f0 325-341,384
+  s_54cd30e61ddd92::t_c30840db5f5e3a 229-230,299,303,305-315,317,404
+  s_54cd30e61ddd92::t_bbb48696844f09 154-157,366
+  s_54cd30e61ddd92::t_8ab3550a21ddf5 21,23-24,37,76,81-90,100-110,119-125,133-134,141-142,184-186,188,190-192,194-195,203-206,208,212-214,217,219-226,232,235,248,252,254-256,258-259,267-268,270,272-275,277-283,286-287,289-296,302
+  s_54cd30e61ddd92::t_5d26a8882d8d7d 245,407,478,487
+  h_3c9b41718876fe 193,197-202,207,209-211,216,257,261-263,265-266,271,276,285
+  s_a8ef38c628e219::t_edb40b55f5cc98 15
+  s_54cd30e61ddd92::t_1cea59e2534eb9 168,346-347,351,353-354,357,359-365,367
+scripts/compose-gen/generator.go
+  s_54cd30e61ddd92::t_3eaf50d6348634 590-593,595
+src/internal/averagefilter/types.go
+  s_54cd30e61ddd92::t_56efd8edeb801f 60
+  s_54cd30e61ddd92::t_e8e4130892d36c 6,8,12-13,29-35,45,50-59,70,72-73
+  s_54cd30e61ddd92::t_ee6ffc282b3478 10,71
+src/internal/common/middleware/newmiddleware/base.go
+  h_3c9b41718876fe 210-215
+src/internal/averagefilter/persist.go
+  s_54cd30e61ddd92::t_50ffc51add1323 1-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "481e1e57ecc1fcadc7996bdbd2eb0ba8cc71d72b",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_54cd30e61ddd92": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef168-ac9f-79c1-8813-8e141f4f8167",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    },
+    "s_a8ef38c628e219": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "019ef168-ac9f-79c1-8813-8e141f4f8167",
+        "model": "unknown"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
