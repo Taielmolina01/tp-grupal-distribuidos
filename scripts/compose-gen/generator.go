@@ -29,7 +29,6 @@ func generateCompose(cfg *Config) string {
 	writeJoinQ2(&b, cfg)
 
 	b.WriteString("\n  # Query 4\n\n")
-	writeSeqStoreQ4FilterSplitter(&b)
 	writeFilterAndSplitterQ4(&b, cfg)
 	writeJoinAccountsQ4(&b, cfg)
 	writeAcumAccountsQ4(&b, cfg)
@@ -367,22 +366,6 @@ func writeJoinQ2(b *strings.Builder, cfg *Config) {
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
-}
-
-func writeSeqStoreQ4FilterSplitter(b *strings.Builder) {
-	b.WriteString("  q4_filter_splitter_seqstore:\n")
-	b.WriteString("    build:\n")
-	b.WriteString("      context: ./src/\n")
-	b.WriteString("      dockerfile: cmd/seqstorenode/Dockerfile\n")
-	b.WriteString("    container_name: q4_filter_splitter_seqstore\n")
-	rabbitmqDepends(b)
-	b.WriteString("    environment:\n")
-	b.WriteString("      - MOM_HOST=rabbitmq\n")
-	b.WriteString("      - MOM_PORT=5672\n")
-	b.WriteString("      - PERSIST_PATH=/var/bkp/Q4_filter_splitter_seqstore.bin\n")
-	b.WriteString("      - REQUEST_QUEUE=Q4_filter_splitter_seqstore\n")
-	jsonFileLogging(b)
-	b.WriteString("\n")
 }
 
 func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
