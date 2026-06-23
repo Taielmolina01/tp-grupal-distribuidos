@@ -1,227 +1,233 @@
 package reducer
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
-	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
-	"tp-grupal-distribuidos/internal/common/eofring"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
+	"tp-grupal-distribuidos/internal/common/statemap"
+	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-const eofRingQueuePrefix = "REDUCE"
-
-func newReducer[T, O comparable](
+func newReducer(
 	config ReducerConfig,
-	reducerFunction func(T, T) T,
-	keyFunc func(T) string,
-	projectFunc func(T) O,
-	inputCodec wire.Codec[T],
-	outputCodec wire.Codec[O],
-	queryId uint8,
+	reducerFunction func(transfer.TransferAfterCurrency, transfer.TransferAfterCurrency) transfer.TransferAfterCurrency,
+	keyFunc func(transfer.TransferAfterCurrency) string,
+	projectFunc func(transfer.TransferAfterCurrency) transfer.TransferForQ2,
+	outputCodec wire.Codec[transfer.TransferForQ2],
 ) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	legacyConn := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputExchange, err := middleware.CreateExchangeMiddleware(
-		config.InputExchange,
-		config.InputQueue,
-		config.InputRoutingKeys,
-		connSettings,
+	var (
+		inputMiddleware newmiddleware.Middleware
+		err             error
 	)
+	outputQueues := make([]middleware.Middleware, 0, len(config.OutputQueues))
+
+	defer func() {
+		if err != nil {
+			if inputMiddleware != nil {
+				if closeErr := inputMiddleware.Close(); closeErr != nil {
+					slog.Error("While closing input middleware", "err", closeErr)
+				}
+			}
+			for _, q := range outputQueues {
+				if closeErr := q.Close(); closeErr != nil {
+					slog.Error("While closing output queue", "err", closeErr)
+				}
+			}
+		}
+	}()
+
+	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	shardKey := fmt.Sprintf("shard-%d", config.Id)
+	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputQueues := make([]middleware.Middleware, 0, len(config.OutputQueues))
-	for _, outputQueue := range config.OutputQueues {
-		m, err := middleware.CreateQueueMiddleware(outputQueue, connSettings)
+	for _, name := range config.OutputQueues {
+		var m middleware.Middleware
+		m, err = middleware.CreateQueueMiddleware(name, legacyConn)
 		if err != nil {
-			if err := inputExchange.Close(); err != nil {
-				slog.Error("While closing input exchange", "err", err)
-			}
-			return nil, err
+			return nil, fmt.Errorf("creating output queue %s: %w", name, err)
 		}
 		outputQueues = append(outputQueues, m)
 	}
 
-	eofInputName, eofOutputName := eofring.GetInputAndOutputQueueNames(
-		config.Id,
-		config.ReducerAmount,
-		eofRingQueuePrefix,
-		eofRingQueuePrefix,
-	)
-
-	eofInput, err := middleware.CreateQueueMiddleware(
-		eofInputName,
-		connSettings,
-	)
-
+	ckpt, err := checkpoint.New(config.PersistPath, marshalClientState, unmarshalClientState)
 	if err != nil {
-		for _, outputQueue := range outputQueues {
-			if err := outputQueue.Close(); err != nil {
-				slog.Error("While closing output queue", "err", err)
-			}
-		}
-		if err := inputExchange.Close(); err != nil {
-			slog.Error("While closing input exchange", "err", err)
-		}
-		return nil, err
+		return nil, fmt.Errorf("creating checkpoint: %w", err)
 	}
 
-	eofOutput, err := middleware.CreateQueueMiddleware(
-		eofOutputName,
-		connSettings,
-	)
-
+	recovered, err := ckpt.Load()
 	if err != nil {
-		for _, outputQueue := range outputQueues {
-			if err := outputQueue.Close(); err != nil {
-				slog.Error("While closing output queue", "err", err)
-			}
-		}
-		if err := inputExchange.Close(); err != nil {
-			slog.Error("While closing input exchange", "err", err)
-		}
-		if err := eofInput.Close(); err != nil {
-			slog.Error("While closing EOF input queue", "err", err)
-		}
-		return nil, err
+		return nil, fmt.Errorf("loading checkpoint: %w", err)
 	}
 
-	handlerMessages := msgmonitor.NewMessageMonitor()
-
-	reducer := &Reducer[T, O]{
-		id:                config.Id,
-		inputExchange:     inputExchange,
-		outputQueues:      outputQueues,
-		reducerMonitor:    NewReducerMonitor[T](handlerMessages),
-		reducerFunction:   reducerFunction,
-		keyFunc:           keyFunc,
-		projectFunc:       projectFunc,
-		inputEofsExpected: config.InputEofsExpected,
-		inputEofCount:     map[int]int{},
-		totalRealAmount:   map[int]uint32{},
-		inputCodec:        inputCodec,
-		outputCodec:       outputCodec,
+	states := statemap.New(func() *clientState {
+		return &clientState{
+			tracker:   sendertracker.New(10_000_000),
+			maxByBank: map[string]transfer.TransferAfterCurrency{},
+		}
+	})
+	for clientID, state := range recovered {
+		states.Set(clientID, state)
+		slog.Info("recovered client state", "clientID", clientID)
 	}
 
-	eofHandler := eofring.CreateEofRingAlgorithm(
-		eofInput,
-		eofOutput,
-		config.ReducerAmount,
-		uint32(config.Id),
-		handlerMessages,
-		func(clientID int, _ uint64, total uint32, isCoordinator bool) error {
-			values := reducer.reducerMonitor.GetValuesCopyByClientIdAndDelete(clientID)
-
-			byShard := make(map[int][]O)
-			for _, v := range values {
-				idx := shard.CalculateIndexForShard(clientID, keyFunc(v), len(reducer.outputQueues))
-				byShard[idx] = append(byShard[idx], projectFunc(v))
-			}
-			for idx, group := range byShard {
-				body := batch.Write(clientID, reducer.queryId, 0, 0, group, reducer.outputCodec)
-				if err := reducer.outputQueues[idx].Send(middleware.Message{Body: body}); err != nil {
-					return err
-				}
-			}
-
-			eofBody := batch.WriteEOF(clientID, reducer.queryId, 0, 0, total)
-			for _, outputQueue := range reducer.outputQueues {
-				if err := outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
-					return err
-				}
-			}
-			return nil
-		},
-		queryId,
-	)
-
-	reducer.eofHandler = eofHandler
-	reducer.handlerMessages = handlerMessages
-	reducer.outputQueueEof = eofOutput
-	reducer.queryId = queryId
-
-	return reducer, nil
+	return &Reducer{
+		id:                   config.Id,
+		queryID:              config.QueryID,
+		inputMiddleware:      inputMiddleware,
+		outputQueues:         outputQueues,
+		prevNodeAmt:          config.ExpectedEOFs,
+		reducerFunction:      reducerFunction,
+		keyFunc:              keyFunc,
+		projectFunc:          projectFunc,
+		outputCodec:          outputCodec,
+		states:               states,
+		checkpoint:           ckpt,
+		persistBatchSize:     config.PersistBatchSize,
+		persistFlushInterval: config.PersistFlushInterval,
+	}, nil
 }
 
-func (reducer *Reducer[T, O]) Run() {
-	defer func() {
-		if err := reducer.close(); err != nil {
-			slog.Error("While closing reducer", "err", err)
-		}
-	}()
-	go reducer.eofHandler.Run()
-	if err := reducer.inputExchange.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		reducer.handleMessage(msg, ack, nack)
+func (r *Reducer) Run() {
+	defer r.close()
+	if err := r.inputMiddleware.StartConsumingBatch(r.persistBatchSize, r.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		r.handleBatch(msgs, ack, nack)
 	}); err != nil {
-		slog.Error("While consuming from input queue", "err", err)
+		slog.Error("While consuming from input middleware", "err", err)
 	}
 }
 
-func (reducer *Reducer[T, O]) handleMessage(msg middleware.Message, ack func(), nack func()) {
-	defer ack()
-
-	input, err := batch.Read(msg.Body, reducer.inputCodec)
-	if err != nil {
-		slog.Error("While deserializing input batch", "err", err)
-		nack()
-		return
-	}
-
-	if input.EOF {
-		reducer.handleEOF(input.ClientID, input.Total)
-		return
-	}
-
-	for i := range input.Records {
-		record := input.Records[i]
-		reducer.reducerMonitor.AddValue(
-			input.ClientID,
-			reducer.keyFunc(record),
-			record,
-			reducer.reducerFunction,
-		)
-	}
-}
-
-func (reducer *Reducer[T, O]) handleEOF(clientID int, total uint32) {
-	eofRingMessage := eofmessagetypes.EofRingMessage{
-		RealAmount:     total,
-		ActualAmount:   reducer.handlerMessages.GetProcessedMessagesAmountByClientId(clientID),
-		ClientId:       clientID,
-		CoordinatorId:  uint32(reducer.id),
-		FilteredAmount: reducer.handlerMessages.GetForwardedMessagesAmountByClientId(clientID),
-	}
-
-	if err := reducer.outputQueueEof.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)}); err != nil {
-		slog.Error("While sending EOF message to EOF ring", "err", err)
-	}
-}
-
-func (reducer *Reducer[T, O]) HandleSignals() {
+func (r *Reducer) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
-	slog.Info("SIGTERM signal received")
-	if err := reducer.inputExchange.StopConsuming(); err != nil {
-		slog.Error("while closing reducer", "err", err)
+	slog.Info("SIGTERM signal received, stopping consumer")
+	r.stopConsuming()
+}
+
+func (r *Reducer) stopConsuming() {
+	if err := r.inputMiddleware.StopConsuming(); err != nil {
+		slog.Error("While stopping input consumer", "err", err)
 	}
 }
 
-func (reducer *Reducer[T, O]) close() error {
-	if err := reducer.inputExchange.Close(); err != nil {
-		return err
+func (r *Reducer) close() {
+	if err := r.inputMiddleware.Close(); err != nil {
+		slog.Error("While closing input middleware", "err", err)
 	}
-	for _, outputQueue := range reducer.outputQueues {
-		if err := outputQueue.Close(); err != nil {
+	for _, q := range r.outputQueues {
+		if err := q.Close(); err != nil {
+			slog.Error("While closing output queue", "err", err)
+		}
+	}
+}
+
+func (r *Reducer) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {
+	modified := make(map[int]*clientState)
+	completed := make(map[int]struct{})
+
+	for _, msg := range msgs {
+		input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
+		if err != nil {
+			slog.Error("decode failed", "err", err)
+			continue
+		}
+
+		clientID := input.ClientID
+		state := r.states.For(clientID)
+		tracker := state.tracker
+
+		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
+			continue
+		}
+
+		if input.EOF {
+			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+		} else {
+			tracker.RegisterBatch(int(input.SenderID))
+			r.processRecords(input.Records, state)
+		}
+
+		tracker.Claim(int(input.SenderID), input.Seq)
+		modified[clientID] = state
+
+		if tracker.IsComplete(r.prevNodeAmt) {
+			if err := r.finishStep(clientID, state); err != nil {
+				slog.Error("finish step failed", "err", err)
+				nack()
+				r.stopConsuming()
+				return
+			}
+			completed[clientID] = struct{}{}
+		}
+	}
+
+	for clientID, state := range modified {
+		if _, done := completed[clientID]; done {
+			r.states.Delete(clientID)
+			r.checkpoint.DeleteClient(clientID)
+			continue
+		}
+		if err := r.checkpoint.SaveClient(clientID, state); err != nil {
+			slog.Error("persist failed, stopping", "err", err)
+			nack()
+			r.stopConsuming()
+			return
+		}
+	}
+
+	ack()
+}
+
+func (r *Reducer) processRecords(recordsBatch []transfer.TransferAfterCurrency, state *clientState) {
+	for i := range recordsBatch {
+		rec := recordsBatch[i]
+		key := r.keyFunc(rec)
+		existing, ok := state.maxByBank[key]
+		if !ok {
+			state.maxByBank[key] = rec
+		} else {
+			state.maxByBank[key] = r.reducerFunction(existing, rec)
+		}
+	}
+}
+
+func (r *Reducer) finishStep(clientID int, state *clientState) error {
+	byShard := make(map[int][]transfer.TransferForQ2)
+	for _, v := range state.maxByBank {
+		idx := shard.CalculateIndexForShard(clientID, r.keyFunc(v), len(r.outputQueues))
+		byShard[idx] = append(byShard[idx], r.projectFunc(v))
+	}
+
+	for idx, group := range byShard {
+		body := batch.Write(clientID, r.queryID, 0, 0, group, r.outputCodec)
+		if err := r.outputQueues[idx].Send(middleware.Message{Body: body}); err != nil {
+			return err
+		}
+	}
+
+	eofBody := batch.WriteEOF(clientID, r.queryID, 0, 0, 0)
+	for _, q := range r.outputQueues {
+		if err := q.Send(middleware.Message{Body: eofBody}); err != nil {
 			return err
 		}
 	}
