@@ -2,11 +2,13 @@ package commondistinctfilter
 
 import (
 	"log/slog"
+	"strconv"
 
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -38,16 +40,26 @@ func NewDistinctFilter[T comparable, S comparable](
 	}
 
 	return &DistinctFilter[T, S]{
-		id:            uint32(config.Id),
-		inputQueue:    inputQueue,
-		outputQueues:  outputQueues,
-		alreadySeen:   map[int]map[S]bool{},
-		compareFunc:   compareFunc,
-		keyFunc:       keyFunc,
-		shardCriteria: shardCriteria,
-		codec:         codec,
-		queryId:       config.QueryID,
+		id:             uint32(config.Id),
+		inputQueue:     inputQueue,
+		outputQueues:   outputQueues,
+		alreadySeen:    map[int]map[S]bool{},
+		outputTrackers: map[int]*outputtracker.OutputTracker{},
+		compareFunc:    compareFunc,
+		keyFunc:        keyFunc,
+		shardCriteria:  shardCriteria,
+		codec:          codec,
+		queryId:        config.QueryID,
 	}, nil
+}
+
+func (distinctfilter *DistinctFilter[T, S]) trackerFor(clientID int) *outputtracker.OutputTracker {
+	ot, ok := distinctfilter.outputTrackers[clientID]
+	if !ok {
+		ot = outputtracker.New()
+		distinctfilter.outputTrackers[clientID] = ot
+	}
+	return ot
 }
 
 func (distinctfilter *DistinctFilter[T, S]) Run() {
@@ -69,12 +81,18 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 	}
 
 	if input.EOF {
-		eofBody := batch.WriteEOF(input.ClientID, distinctfilter.queryId, 0, 0, input.Total)
-		for _, outputQueue := range distinctfilter.outputQueues {
+		ot := distinctfilter.trackerFor(input.ClientID)
+		for idx, outputQueue := range distinctfilter.outputQueues {
+			rk := strconv.Itoa(idx)
+			total := ot.CountFor(rk)
+			seq := ot.RegisterBatch(rk)
+			eofBody := batch.WriteEOF(input.ClientID, distinctfilter.queryId, uint8(distinctfilter.id), seq, uint32(total))
 			if err := outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
 				slog.Error("While broadcasting EOF to output queue", "err", err)
 			}
 		}
+		delete(distinctfilter.outputTrackers, input.ClientID)
+		delete(distinctfilter.alreadySeen, input.ClientID)
 		return
 	}
 
@@ -100,8 +118,10 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 		byShard[idx] = append(byShard[idx], record)
 	}
 
+	ot := distinctfilter.trackerFor(input.ClientID)
 	for idx, group := range byShard {
-		body := batch.Write(input.ClientID, distinctfilter.queryId, 0, 0, group, distinctfilter.codec)
+		seq := ot.RegisterBatch(strconv.Itoa(idx))
+		body := batch.Write(input.ClientID, distinctfilter.queryId, uint8(distinctfilter.id), seq, group, distinctfilter.codec)
 		if err := distinctfilter.outputQueues[idx].Send(middleware.Message{Body: body}); err != nil {
 			slog.Error("While sending output batch", "err", err)
 		}
