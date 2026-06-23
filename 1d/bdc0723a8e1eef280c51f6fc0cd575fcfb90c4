@@ -1,0 +1,67 @@
+src/cmd/averagefilter/config.go
+  s_54cd30e61ddd92::t_42f26cfa2a5884 10,60,62
+  s_54cd30e61ddd92::t_e5fd6baae4a315 7,55-59,61,63-79,89-93
+src/internal/averagefilter/averagefilter.go
+  s_54cd30e61ddd92::t_4a7936ad6e01e5 88-90,91-94
+  s_54cd30e61ddd92::t_920b084a5754f0 261
+  s_54cd30e61ddd92::t_c30840db5f5e3a 227,231-236,238
+  s_54cd30e61ddd92::t_bbb48696844f09 144-147
+  s_54cd30e61ddd92::t_8ab3550a21ddf5 19,21-22,35,73,78-87,95,96-99,108-113,123-124,177-179,181,184-186,188-189,197-200,202,206-210,213,224
+  h_3c9b41718876fe 187,191-196,201,203,212
+  s_a8ef38c628e219::t_edb40b55f5cc98 13
+  s_54cd30e61ddd92::t_1cea59e2534eb9 277
+  s_54cd30e61ddd92::t_e5c4fbf0f10ff7 348-359,363-372,377-378,380-383,385-395,402-403,406-409,411-417,419,422-438,440,442-444
+  s_54cd30e61ddd92::t_ed7acbd40a22d5 215-223,318-335
+  s_54cd30e61ddd92::t_44f3135757c809 373,375,379
+  s_54cd30e61ddd92::t_57c81e40dfaa5d 374,376,384,396-401,410,418,439,441
+  s_54cd30e61ddd92::t_d893e39343bd3f 8,12,114,244-249,251-253,254-256,279-280
+  s_54cd30e61ddd92::t_1e35620be77467 17,19-20
+  s_54cd30e61ddd92::t_3b2d06f5b55098 204
+  s_54cd30e61ddd92::t_58f26d0e03e38d 115,157-165,250,257-278,360-362
+scripts/compose-gen/generator.go
+  s_54cd30e61ddd92::t_3eaf50d6348634 589-592,594
+src/internal/averagefilter/types.go
+  s_54cd30e61ddd92::t_56efd8edeb801f 60
+  s_54cd30e61ddd92::t_e8e4130892d36c 5,8,10-11,28-34,44,49-56,59,66-67
+  s_54cd30e61ddd92::t_38bb61e375fe9a 57
+  s_54cd30e61ddd92::t_92fbafdda271e7 7,12,58
+src/internal/common/middleware/newmiddleware/base.go
+  h_3c9b41718876fe 210-215
+src/internal/averagefilter/persist.go
+  s_54cd30e61ddd92::t_50ffc51add1323 1-6,7-11,13-14,15-20,25-32,33-36,42-67
+  s_54cd30e61ddd92::t_b69d722305659d 3-9,11-15,19-50,52-66
+src/internal/common/messageprotocol/rabbit/channels/q3filter/q3filter.go
+  s_54cd30e61ddd92::t_45ab6f50d89068 11,18,26
+src/internal/common/appendlog/appendlog.go
+  s_54cd30e61ddd92::t_cf92d30731214c 58,185
+  s_54cd30e61ddd92::t_925eea222cc328 1-16,18-57,59-121,125-184,186-243
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "1dbdc0723a8e1eef280c51f6fc0cd575fcfb90c4",
+  "prompts": {},
+  "humans": {
+    "h_3c9b41718876fe": {
+      "author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  },
+  "sessions": {
+    "s_54cd30e61ddd92": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef168-ac9f-79c1-8813-8e141f4f8167",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    },
+    "s_a8ef38c628e219": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "019ef168-ac9f-79c1-8813-8e141f4f8167",
+        "model": "unknown"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
