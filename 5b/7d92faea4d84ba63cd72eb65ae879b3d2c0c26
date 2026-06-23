@@ -1,0 +1,29 @@
+src/internal/averagefilter/averagefilter.go
+  s_54cd30e61ddd92::t_e5c4fbf0f10ff7 322-343,348-349,351-354,356-366,373-374,377-380,382-388,390,393-409,411,413-415
+  s_54cd30e61ddd92::t_ed7acbd40a22d5 205-213,292-309
+  s_54cd30e61ddd92::t_44f3135757c809 344,346,350
+  s_54cd30e61ddd92::t_57c81e40dfaa5d 345,347,355,367-372,381,389,410,412
+  s_54cd30e61ddd92::t_d893e39343bd3f 8,12,114,234-254
+  s_54cd30e61ddd92::t_1e35620be77467 17,19-20
+  s_54cd30e61ddd92::t_3b2d06f5b55098 194
+src/internal/averagefilter/persist.go
+  s_54cd30e61ddd92::t_b69d722305659d 3-9,11-15,19-50,52-66
+src/internal/averagefilter/types.go
+  s_54cd30e61ddd92::t_38bb61e375fe9a 55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "5b7d92faea4d84ba63cd72eb65ae879b3d2c0c26",
+  "prompts": {},
+  "sessions": {
+    "s_54cd30e61ddd92": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef168-ac9f-79c1-8813-8e141f4f8167",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
