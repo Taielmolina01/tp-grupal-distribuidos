@@ -12,14 +12,16 @@ import (
 	"strings"
 	"syscall"
 
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/q3filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -28,12 +30,11 @@ const avgFractionThreshold = 100
 
 func NewAverageFilter(config AverageFilterConfig) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-	oldConnSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
 		inputTransfersMiddleware newmiddleware.Middleware
 		inputAvgsMiddleware      newmiddleware.Middleware
-		outputQueue              middleware.Middleware
+		outputQueue              newmiddleware.Middleware
 		err                      error
 	)
 
@@ -72,9 +73,39 @@ func NewAverageFilter(config AverageFilterConfig) (worker.Worker, error) {
 		return nil, fmt.Errorf("creating input avgs middleware: %w", err)
 	}
 
-	outputQueue, err = middleware.CreateQueueMiddleware(config.OutputQueue, oldConnSettings)
+	outputQueue, err = newmiddleware.NewQueueMiddleware(connSettings, config.OutputQueue)
 	if err != nil {
 		return nil, fmt.Errorf("creating output queue: %w", err)
+	}
+
+	ckpt, err := checkpoint.New(config.PersistPath, marshalClientState, unmarshalClientState)
+	if err != nil {
+		return nil, fmt.Errorf("creating checkpoint: %w", err)
+	}
+
+	recovered, err := ckpt.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading checkpoint: %w", err)
+	}
+
+	states := statemap.New(func() *clientState {
+		return &clientState{
+			avgs:             map[string]float64{},
+			bufferFiles:      map[string]*os.File{},
+			outputTracker:    outputtracker.New(),
+			transfersTracker: sendertracker.New(10_000_000),
+			avgsTracker:      sendertracker.New(10_000_000),
+		}
+	})
+	for clientID, state := range recovered {
+		state.bufferFiles = map[string]*os.File{}
+		states.Set(clientID, state)
+		slog.Info("recovered client state", "clientID", clientID)
+	}
+
+	bufferDir := filepath.Join(config.PersistPath, "buffers")
+	if err := os.MkdirAll(bufferDir, 0755); err != nil {
+		return nil, fmt.Errorf("creating buffer dir: %w", err)
 	}
 
 	return &AverageFilter{
@@ -83,10 +114,15 @@ func NewAverageFilter(config AverageFilterConfig) (worker.Worker, error) {
 		inputTransfersMiddleware: inputTransfersMiddleware,
 		inputAvgsMiddleware:      inputAvgsMiddleware,
 		outputQueue:              outputQueue,
-		transfersMonitor:         msgmonitor.NewMessageMonitor(),
 		expectedTransfersEofs:    config.ExpectedTransfersEofs,
 		avgsExpectedEofs:         config.ExpectedAvgEofs,
-		state:                    map[int]*clientState{},
+		maxBatchSize:             config.MaxBatchSize,
+		maxBatchBytes:            config.MaxBatchBytes,
+		states:                   states,
+		checkpoint:               ckpt,
+		persistBatchSize:         config.PersistBatchSize,
+		persistFlushInterval:     config.PersistFlushInterval,
+		bufferDir:                bufferDir,
 	}, nil
 }
 
@@ -94,16 +130,16 @@ func (af *AverageFilter) Run() {
 	defer af.close()
 
 	go af.consumeAvgs()
-	if err := af.inputTransfersMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
-		af.handleTransferInput(msg, ack)
+	if err := af.inputTransfersMiddleware.StartConsumingBatch(af.persistBatchSize, af.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		af.handleTransferBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming transfers", "err", err)
 	}
 }
 
 func (af *AverageFilter) consumeAvgs() {
-	if err := af.inputAvgsMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, _ func()) {
-		af.handleAvgInput(msg, ack)
+	if err := af.inputAvgsMiddleware.StartConsumingBatch(af.persistBatchSize, af.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		af.handleAvgBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming avgs", "err", err)
 	}
@@ -115,6 +151,10 @@ func (af *AverageFilter) HandleSignals() {
 	<-signals
 	slog.Info("SIGTERM signal received, stopping consumer")
 
+	af.stopConsuming()
+}
+
+func (af *AverageFilter) stopConsuming() {
 	if err := af.inputAvgsMiddleware.StopConsuming(); err != nil {
 		slog.Error("While stopping input avgs consumer", "filter_id", af.id, "err", err)
 	}
@@ -125,7 +165,7 @@ func (af *AverageFilter) HandleSignals() {
 
 func (af *AverageFilter) close() {
 	af.lock.Lock()
-	for clientID := range af.state {
+	for clientID := range af.states.All() {
 		af.deleteRemainingFiles(clientID)
 	}
 	af.lock.Unlock()
@@ -141,47 +181,58 @@ func (af *AverageFilter) close() {
 	}
 }
 
-func (af *AverageFilter) getOrInitState(clientID int) *clientState {
-	s, ok := af.state[clientID]
-	if !ok {
-		s = &clientState{avgs: map[string]float64{}, bufferFiles: map[string]*os.File{}}
-		af.state[clientID] = s
-	}
-	return s
-}
-
-func (af *AverageFilter) handleTransferInput(msg newmiddleware.Message, ack func()) {
-	defer ack()
-
-	input, err := q3filter.Read(msg.Body)
-	if err != nil {
-		slog.Error("While deserializing transfer batch", "err", err)
-		return
-	}
-
-	if input.EOF {
-		af.handleTransferEOF(input.ClientID, input.Total)
-		return
-	}
-
-	for i := range input.Records {
-		af.handleTransferRecord(input.ClientID, input.Records[i])
-	}
-
-	af.lock.Lock()
-	if state, ok := af.state[input.ClientID]; ok {
-		af.flushPendingLocked(input.ClientID, state)
-	}
-	af.lock.Unlock()
-}
-
-func (af *AverageFilter) handleTransferRecord(clientID int, t transfer.TransferForQ3Filter) {
-	af.transfersMonitor.AddProcessedMessagesAmountByClientId(clientID, 1)
-
+func (af *AverageFilter) handleTransferBatch(msgs []newmiddleware.Message, ack, nack func()) {
 	af.lock.Lock()
 	defer af.lock.Unlock()
-	state := af.getOrInitState(clientID)
 
+	modified := make(map[int]*clientState)
+
+	for _, msg := range msgs {
+		input, err := q3filter.Read(msg.Body)
+		if err != nil {
+			slog.Error("decode failed", "err", err)
+			continue
+		}
+
+		clientID := input.ClientID
+		state := af.states.For(clientID)
+		tracker := state.transfersTracker
+
+		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
+			continue
+		}
+
+		if input.EOF {
+			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+		} else {
+			tracker.RegisterBatch(int(input.SenderID))
+			for _, record := range input.Records {
+				af.handleTransferRecordLocked(input.ClientID, record, state)
+			}
+			af.flushPendingLocked(input.ClientID, state)
+		}
+
+		tracker.Claim(int(input.SenderID), input.Seq)
+		modified[input.ClientID] = state
+
+		if af.isComplete(state) {
+			if err := af.finalizeAndEmitEOFLocked(input.ClientID, state); err != nil {
+				slog.Error("While finalizing average filter client", "err", err)
+				nack()
+				af.stopConsuming()
+				return
+			}
+		}
+	}
+
+	if !af.persistModified(modified, nack) {
+		return
+	}
+	ack()
+}
+
+func (af *AverageFilter) handleTransferRecordLocked(clientID int, t transfer.TransferForQ3Filter, state *clientState) {
 	if _, ok := state.avgs[t.PaymentFormat]; ok {
 		af.processTransferLocked(clientID, t, state)
 		return
@@ -191,96 +242,129 @@ func (af *AverageFilter) handleTransferRecord(clientID int, t transfer.TransferF
 		return
 	}
 
-	af.saveTransferToFile(clientID, t)
+	af.saveTransferToFile(clientID, t, state)
 }
 
-func (af *AverageFilter) handleTransferEOF(clientID int, total uint32) {
+func (af *AverageFilter) handleAvgBatch(msgs []newmiddleware.Message, ack, nack func()) {
 	af.lock.Lock()
 	defer af.lock.Unlock()
 
-	state := af.getOrInitState(clientID)
-	state.transfersEofsReceived++
+	modified := make(map[int]*clientState)
 
-	if state.transfersEofsReceived < af.expectedTransfersEofs {
-		return
+	for _, msg := range msgs {
+		input, err := avgmethod.Read(msg.Body)
+		if err != nil {
+			slog.Error("decode failed", "err", err)
+			continue
+		}
+
+		clientID := input.ClientID
+		state := af.states.For(clientID)
+		tracker := state.avgsTracker
+
+		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
+			continue
+		}
+
+		if input.EOF {
+			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+			if int(input.Total) > state.expectedAvgRecords {
+				state.expectedAvgRecords = int(input.Total)
+			}
+		} else {
+			tracker.RegisterBatch(int(input.SenderID))
+			for i := range input.Records {
+				rec := input.Records[i]
+				state.avgs[rec.Method] = rec.Avg
+				af.drainFileForMethod(input.ClientID, rec.Method, state)
+			}
+			af.flushPendingLocked(input.ClientID, state)
+		}
+
+		tracker.Claim(int(input.SenderID), input.Seq)
+		af.checkAvgsReady(state)
+		modified[input.ClientID] = state
+
+		if af.isComplete(state) {
+			if err := af.finalizeAndEmitEOFLocked(input.ClientID, state); err != nil {
+				slog.Error("While finalizing average filter client", "err", err)
+				nack()
+				af.stopConsuming()
+				return
+			}
+		}
 	}
 
-	if !state.avgsReady {
-		state.transfersEofPending = true
+	if !af.persistModified(modified, nack) {
 		return
 	}
-
-	af.finalizeAndEmitEOFLocked(clientID, state)
+	ack()
 }
 
-func (af *AverageFilter) handleAvgInput(msg newmiddleware.Message, ack func()) {
-	defer ack()
-
-	input, err := avgmethod.Read(msg.Body)
-	if err != nil {
-		slog.Error("While deserializing avg batch", "err", err)
-		return
+func (af *AverageFilter) persistModified(modified map[int]*clientState, nack func()) bool {
+	for clientID, state := range modified {
+		if _, ok := af.states.All()[clientID]; !ok {
+			continue
+		}
+		if err := af.checkpoint.SaveClient(clientID, state); err != nil {
+			slog.Error("persist failed, stopping", "err", err)
+			nack()
+			af.stopConsuming()
+			return false
+		}
 	}
-
-	af.lock.Lock()
-	defer af.lock.Unlock()
-	state := af.getOrInitState(input.ClientID)
-
-	if input.EOF {
-		af.handleAvgEOFLocked(input.ClientID, state, input.Total)
-		return
-	}
-
-	for i := range input.Records {
-		rec := input.Records[i]
-		state.avgs[rec.Method] = rec.Avg
-		af.drainFileForMethod(input.ClientID, rec.Method, state)
-	}
-	af.flushPendingLocked(input.ClientID, state)
-	af.checkAvgsReady(input.ClientID, state)
+	return true
 }
-
-const pendingFlushThreshold = 1000
 
 func (af *AverageFilter) flushPendingLocked(clientID int, state *clientState) {
 	if len(state.pending) == 0 {
 		return
 	}
-	body := batch.Write(clientID, af.queryID, 0, 0, state.pending, records.Query3ResultCodec)
-	if err := af.outputQueue.Send(middleware.Message{Body: body}); err != nil {
-		slog.Error("While sending Q3 results batch", "err", err)
+
+	builder := batch.NewBuilder(af.maxBatchSize, af.maxBatchBytes, records.Query3ResultCodec)
+	for i := range state.pending {
+		if !builder.TryAdd(&state.pending[i]) {
+			seq := state.outputTracker.RegisterBatch("")
+			body := builder.Flush(clientID, af.queryID, uint8(af.id), seq)
+			if err := af.outputQueue.Send(newmiddleware.Message{Body: body}); err != nil {
+				slog.Error("While sending Q3 results batch", "err", err)
+			}
+			builder.TryAdd(&state.pending[i])
+		}
+	}
+	if !builder.IsEmpty() {
+		seq := state.outputTracker.RegisterBatch("")
+		body := builder.Flush(clientID, af.queryID, uint8(af.id), seq)
+		if err := af.outputQueue.Send(newmiddleware.Message{Body: body}); err != nil {
+			slog.Error("While sending Q3 results batch", "err", err)
+		}
 	}
 	state.pending = state.pending[:0]
 }
 
-func (af *AverageFilter) handleAvgEOFLocked(clientID int, state *clientState, totalAvgs uint32) {
-	state.avgsEofsReceived++
-	if int(totalAvgs) > state.expectedAvgRecords {
-		state.expectedAvgRecords = int(totalAvgs)
-	}
-	af.checkAvgsReady(clientID, state)
-}
-
-func (af *AverageFilter) checkAvgsReady(clientID int, state *clientState) {
-	if state.avgsReady || state.avgsEofsReceived < af.avgsExpectedEofs || len(state.avgs) < state.expectedAvgRecords {
+func (af *AverageFilter) checkAvgsReady(state *clientState) {
+	if state.avgsReady || !state.avgsTracker.IsComplete(af.avgsExpectedEofs) || len(state.avgs) < state.expectedAvgRecords {
 		return
 	}
 	state.avgsReady = true
-	af.deleteRemainingFiles(clientID)
-
-	if state.transfersEofPending {
-		state.transfersEofPending = false
-		af.finalizeAndEmitEOFLocked(clientID, state)
-	}
 }
 
-func (af *AverageFilter) finalizeAndEmitEOFLocked(clientID int, state *clientState) {
+func (af *AverageFilter) isComplete(state *clientState) bool {
+	return state.avgsReady && state.transfersTracker.IsComplete(af.expectedTransfersEofs)
+}
+
+func (af *AverageFilter) finalizeAndEmitEOFLocked(clientID int, state *clientState) error {
 	af.finalizeClientLocked(clientID, state)
-	forwarded := uint32(af.transfersMonitor.GetForwardedMessagesAmountByClientId(clientID))
-	eofBody := batch.WriteEOF(clientID, af.queryID, 0, 0, forwarded)
-	if err := af.outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
-		slog.Error("While sending EOF message", "err", err)
+	total := state.outputTracker.CountFor("")
+	seq := state.outputTracker.RegisterBatch("")
+	eofBody := batch.WriteEOF(clientID, af.queryID, uint8(af.id), seq, uint32(total))
+	if err := af.outputQueue.Send(newmiddleware.Message{Body: eofBody}); err != nil {
+		return fmt.Errorf("sending EOF message: %w", err)
 	}
+	af.states.Delete(clientID)
+	af.checkpoint.DeleteClient(clientID)
+	return nil
 }
 
 func (af *AverageFilter) processTransferLocked(clientID int, t transfer.TransferForQ3Filter, state *clientState) {
@@ -297,8 +381,7 @@ func (af *AverageFilter) processTransferLocked(clientID int, t transfer.Transfer
 		PaymentFormat: t.PaymentFormat,
 		Amount:        t.AmountPaid,
 	})
-	af.transfersMonitor.AddForwardedMessagesAmountByClientId(clientID, 1)
-	if len(state.pending) >= pendingFlushThreshold {
+	if len(state.pending) >= af.maxBatchSize {
 		af.flushPendingLocked(clientID, state)
 	}
 }
@@ -309,7 +392,6 @@ func (af *AverageFilter) finalizeClientLocked(clientID int, state *clientState) 
 	}
 	af.deleteRemainingFiles(clientID)
 	af.flushPendingLocked(clientID, state)
-	delete(af.state, clientID)
 }
 
 func (af *AverageFilter) bufferFileName(clientID int, method string) string {
@@ -319,11 +401,10 @@ func (af *AverageFilter) bufferFileName(clientID int, method string) string {
 		}
 		return '_'
 	}, method)
-	return fmt.Sprintf("avg_filter_%d_client_%d_%s.csv", af.id, clientID, safe)
+	return filepath.Join(af.bufferDir, fmt.Sprintf("avg_filter_%d_client_%d_%s.csv", af.id, clientID, safe))
 }
 
-func (af *AverageFilter) saveTransferToFile(clientID int, t transfer.TransferForQ3Filter) {
-	state := af.state[clientID]
+func (af *AverageFilter) saveTransferToFile(clientID int, t transfer.TransferForQ3Filter, state *clientState) {
 	file, ok := state.bufferFiles[t.PaymentFormat]
 	if !ok {
 		filename := af.bufferFileName(clientID, t.PaymentFormat)
@@ -394,7 +475,7 @@ func (af *AverageFilter) drainFileForMethod(clientID int, method string, state *
 }
 
 func (af *AverageFilter) deleteRemainingFiles(clientID int) {
-	if state, ok := af.state[clientID]; ok {
+	if state, ok := af.states.All()[clientID]; ok {
 		for method, f := range state.bufferFiles {
 			if err := f.Close(); err != nil {
 				slog.Error("While closing buffer file", "filter_id", af.id, "method", method, "err", err)
@@ -403,7 +484,7 @@ func (af *AverageFilter) deleteRemainingFiles(clientID int) {
 		}
 	}
 
-	pattern := fmt.Sprintf("avg_filter_%d_client_%d_*.csv", af.id, clientID)
+	pattern := filepath.Join(af.bufferDir, fmt.Sprintf("avg_filter_%d_client_%d_*.csv", af.id, clientID))
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		slog.Error("While globbing buffer files", "filter_id", af.id, "err", err)

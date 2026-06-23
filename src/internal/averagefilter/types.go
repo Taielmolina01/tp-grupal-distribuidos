@@ -3,11 +3,14 @@ package averagefilter
 import (
 	"os"
 	"sync"
+	"time"
 
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
-	"tp-grupal-distribuidos/internal/common/msgmonitor"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
 )
 
 type AverageFilterConfig struct {
@@ -23,6 +26,13 @@ type AverageFilterConfig struct {
 	ExpectedTransfersEofs int
 	ExpectedAvgEofs       int
 
+	MaxBatchSize  int
+	MaxBatchBytes int
+
+	PersistPath          string
+	PersistBatchSize     int
+	PersistFlushInterval time.Duration
+
 	QueryID uint8
 }
 
@@ -32,26 +42,33 @@ type AverageFilter struct {
 
 	inputTransfersMiddleware newmiddleware.Middleware
 	inputAvgsMiddleware      newmiddleware.Middleware
-	outputQueue              middleware.Middleware
-
-	transfersMonitor msgmonitor.MessageMonitor
+	outputQueue              newmiddleware.Middleware
 
 	expectedTransfersEofs int
 	avgsExpectedEofs      int
 
-	lock  sync.Mutex
-	state map[int]*clientState
+	maxBatchSize  int
+	maxBatchBytes int
+
+	states     statemap.StateMap[clientState]
+	checkpoint *checkpoint.Checkpoint[clientState]
+
+	persistBatchSize     int
+	persistFlushInterval time.Duration
+	bufferDir            string
+
+	lock sync.Mutex
 }
 
 type clientState struct {
 	avgs               map[string]float64
 	avgsReady          bool
-	avgsEofsReceived   int
 	expectedAvgRecords int
-
-	transfersEofsReceived int
-	transfersEofPending   bool
 
 	pending     []queryresult.Query3Result
 	bufferFiles map[string]*os.File
+
+	outputTracker    *outputtracker.OutputTracker
+	transfersTracker *sendertracker.SenderTracker
+	avgsTracker      *sendertracker.SenderTracker
 }
