@@ -1,0 +1,22 @@
+src/internal/common/messageprotocol/rabbit/channels/q3filter/q3filter.go
+  s_54cd30e61ddd92::t_45ab6f50d89068 11,18,26
+src/internal/common/appendlog/appendlog.go
+  s_54cd30e61ddd92::t_cf92d30731214c 58,185
+  s_54cd30e61ddd92::t_925eea222cc328 1-16,18-57,59-121,125-184,186-243
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "082a87bdd7969efd1ac7bce2791e4841ca989fd8",
+  "prompts": {},
+  "sessions": {
+    "s_54cd30e61ddd92": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef168-ac9f-79c1-8813-8e141f4f8167",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
