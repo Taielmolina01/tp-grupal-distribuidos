@@ -35,7 +35,7 @@ services:
       - MOM_PORT=5672
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - QUERY_EOFS_EXPECTED=1:1,2:2,3:2,4:2,5:1
+      - QUERY_EOFS_EXPECTED=1:2,2:2,3:2,4:2,5:1
 
   client_0:
     build:
@@ -55,7 +55,6 @@ services:
     volumes:
       - ./input:/input
       - ./output:/output
-
 
   # Query 1
 
@@ -163,7 +162,6 @@ services:
         max-size: "50m"
         max-file: "3"
 
-
   # Query 2
 
   q2_reducer_0:
@@ -176,15 +174,16 @@ services:
         condition: service_healthy
     environment:
       - ID=0
-      - REDUCER_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_EXCHANGE=Q1234_filtered_exchange
-      - INPUT_QUEUE=Q2_reducer_in_q_0
-      - INPUT_ROUTING_KEYS=Q2_filtered_shard-0
-      - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
       - QUERY_ID=2
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
+      - INPUT_MIDDLEWARE_PREFIX=Q2_filtered
+      - EXPECTED_EOFS=2
+      - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
+      - PERSIST_PATH=/var/bkp/q2_reducer_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -201,15 +200,16 @@ services:
         condition: service_healthy
     environment:
       - ID=1
-      - REDUCER_AMOUNT=2
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_EXCHANGE=Q1234_filtered_exchange
-      - INPUT_QUEUE=Q2_reducer_in_q_1
-      - INPUT_ROUTING_KEYS=Q2_filtered_shard-1
-      - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
       - QUERY_ID=2
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
+      - INPUT_MIDDLEWARE_PREFIX=Q2_filtered
+      - EXPECTED_EOFS=2
+      - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
+      - PERSIST_PATH=/var/bkp/q2_reducer_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -264,12 +264,13 @@ services:
       - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_QUEUE=Q2_reduced_transfers_0
       - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_0
-      - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2
-      - JOIN_AMOUNT=2
       - ID=0
+      - PERSIST_PATH=/var/bkp/q2_join_0
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
@@ -290,18 +291,18 @@ services:
       - JOIN_TYPE=transfer_account_by_bank
       - LEFT_INPUT_QUEUE=Q2_reduced_transfers_1
       - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_1
-      - OUTPUT_EXCHANGE=results_queue
       - OUTPUT_QUEUE=results_queue
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2
-      - JOIN_AMOUNT=2
       - ID=1
+      - PERSIST_PATH=/var/bkp/q2_join_1
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "3"
-
 
   # Query 4
 
@@ -641,7 +642,6 @@ services:
         max-size: "50m"
         max-file: "3"
 
-
   # Query 3
 
   q3_filter_range_0:
@@ -850,7 +850,6 @@ services:
       - OUTPUT_QUEUE=results_queue
       - QUERY_ID=3
 
-
   # Query 5
 
   q5_filter_date_and_payment_0:
@@ -982,7 +981,6 @@ services:
       - REDUCER_TYPE=COUNT
       - QUERY_ID=5
 
-
   # Tolerancia a fallas
 
   watchdog_0:
@@ -1062,4 +1060,3 @@ services:
       options:
         max-size: "50m"
         max-file: "3"
-
