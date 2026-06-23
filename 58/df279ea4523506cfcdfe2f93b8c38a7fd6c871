@@ -1,0 +1,38 @@
+src/internal/common/middleware/newmiddleware/base.go
+  s_54cd30e61ddd92::t_1d16730c5bbe78 206-215,219-231
+src/internal/common/middleware/newmiddleware/sharded_middleware.go
+  s_54cd30e61ddd92::t_3f7e3099b44863 20,39,79
+src/internal/common/middleware/exchange_middleware.go
+  s_54cd30e61ddd92::t_5882c9724652a9 68,85,141,251-253
+src/internal/common/middleware/queue_middleware.go
+  s_54cd30e61ddd92::t_d0b73df37e5810 59,173-175
+src/internal/common/middleware/newmiddleware/fanout_middleware.go
+  s_54cd30e61ddd92::t_06931152e65bf6 20,39,73
+src/internal/common/middleware/newmiddleware/queue_middleware.go
+  s_a8ef38c628e219::t_242352df07bc7b 47
+  s_54cd30e61ddd92::t_59efb494278300 19,46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.10",
+  "base_commit_sha": "58df279ea4523506cfcdfe2f93b8c38a7fd6c871",
+  "prompts": {},
+  "sessions": {
+    "s_54cd30e61ddd92": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef168-ac9f-79c1-8813-8e141f4f8167",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    },
+    "s_a8ef38c628e219": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "019ef168-ac9f-79c1-8813-8e141f4f8167",
+        "model": "unknown"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
