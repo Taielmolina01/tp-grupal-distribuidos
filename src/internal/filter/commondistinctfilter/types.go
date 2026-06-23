@@ -1,20 +1,35 @@
 package commondistinctfilter
 
 import (
+	"time"
+
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/outputtracker"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
 )
 
-type DistinctFilter[T comparable, S comparable] struct {
-	id             uint32
-	inputQueue     middleware.Middleware
-	outputQueues   []middleware.Middleware
-	alreadySeen    map[int]map[S]bool
-	outputTrackers map[int]*outputtracker.OutputTracker
-	compareFunc    func(T, T) bool
-	keyFunc        func(T) S
-	shardCriteria  func(T) string
-	codec          wire.Codec[T]
-	queryId        uint8
+type clientState[T any] struct {
+	tracker *sendertracker.SenderTracker
+	seen    map[string]T
+}
+
+type DistinctFilter[T comparable] struct {
+	id           uint32
+	queryId      uint8
+	expectedEOFs int
+
+	inputMiddleware newmiddleware.Middleware
+	outputQueues    []middleware.Middleware
+
+	keyFunc func(T) string
+	codec   wire.Codec[T]
+
+	states     statemap.StateMap[clientState[T]]
+	checkpoint *checkpoint.Checkpoint[clientState[T]]
+
+	persistBatchSize     int
+	persistFlushInterval time.Duration
 }

@@ -339,8 +339,11 @@ func writeFilterBankIdAlreadySeen(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - ID=%d\n", i)
 		fmt.Fprintf(b, "      - INPUT_QUEUE=Q2_accounts_%d\n", i)
 		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterBankIdAlreadySeen)
 		b.WriteString("      - QUERY_ID=2\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q2_filter_bank_distinct_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }

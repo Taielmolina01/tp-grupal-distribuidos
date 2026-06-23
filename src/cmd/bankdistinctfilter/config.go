@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"tp-grupal-distribuidos/internal/common/filter"
 )
@@ -12,7 +13,7 @@ import (
 func loadConfig() (filter.FilterConfig, error) {
 	id, err := strconv.Atoi(os.Getenv("ID"))
 	if err != nil {
-		return filter.FilterConfig{}, err
+		return filter.FilterConfig{}, errors.New("ID environment variable is required and must be a number")
 	}
 
 	momPort, err := strconv.Atoi(os.Getenv("MOM_PORT"))
@@ -26,52 +27,44 @@ func loadConfig() (filter.FilterConfig, error) {
 	}
 
 	inputQueue := os.Getenv("INPUT_QUEUE")
-
-	outputQueue := os.Getenv("OUTPUT_QUEUE")
-
-	filterAmount := os.Getenv("FILTER_AMOUNT")
-	if filterAmount == "" {
-		return filter.FilterConfig{}, errors.New("FILTER_AMOUNT environment variable is required")
+	if inputQueue == "" {
+		return filter.FilterConfig{}, errors.New("INPUT_QUEUE environment variable is required")
 	}
 
-	filterAmountInt, err := strconv.Atoi(filterAmount)
-	if err != nil {
-		return filter.FilterConfig{}, errors.New("FILTER_AMOUNT environment variable must be a number")
+	outputQueues := os.Getenv("OUTPUT_QUEUES")
+	if outputQueues == "" {
+		return filter.FilterConfig{}, errors.New("OUTPUT_QUEUES environment variable is required")
 	}
 
-	queryIdStr := os.Getenv("QUERY_ID")
-	if queryIdStr == "" {
-		return filter.FilterConfig{}, errors.New("QUERY_ID environment variable is required")
-	}
-	queryId, err := strconv.Atoi(queryIdStr)
+	queryId, err := strconv.Atoi(os.Getenv("QUERY_ID"))
 	if err != nil {
 		return filter.FilterConfig{}, errors.New("QUERY_ID environment variable is required and must be a number")
 	}
 
-	config := filter.FilterConfig{
-		Id:           id,
-		MomHost:      momHost,
-		MomPort:      momPort,
-		InputQueue:   inputQueue,
-		OutputQueue:  outputQueue,
-		FilterAmount: filterAmountInt,
-		QueryID:      uint8(queryId),
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return filter.FilterConfig{}, errors.New("PERSIST_PATH environment variable is required")
 	}
 
-	if err := loadBankDistinctVenv(&config); err != nil {
-		return filter.FilterConfig{}, err
+	persistBatchSize, err := strconv.Atoi(os.Getenv("PERSIST_BATCH_SIZE"))
+	if err != nil {
+		return filter.FilterConfig{}, errors.New("PERSIST_BATCH_SIZE environment variable is required and must be a number")
 	}
 
-	return config, nil
-}
-
-// Helpers
-
-func loadBankDistinctVenv(config *filter.FilterConfig) error {
-	outputQueues := os.Getenv("OUTPUT_QUEUES")
-	if outputQueues == "" {
-		return errors.New("OUTPUT_QUEUES environment variable is required")
+	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
+	if err != nil {
+		return filter.FilterConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
 	}
-	config.OutputQueues = strings.Split(outputQueues, ",")
-	return nil
+
+	return filter.FilterConfig{
+		Id:                   id,
+		MomHost:              momHost,
+		MomPort:              momPort,
+		InputQueue:           inputQueue,
+		OutputQueues:         strings.Split(outputQueues, ","),
+		QueryID:              uint8(queryId),
+		PersistPath:          persistPath,
+		PersistBatchSize:     persistBatchSize,
+		PersistFlushInterval: persistFlushInterval,
+	}, nil
 }
