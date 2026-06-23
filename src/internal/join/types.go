@@ -2,9 +2,15 @@ package join
 
 import (
 	"sync"
+	"time"
 
-	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
+	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
+	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
 type JoinType string
@@ -14,28 +20,46 @@ const (
 )
 
 type JoinConfig struct {
-	Id                int
-	Amount            int
-	MomHost           string
-	MomPort           int
+	Id      int
+	MomHost string
+	MomPort int
+	QueryID uint8
+
 	LeftInputQueue    string
 	RightInputQueue   string
 	OutputQueue       string
-	QueryID           uint8
 	LeftEofsExpected  int
 	RightEofsExpected int
+
+	PersistPath          string
+	PersistBatchSize     int
+	PersistFlushInterval time.Duration
 }
 
-type Join[L, R, O any] struct {
-	output      middleware.Middleware
-	outputCodec wire.Codec[O]
-	leftBuffer  map[int]map[string]L //{clientID : {key : data}}
-	rightBuffer map[int]map[string]R //{clientID : {key : data}}
-	pending     map[int][]O
-	leftKey     func(L) string
-	rightKey    func(R) string
-	combine     func(L, R) O
-	leftCombine func(L, L) L
-	queryID     uint8
-	mu          sync.Mutex
+type clientState struct {
+	leftBuffer   map[string]transfer.TransferForQ2
+	rightBuffer  map[string]account.Account
+	leftTracker  *sendertracker.SenderTracker
+	rightTracker *sendertracker.SenderTracker
+	emitted      bool
+}
+
+type Join struct {
+	id      int
+	queryID uint8
+
+	leftInput  newmiddleware.Middleware
+	rightInput newmiddleware.Middleware
+	output     middleware.Middleware
+
+	leftEofsExpected  int
+	rightEofsExpected int
+
+	states     statemap.StateMap[clientState]
+	checkpoint *checkpoint.Checkpoint[clientState]
+
+	persistBatchSize     int
+	persistFlushInterval time.Duration
+
+	mu sync.Mutex
 }

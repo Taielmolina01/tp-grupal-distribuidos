@@ -1,197 +1,183 @@
 package join
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
-	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
+	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
+	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-type TwoInputAdapter[L, R, O any] struct {
-	id                int
-	joinAmount        int
-	queryID           uint8
-	join              *Join[L, R, O]
-	leftInput         middleware.Middleware
-	rightInput        middleware.Middleware
-	output            middleware.Middleware
-	leftCodec         wire.Codec[L]
-	rightCodec        wire.Codec[R]
-	leftEofCount      map[int]int
-	rightEofCount     map[int]int
-	leftEofsExpected  int
-	rightEofsExpected int
-	fired             map[int]bool
-	lock              sync.Mutex
-}
+func NewJoin(config JoinConfig) (worker.Worker, error) {
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	legacyConn := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-func newTwoInputJoin[L, R, O any](
-	config JoinConfig,
-	leftKey func(L) string,
-	rightKey func(R) string,
-	combine func(L, R) O,
-	leftCombine func(L, L) L,
-	leftCodec wire.Codec[L],
-	rightCodec wire.Codec[R],
-	outputCodec wire.Codec[O],
-) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-
-	leftInput, err := middleware.CreateQueueMiddleware(config.LeftInputQueue, connSettings)
-	if err != nil {
-		return nil, err
-	}
-
-	rightInput, err := middleware.CreateQueueMiddleware(config.RightInputQueue, connSettings)
-	if err != nil {
-		if err := leftInput.Close(); err != nil {
-			slog.Error("while closing left input", "err", err)
-		}
-		return nil, err
-	}
-
-	output, err := middleware.CreateQueueMiddleware(config.OutputQueue, connSettings)
-	if err != nil {
-		if err := leftInput.Close(); err != nil {
-			slog.Error("while closing left input", "err", err)
-		}
-		if err := rightInput.Close(); err != nil {
-			slog.Error("while closing right input", "err", err)
-		}
-		return nil, err
-	}
-
-	slog.Info("join started",
-		"left_queue", config.LeftInputQueue,
-		"right_queue", config.RightInputQueue,
-		"output_queue", config.OutputQueue,
+	var (
+		leftInput  newmiddleware.Middleware
+		rightInput newmiddleware.Middleware
+		output     middleware.Middleware
+		err        error
 	)
 
-	leftEofs := config.LeftEofsExpected
-	if leftEofs <= 0 {
-		leftEofs = 1
-	}
-	rightEofs := config.RightEofsExpected
-	if rightEofs <= 0 {
-		rightEofs = 1
-	}
-
-	adapter := &TwoInputAdapter[L, R, O]{
-		id:                config.Id,
-		joinAmount:        config.Amount,
-		queryID:           config.QueryID,
-		join:              newJoin(output, outputCodec, leftKey, rightKey, combine, leftCombine, config.QueryID),
-		leftInput:         leftInput,
-		rightInput:        rightInput,
-		output:            output,
-		leftCodec:         leftCodec,
-		rightCodec:        rightCodec,
-		leftEofCount:      map[int]int{},
-		rightEofCount:     map[int]int{},
-		leftEofsExpected:  leftEofs,
-		rightEofsExpected: rightEofs,
-		fired:             map[int]bool{},
-	}
-
-	return adapter, nil
-}
-
-func (a *TwoInputAdapter[L, R, O]) Run() {
-	done := make(chan struct{})
-	go func() {
-		if err := a.leftInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-			defer ack()
-			input, err := batch.Read(msg.Body, a.leftCodec)
-			if err != nil {
-				slog.Error("while deserializing left batch", "err", err)
-				return
+	defer func() {
+		if err != nil {
+			for _, m := range []interface{ Close() error }{leftInput, rightInput, output} {
+				if m != nil {
+					if closeErr := m.Close(); closeErr != nil {
+						slog.Error("While closing middleware", "err", closeErr)
+					}
+				}
 			}
-			if input.EOF {
-				a.lock.Lock()
-				a.leftEofCount[input.ClientID]++
-				a.lock.Unlock()
-				a.handleEOF(input.ClientID)
-				return
-			}
-			for i := range input.Records {
-				a.join.HandleLeft(input.ClientID, input.Records[i])
-			}
-		}); err != nil {
-			slog.Error("while consuming left input", "err", err)
 		}
-		close(done)
 	}()
 
-	if err := a.rightInput.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-		defer ack()
-		input, err := batch.Read(msg.Body, a.rightCodec)
-		if err != nil {
-			slog.Error("while deserializing right batch", "err", err)
-			return
+	leftInput, err = newmiddleware.NewQueueMiddleware(connSettings, config.LeftInputQueue)
+	if err != nil {
+		return nil, fmt.Errorf("creating left input middleware: %w", err)
+	}
+
+	rightInput, err = newmiddleware.NewQueueMiddleware(connSettings, config.RightInputQueue)
+	if err != nil {
+		return nil, fmt.Errorf("creating right input middleware: %w", err)
+	}
+
+	output, err = middleware.CreateQueueMiddleware(config.OutputQueue, legacyConn)
+	if err != nil {
+		return nil, fmt.Errorf("creating output middleware: %w", err)
+	}
+
+	ckpt, err := checkpoint.New(config.PersistPath, marshalClientState, unmarshalClientState)
+	if err != nil {
+		return nil, fmt.Errorf("creating checkpoint: %w", err)
+	}
+
+	recovered, err := ckpt.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading checkpoint: %w", err)
+	}
+
+	states := statemap.New(func() *clientState {
+		return &clientState{
+			leftBuffer:   map[string]transfer.TransferForQ2{},
+			rightBuffer:  map[string]account.Account{},
+			leftTracker:  sendertracker.New(10_000_000),
+			rightTracker: sendertracker.New(10_000_000),
 		}
-		if input.EOF {
-			a.lock.Lock()
-			a.rightEofCount[input.ClientID]++
-			a.lock.Unlock()
-			a.handleEOF(input.ClientID)
-			return
-		}
-		for i := range input.Records {
-			a.join.HandleRight(input.ClientID, input.Records[i])
-		}
+	})
+	for clientID, state := range recovered {
+		states.Set(clientID, state)
+		slog.Info("recovered client state", "clientID", clientID)
+	}
+
+	return &Join{
+		id:                   config.Id,
+		queryID:              config.QueryID,
+		leftInput:            leftInput,
+		rightInput:           rightInput,
+		output:               output,
+		leftEofsExpected:     config.LeftEofsExpected,
+		rightEofsExpected:    config.RightEofsExpected,
+		states:               states,
+		checkpoint:           ckpt,
+		persistBatchSize:     config.PersistBatchSize,
+		persistFlushInterval: config.PersistFlushInterval,
+	}, nil
+}
+
+func (j *Join) Run() {
+	defer j.close()
+	go j.consumeRight()
+
+	if err := j.leftInput.StartConsumingBatch(j.persistBatchSize, j.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		j.handleLeftBatch(msgs, ack, nack)
 	}); err != nil {
-		slog.Error("while consuming right input", "err", err)
-	}
-
-	<-done
-}
-
-func (a *TwoInputAdapter[L, R, O]) handleEOF(clientID int) {
-	a.lock.Lock()
-	if a.fired[clientID] {
-		a.lock.Unlock()
-		return
-	}
-	if a.leftEofCount[clientID] < a.leftEofsExpected || a.rightEofCount[clientID] < a.rightEofsExpected {
-		a.lock.Unlock()
-		return
-	}
-	a.fired[clientID] = true
-	delete(a.leftEofCount, clientID)
-	delete(a.rightEofCount, clientID)
-	a.lock.Unlock()
-
-	a.join.HandleQueryEOF(clientID)
-
-	eofBody := batch.WriteEOF(clientID, a.queryID, 0, 0, 0)
-	if err := a.output.Send(middleware.Message{Body: eofBody}); err != nil {
-		slog.Error("while sending join EOF downstream", "err", err)
+		slog.Error("While consuming from left input", "err", err)
 	}
 }
 
-func (a *TwoInputAdapter[L, R, O]) HandleSignals() {
+func (j *Join) consumeRight() {
+	if err := j.rightInput.StartConsumingBatch(j.persistBatchSize, j.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		j.handleRightBatch(msgs, ack, nack)
+	}); err != nil {
+		slog.Error("While consuming from right input", "err", err)
+	}
+}
+
+func (j *Join) HandleSignals() {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	<-signals
-	if err := a.leftInput.StopConsuming(); err != nil {
-		slog.Error("while stopping left input", "err", err)
+	slog.Info("SIGTERM signal received, stopping consumers")
+	j.stopConsuming()
+}
+
+func (j *Join) stopConsuming() {
+	if err := j.leftInput.StopConsuming(); err != nil {
+		slog.Error("While stopping left input consumer", "err", err)
 	}
-	if err := a.rightInput.StopConsuming(); err != nil {
-		slog.Error("while stopping right input", "err", err)
+	if err := j.rightInput.StopConsuming(); err != nil {
+		slog.Error("While stopping right input consumer", "err", err)
 	}
-	if err := a.leftInput.Close(); err != nil {
-		slog.Error("while closing left input", "err", err)
+}
+
+func (j *Join) close() {
+	if err := j.leftInput.Close(); err != nil {
+		slog.Error("While closing left input middleware", "err", err)
 	}
-	if err := a.rightInput.Close(); err != nil {
-		slog.Error("while closing right input", "err", err)
+	if err := j.rightInput.Close(); err != nil {
+		slog.Error("While closing right input middleware", "err", err)
 	}
-	if err := a.join.output.Close(); err != nil {
-		slog.Error("while closing output", "err", err)
+	if err := j.output.Close(); err != nil {
+		slog.Error("While closing output middleware", "err", err)
 	}
+}
+
+func (j *Join) handleLeftBatch(msgs []newmiddleware.Message, ack, nack func()) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.handleBatch(msgs, ack, nack, true)
+}
+
+func (j *Join) handleRightBatch(msgs []newmiddleware.Message, ack, nack func()) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.handleBatch(msgs, ack, nack, false)
+}
+
+func (j *Join) handleBatch(msgs []newmiddleware.Message, ack, nack func(), isLeft bool) {
+	modified := make(map[int]*clientState)
+
+	for _, msg := range msgs {
+		clientID, ok := j.processMessage(msg, isLeft)
+		if !ok {
+			continue
+		}
+		modified[clientID] = j.states.For(clientID)
+	}
+
+	for clientID, state := range modified {
+		if err := j.maybeEmit(clientID, state); err != nil {
+			slog.Error("emit failed, stopping", "err", err)
+			nack()
+			j.stopConsuming()
+			return
+		}
+		if err := j.checkpoint.SaveClient(clientID, state); err != nil {
+			slog.Error("persist failed, stopping", "err", err)
+			nack()
+			j.stopConsuming()
+			return
+		}
+	}
+
+	ack()
 }

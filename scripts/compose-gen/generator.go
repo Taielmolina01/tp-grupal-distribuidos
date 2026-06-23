@@ -29,7 +29,6 @@ func generateCompose(cfg *Config) string {
 	writeJoinQ2(&b, cfg)
 
 	b.WriteString("\n  # Query 4\n\n")
-	writeSeqStoreQ4FilterSplitter(&b)
 	writeFilterAndSplitterQ4(&b, cfg)
 	writeJoinAccountsQ4(&b, cfg)
 	writeAcumAccountsQ4(&b, cfg)
@@ -309,15 +308,16 @@ func writeReducerQ2(b *strings.Builder, cfg *Config) {
 		rabbitmqDepends(b)
 		b.WriteString("    environment:\n")
 		fmt.Fprintf(b, "      - ID=%d\n", i)
-		fmt.Fprintf(b, "      - REDUCER_AMOUNT=%d\n", cfg.ReducerQ2)
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
-		b.WriteString("      - INPUT_EXCHANGE=Q1234_filtered_exchange\n")
-		fmt.Fprintf(b, "      - INPUT_QUEUE=Q2_reducer_in_q_%d\n", i)
-		fmt.Fprintf(b, "      - INPUT_ROUTING_KEYS=Q2_filtered_shard-%d\n", i)
-		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
 		b.WriteString("      - QUERY_ID=2\n")
 		b.WriteString("      - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK\n")
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q2_filtered\n")
+		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterCurrency)
+		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q2_reducer_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -339,8 +339,11 @@ func writeFilterBankIdAlreadySeen(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - ID=%d\n", i)
 		fmt.Fprintf(b, "      - INPUT_QUEUE=Q2_accounts_%d\n", i)
 		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
-		fmt.Fprintf(b, "      - FILTER_AMOUNT=%d\n", cfg.FilterBankIdAlreadySeen)
 		b.WriteString("      - QUERY_ID=2\n")
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q2_filter_bank_distinct_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }
@@ -359,31 +362,16 @@ func writeJoinQ2(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - JOIN_TYPE=transfer_account_by_bank\n")
 		fmt.Fprintf(b, "      - LEFT_INPUT_QUEUE=Q2_reduced_transfers_%d\n", i)
 		fmt.Fprintf(b, "      - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_%d\n", i)
-		b.WriteString("      - OUTPUT_EXCHANGE=results_queue\n")
 		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
 		fmt.Fprintf(b, "      - LEFT_EOFS_EXPECTED=%d\n", cfg.ReducerQ2)
 		fmt.Fprintf(b, "      - RIGHT_EOFS_EXPECTED=%d\n", cfg.FilterBankIdAlreadySeen)
-		fmt.Fprintf(b, "      - JOIN_AMOUNT=%d\n", cfg.JoinQ2)
 		fmt.Fprintf(b, "      - ID=%d\n", i)
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q2_join_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
-}
-
-func writeSeqStoreQ4FilterSplitter(b *strings.Builder) {
-	b.WriteString("  q4_filter_splitter_seqstore:\n")
-	b.WriteString("    build:\n")
-	b.WriteString("      context: ./src/\n")
-	b.WriteString("      dockerfile: cmd/seqstorenode/Dockerfile\n")
-	b.WriteString("    container_name: q4_filter_splitter_seqstore\n")
-	rabbitmqDepends(b)
-	b.WriteString("    environment:\n")
-	b.WriteString("      - MOM_HOST=rabbitmq\n")
-	b.WriteString("      - MOM_PORT=5672\n")
-	b.WriteString("      - PERSIST_PATH=/var/bkp/Q4_filter_splitter_seqstore.bin\n")
-	b.WriteString("      - REQUEST_QUEUE=Q4_filter_splitter_seqstore\n")
-	jsonFileLogging(b)
-	b.WriteString("\n")
 }
 
 func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
@@ -559,7 +547,6 @@ func writeAggregateQ3(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - MOM_PORT=5672\n")
 		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q3_sum_aggregate\n")
 		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q3_avg_output\n")
-		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.AverageFilterQ3)
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.SumQ3)
 		writeMaxBatchConfig(b, cfg)
 		b.WriteString("      - QUERY_ID=3\n")
@@ -588,7 +575,12 @@ func writeAverageFilterQ3(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterRangeQ3)
 		fmt.Fprintf(b, "      - AVG_EXPECTED_EOFS=%d\n", cfg.AggregateQ3)
 		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
+		writeMaxBatchConfig(b, cfg)
+		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_average_filter_%d\n", i)
+		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		b.WriteString("      - QUERY_ID=3\n")
+		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
 }

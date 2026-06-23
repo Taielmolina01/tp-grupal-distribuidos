@@ -56,7 +56,7 @@ func CreateQueueMiddlewareHelper(
 
 	q, err := ch.QueueDeclare(
 		queueName, // name
-		false,     // durability
+		true,      // durability
 		false,     // delete when unused
 		false,     // exclusive
 		false,     // no-wait
@@ -170,8 +170,9 @@ func (q *queueMiddleware) Send(msg Message) (err error) {
 		true,
 		false,
 		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        msg.Body,
+			DeliveryMode: amqp.Persistent,
+			ContentType:  "application/octet-stream",
+			Body:         msg.Body,
 		})
 
 	if err != nil {
