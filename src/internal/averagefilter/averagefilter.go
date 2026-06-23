@@ -5,14 +5,19 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 
+	"tp-grupal-distribuidos/internal/common/appendlog"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/q3filter"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
+	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -106,6 +111,7 @@ func NewAverageFilter(config AverageFilterConfig) (worker.Worker, error) {
 		checkpoint:               ckpt,
 		persistBatchSize:         config.PersistBatchSize,
 		persistFlushInterval:     config.PersistFlushInterval,
+		transferLogDir:           filepath.Join(config.PersistPath, "transfers"),
 	}, nil
 }
 
@@ -185,7 +191,7 @@ func (af *AverageFilter) handleTransferBatch(msgs []newmiddleware.Message, ack, 
 			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
 		} else {
 			tracker.RegisterBatch(int(input.SenderID))
-			if err := af.processTransferBatch(input, state); err != nil {
+			if err := af.processTransferBatch(input.ClientID, input.SenderID, input.Seq, input.Records); err != nil {
 				slog.Error("process batch failed", "err", err)
 				nack()
 				af.stopConsuming()
@@ -196,14 +202,15 @@ func (af *AverageFilter) handleTransferBatch(msgs []newmiddleware.Message, ack, 
 		tracker.Claim(int(input.SenderID), input.Seq)
 		modified[input.ClientID] = state
 
-		if tracker.IsComplete(af.expectedTransfersEofs) {
-			//TODO: Try finalize (verificando que el otro tb haya terminado)
-			if state.avgsTracker.IsComplete(af.avgsExpectedEofs) {
-				if err := af.finalize(state); err != nil {
-
-				}
-				completed[clientID] = struct{}{}
-			}
+		done, err := af.tryFinalize(clientID, state)
+		if err != nil {
+			slog.Error("finalize failed", "clientID", clientID, "err", err)
+			nack()
+			af.stopConsuming()
+			return
+		}
+		if done {
+			completed[clientID] = struct{}{}
 		}
 	}
 
@@ -224,10 +231,27 @@ func (af *AverageFilter) handleTransferBatch(msgs []newmiddleware.Message, ack, 
 	ack()
 }
 
-func (af *AverageFilter) processTransferBatch(input batch.Msg[transfer.TransferForQ3Filter], state *clientState) error {
-	//TODO: Bajar a disco append olny
-	//Para esto armo un array de pending x cliente y lo tengo en su status (pero sin persistirlo). El persist definirlo con lucho
-	return nil
+func (af *AverageFilter) processTransferBatch(
+	clientID int,
+	senderID uint8,
+	seq uint64,
+	records []transfer.TransferForQ3Filter,
+) error {
+	log, err := appendlog.Open(af.transferLogPath(clientID), q3filter.Codec)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := log.Close(); err != nil {
+			slog.Error("While closing transfer append log", "clientID", clientID, "err", err)
+		}
+	}()
+
+	return log.Append(senderID, seq, records)
+}
+
+func (af *AverageFilter) transferLogPath(clientID int) string {
+	return filepath.Join(af.transferLogDir, fmt.Sprintf("%d.log", clientID))
 }
 
 func (af *AverageFilter) handleAvgBatch(msg newmiddleware.Message, ack, nack func()) {
@@ -265,29 +289,25 @@ func (af *AverageFilter) handleAvgBatch(msg newmiddleware.Message, ack, nack fun
 
 	tracker.Claim(int(input.SenderID), input.Seq)
 
-	if tracker.IsComplete(af.avgsExpectedEofs) {
-		//TODO: Try finalize (verificando que el otro tb haya terminado)
-		if state.transfersTracker.IsComplete(af.expectedTransfersEofs) {
-			if err := af.finalize(state); err != nil {
-
-			}
-		}
-
+	done, err := af.tryFinalize(clientID, state)
+	if err != nil {
+		slog.Error("finalize failed", "clientID", clientID, "err", err)
+		nack()
+		af.stopConsuming()
+		return
 	}
-
-	// for clientID, state := range modified {
-	// 	if _, done := completed[clientID]; done {
-	// 		af.states.Delete(clientID)
-	// 		af.checkpoint.DeleteClient(clientID)
-	// 		continue
-	// 	}
-	// 	if err := af.checkpoint.SaveClient(clientID, state); err != nil {
-	// 		slog.Error("persist failed, stopping", "err", err)
-	// 		nack()
-	// 		af.stopConsuming()
-	// 		return
-	// 	}
-	// }
+	if done {
+		af.states.Delete(clientID)
+		af.checkpoint.DeleteClient(clientID)
+		ack()
+		return
+	}
+	if err := af.checkpoint.SaveClient(clientID, state); err != nil {
+		slog.Error("persist failed, stopping", "err", err)
+		nack()
+		af.stopConsuming()
+		return
+	}
 
 	ack()
 }
@@ -299,37 +319,97 @@ func (af *AverageFilter) processAvgBatch(input batch.Msg[transfer.AvgByMethod], 
 	return nil
 }
 
-func (af *AverageFilter) finalize(state *clientState) error {
-	// ot := outputtracker.New()
-	// builder := batch.NewBuilder(af.maxBatchSize, af.maxBatchBytes, records.Query3ResultCodec)
+func (af *AverageFilter) tryFinalize(clientID int, state *clientState) (bool, error) {
+	if !state.transfersTracker.IsComplete(af.expectedTransfersEofs) ||
+		!state.avgsTracker.IsComplete(af.avgsExpectedEofs) {
+		return false, nil
+	}
+	if err := af.finalize(clientID, state); err != nil {
+		return false, err
+	}
+	return true, nil
+}
 
-	// TODO: Abrir el archivo del cliente y empezar a iterar
-	// Esto es el ejemplo del filteraccountseen
-	// for acc := range state.seenAccounts {
-	// 	result := queryresult.Query4Result{
-	// 		BankId:        acc.BankID,
-	// 		AccountNumber: acc.AccountNumber,
-	// 	}
-	// 	if !builder.TryAdd(&result) {
-	// 		seq := ot.RegisterBatch("")
-	// 		body := builder.Flush(clientID, uint8(af.queryID), uint8(af.id), seq)
-	// 		if err := af.outputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
-	// 			return err
-	// 		}
-	// 		builder.TryAdd(&result)
-	// 	}
-	// }
+func (af *AverageFilter) finalize(clientID int, state *clientState) error {
+	log, err := appendlog.Open(af.transferLogPath(clientID), q3filter.Codec)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := log.Close(); err != nil {
+			slog.Error("While closing transfer append log", "clientID", clientID, "err", err)
+		}
+	}()
 
-	// if !builder.IsEmpty() {
-	// 	seq := ot.RegisterBatch("")
-	// 	body := builder.Flush(clientID, uint8(af.queryID), uint8(af.id), seq)
-	// 	if err := af.outputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
-	// 		return err
-	// 	}
-	// }
+	replayTracker := sendertracker.New(10_000_000)
+	ot := outputtracker.New()
+	if err := log.ReadUnique(replayTracker, func(entry appendlog.Entry[transfer.TransferForQ3Filter]) error {
+		if err := af.emitTransferResults(clientID, state, ot, entry.Records); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
 
-	// total := ot.CountFor("")
-	// eofBody := batch.WriteEOF(clientID, uint8(af.queryID), uint8(af.id), total+1, uint32(total))
-	// return f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody})
+	total := ot.CountFor("")
+	eofBody := batch.WriteEOF(clientID, uint8(af.queryID), uint8(af.id), total+1, uint32(total))
+	if err := af.outputQueue.Send(newmiddleware.Message{Body: eofBody}); err != nil {
+		return err
+	}
+
+	if err := os.Remove(af.transferLogPath(clientID)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing transfer log: %w", err)
+	}
 	return nil
+}
+
+func (af *AverageFilter) emitTransferResults(
+	clientID int,
+	state *clientState,
+	ot *outputtracker.OutputTracker,
+	transfers []transfer.TransferForQ3Filter,
+) error {
+	builder := batch.NewBuilder(af.maxBatchSize, af.maxBatchBytes, records.Query3ResultCodec)
+
+	for _, transfer := range transfers {
+		result, ok := af.resultForTransfer(state, transfer)
+		if !ok {
+			continue
+		}
+		if !builder.TryAdd(&result) {
+			if err := af.flushResultBatch(clientID, builder, ot); err != nil {
+				return err
+			}
+			builder.TryAdd(&result)
+		}
+	}
+
+	if !builder.IsEmpty() {
+		return af.flushResultBatch(clientID, builder, ot)
+	}
+	return nil
+}
+
+func (af *AverageFilter) resultForTransfer(state *clientState, t transfer.TransferForQ3Filter) (queryresult.Query3Result, bool) {
+	avg, ok := state.avgs[t.PaymentFormat]
+	if !ok || t.AmountPaid >= avg/avgFractionThreshold {
+		return queryresult.Query3Result{}, false
+	}
+	return queryresult.Query3Result{
+		FromBank:      t.FromBank,
+		FromAccount:   t.FromBankAccount,
+		PaymentFormat: t.PaymentFormat,
+		Amount:        t.AmountPaid,
+	}, true
+}
+
+func (af *AverageFilter) flushResultBatch(
+	clientID int,
+	builder *batch.Builder[queryresult.Query3Result],
+	ot *outputtracker.OutputTracker,
+) error {
+	seq := ot.RegisterBatch("")
+	body := builder.Flush(clientID, uint8(af.queryID), uint8(af.id), seq)
+	return af.outputQueue.Send(newmiddleware.Message{Body: body})
 }

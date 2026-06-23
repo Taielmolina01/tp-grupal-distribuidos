@@ -52,7 +52,7 @@ type AverageFilter struct {
 
 	persistBatchSize     int
 	persistFlushInterval time.Duration
-	bufferDir            string
+	transferLogDir       string
 
 	lock sync.Mutex
 }
