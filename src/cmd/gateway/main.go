@@ -94,7 +94,7 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		sessionStorePath = "/data/gateway_sessions.bin"
 	}
 
-	var seqCheckpointEvery uint64 = 1
+	var seqCheckpointEvery uint64 = 100
 	if v := os.Getenv("SEQ_CHECKPOINT_EVERY"); v != "" {
 		parsed, err := strconv.ParseUint(v, 10, 64)
 		if err != nil || parsed == 0 {

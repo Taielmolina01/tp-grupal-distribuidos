@@ -2,6 +2,9 @@ package commondistinctfilter
 
 import (
 	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
@@ -51,6 +54,8 @@ func NewDistinctFilter[T comparable, S comparable](
 }
 
 func (distinctfilter *DistinctFilter[T, S]) Run() {
+	defer distinctfilter.close()
+
 	slog.Info("Starting filter consumers", "filter_id", distinctfilter.id)
 	if err := distinctfilter.inputQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		distinctfilter.handleMessage(msg, ack, nack)
@@ -109,7 +114,20 @@ func (distinctfilter *DistinctFilter[T, S]) handleMessage(msg middleware.Message
 }
 
 func (distinctfilter *DistinctFilter[T, S]) HandleSignals() {
-
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	<-signals
+	slog.Info("SIGTERM signal received")
+	distinctfilter.inputQueue.StopConsuming()
 }
 
-// Handler para la working queue que comparten las distintas intancias de sum.
+func (distinctfilter *DistinctFilter[T, S]) close() {
+	if err := distinctfilter.inputQueue.Close(); err != nil {
+		slog.Error("While closing input queue", "err", err)
+	}
+	for _, outputQueue := range distinctfilter.outputQueues {
+		if err := outputQueue.Close(); err != nil {
+			slog.Error("While closing output queue", "err", err)
+		}
+	}
+}

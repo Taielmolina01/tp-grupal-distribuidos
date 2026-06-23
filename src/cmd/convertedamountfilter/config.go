@@ -24,7 +24,10 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	inputQueue := os.Getenv("INPUT_QUEUE")
+	inputMiddlewarePrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
+	if inputMiddlewarePrefix == "" {
+		return filter.FilterConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
+	}
 
 	outputQueue := os.Getenv("OUTPUT_QUEUE")
 
@@ -48,13 +51,13 @@ func loadConfig() (filter.FilterConfig, error) {
 	}
 
 	config := filter.FilterConfig{
-		Id:           id,
-		MomHost:      momHost,
-		MomPort:      momPort,
-		InputQueue:   inputQueue,
-		OutputQueue:  outputQueue,
-		FilterAmount: filterAmountInt,
-		QueryID:      uint8(queryId),
+		Id:                   id,
+		MomHost:              momHost,
+		MomPort:              momPort,
+		InputMiddlewarePrefix: inputMiddlewarePrefix,
+		OutputQueue:          outputQueue,
+		FilterAmount:         filterAmountInt,
+		QueryID:              uint8(queryId),
 	}
 
 	if err := loadAmountVenv(&config); err != nil {

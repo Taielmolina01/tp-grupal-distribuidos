@@ -364,10 +364,8 @@ func (gateway *Gateway) handleClientRequest(conn net.Conn) {
 		return
 	}
 
-	if phase == tcpproto.PhaseAccounts {
-		if !gateway.runAccountsPhase(client, r) {
-			return
-		}
+	if phase == tcpproto.PhaseAccounts && !gateway.runAccountsPhase(client, r) {
+		return
 	}
 
 	if !gateway.runTransfersPhase(client, r) {

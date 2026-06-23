@@ -72,7 +72,7 @@ services:
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
       - INPUT_MIDDLEWARE_PREFIX=Q1234_filter_currency
-      - OUTPUT_CLUSTERS=Q1_filtered:2,Q2_filtered:2,Q3_filtered:2,Q4_filtered:2
+      - OUTPUT_CLUSTERS=Q1_filtered:2,Q3_filtered:2,Q4_filtered:2
       - CURRENCIES=US Dollar
       - EXPECTED_EOFS=1
       - QUERY_ID=1
@@ -98,7 +98,7 @@ services:
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
       - INPUT_MIDDLEWARE_PREFIX=Q1234_filter_currency
-      - OUTPUT_CLUSTERS=Q1_filtered:2,Q2_filtered:2,Q3_filtered:2,Q4_filtered:2
+      - OUTPUT_CLUSTERS=Q1_filtered:2,Q3_filtered:2,Q4_filtered:2
       - CURRENCIES=US Dollar
       - EXPECTED_EOFS=1
       - QUERY_ID=1
@@ -919,9 +919,10 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - INPUT_QUEUE=Q5_filtered_fetcher_q
-      - INPUT_EXCHANGE=Q5_filtered_exchange
-      - INPUT_ROUTING_KEYS=Q5_TRANSFERS_KEY
-      - OUTPUT_QUEUE=Q5_fetcher_output
+      - INPUT_EXCHANGE=Q5_filtered
+      - INPUT_ROUTING_KEYS=shard-0
+      - OUTPUT_CLUSTERS=Q5_fetcher_output:2
+      - INPUT_SENDERS=2
       - QUERY_ID=5
       - QUOTE=USD
 
@@ -938,7 +939,7 @@ services:
       - MOM_PORT=5672
       - ID=0
       - AMOUNT=1
-      - INPUT_QUEUE=Q5_fetcher_output
+      - INPUT_MIDDLEWARE_PREFIX=Q5_fetcher_output
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
       - QUERY_ID=5
@@ -957,7 +958,7 @@ services:
       - MOM_PORT=5672
       - ID=1
       - AMOUNT=1
-      - INPUT_QUEUE=Q5_fetcher_output
+      - INPUT_MIDDLEWARE_PREFIX=Q5_fetcher_output
       - OUTPUT_QUEUE=Q5_filtered_to_count_q
       - FILTER_AMOUNT=2
       - QUERY_ID=5
@@ -976,7 +977,7 @@ services:
       - MOM_PORT=5672
       - ID=0
       - REDUCER_AMOUNT=1
-      - INPUT_EOFS_EXPECTED=1
+      - INPUT_EOFS_EXPECTED=2
       - INPUT_QUEUE=Q5_filtered_to_count_q
       - OUTPUT_QUEUES=results_queue
       - REDUCER_TYPE=COUNT

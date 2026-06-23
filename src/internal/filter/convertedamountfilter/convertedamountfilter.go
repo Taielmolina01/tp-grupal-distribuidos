@@ -1,26 +1,26 @@
 package convertedamountfilter
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
-	"tp-grupal-distribuidos/internal/common/eofmessagetypes"
-	"tp-grupal-distribuidos/internal/common/eofring"
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/msgmonitor"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
 const (
-	DATE_LAYOUT            = "2006-01-02"
-	DATE_LAYOUT_WITH_HOUR  = "2006-01-02 15:04"
-	FILE_LAYOUT            = "%s_%s.csv"
-	_EOF_RING_QUEUE_PREFIX = "FILTER_CONVERTED_AMOUNT"
+	DATE_LAYOUT           = "2006-01-02"
+	DATE_LAYOUT_WITH_HOUR = "2006-01-02 15:04"
+	FILE_LAYOUT           = "%s_%s.csv"
 )
 
 func CreateConvertedAmountFilter(config filter.FilterConfig) (worker.Worker, error) {
@@ -36,10 +36,15 @@ func newConvertedAmountFilter(
 		Hostname: config.MomHost,
 		Port:     config.MomPort,
 	}
+	newConnSettings := newmiddleware.ConnSettings{
+		Hostname: config.MomHost,
+		Port:     config.MomPort,
+	}
 
-	inputQueue, err := middleware.CreateQueueMiddleware(
-		config.InputQueue,
-		connSettings,
+	inputQueueName := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	shardKey := fmt.Sprintf("shard-%d", config.Id)
+	inputQueue, err := newmiddleware.NewShardedMiddleware(
+		newConnSettings, config.InputMiddlewarePrefix, inputQueueName, shardKey,
 	)
 
 	if err != nil {
@@ -59,46 +64,6 @@ func newConvertedAmountFilter(
 
 	messagesMonitor := msgmonitor.NewMessageMonitor()
 
-	eofInputQueueName, eofOutputQueueName := eofring.GetInputAndOutputQueueNames(
-		config.Id,
-		config.FilterAmount,
-		_EOF_RING_QUEUE_PREFIX,
-		_EOF_RING_QUEUE_PREFIX,
-	)
-
-	eofInputQueue, err := middleware.CreateQueueMiddleware(
-		eofInputQueueName,
-		connSettings,
-	)
-
-	if err != nil {
-		if err := inputQueue.Close(); err != nil {
-			slog.Error("while closing input queue after EOF input queue creation failure", "err", err)
-		}
-		if err := outputQueue.Close(); err != nil {
-			slog.Error("while closing output queue after EOF input queue creation failure", "err", err)
-		}
-		return nil, err
-	}
-
-	eofOutputQueue, err := middleware.CreateQueueMiddleware(
-		eofOutputQueueName,
-		connSettings,
-	)
-
-	if err != nil {
-		if err := inputQueue.Close(); err != nil {
-			slog.Error("while closing input queue after EOF output queue creation failure", "err", err)
-		}
-		if err := outputQueue.Close(); err != nil {
-			slog.Error("while closing output queue after EOF output queue creation failure", "err", err)
-		}
-		if err := eofInputQueue.Close(); err != nil {
-			slog.Error("while closing EOF input queue after EOF output queue creation failure", "err", err)
-		}
-		return nil, err
-	}
-
 	filter := &ConvertedAmountFilter{
 		InputQueue:      inputQueue,
 		OutputQueue:     outputQueue,
@@ -108,42 +73,23 @@ func newConvertedAmountFilter(
 		Quote:           config.Quote,
 		AmountThreshold: config.Amount,
 		Pending:         make(map[int][]transfer.FinalTransferForQ5),
-		EofOutputQueue:  eofOutputQueue,
 	}
-
-	filter.EofRing = eofring.CreateEofRingAlgorithm(
-		eofInputQueue,
-		eofOutputQueue,
-		config.FilterAmount,
-		uint32(config.Id),
-		messagesMonitor,
-		func(clientID int, _ uint64, total uint32, isCoordinator bool) error {
-			if isCoordinator {
-				if err := outputQueue.Send(middleware.Message{Body: batch.WriteEOF(clientID, config.QueryID, 0, 0, total)}); err != nil {
-					slog.Error("while sending EOF from coordinator", "client_id", clientID, "err", err)
-					return err
-				}
-
-			}
-			return nil
-		},
-		config.QueryID,
-	)
 
 	return filter, nil
 }
 
 func (filter *ConvertedAmountFilter) Run() {
 	defer filter.close()
-	go filter.EofRing.Run()
 
-	if err := filter.InputQueue.StartConsuming(filter.consume); err != nil {
+	if err := filter.InputQueue.StartConsuming(func(msg newmiddleware.Message, ack func(), nack func()) {
+		filter.consume(msg, ack, nack)
+	}); err != nil {
 		slog.Error("while starting consuming from left input queue", "err", err)
 		return
 	}
 }
 
-func (filter *ConvertedAmountFilter) consume(msg middleware.Message, ack, _ func()) {
+func (filter *ConvertedAmountFilter) consume(msg newmiddleware.Message, ack, _ func()) {
 	defer ack()
 
 	input, err := batch.Read(msg.Body, records.FetcherResponseCodec)
@@ -176,22 +122,10 @@ func (filter *ConvertedAmountFilter) consume(msg middleware.Message, ack, _ func
 // Helpers
 
 func (filter *ConvertedAmountFilter) handleEOF(clientID int, total uint32) {
-
 	filter.flush(clientID)
 
-	actual := filter.HandlerMessages.GetProcessedMessagesAmountByClientId(clientID)
-	filtered := filter.HandlerMessages.GetForwardedMessagesAmountByClientId(clientID)
-
-	eofRingMessage := eofmessagetypes.EofRingMessage{
-		RealAmount:     total,
-		ActualAmount:   actual,
-		ClientId:       clientID,
-		CoordinatorId:  uint32(filter.Id),
-		FilteredAmount: filtered,
-	}
-
-	if err := filter.EofOutputQueue.Send(middleware.Message{Body: eofring.SerializeRingMessage(eofRingMessage)}); err != nil {
-		slog.Error("While sending EOF message to EOF ring", "filter_id", filter.Id, "client_id", clientID, "err", err)
+	if err := filter.OutputQueue.Send(middleware.Message{Body: batch.WriteEOF(clientID, filter.QueryID, 0, 0, total)}); err != nil {
+		slog.Error("while sending EOF to output queue", "filter_id", filter.Id, "client_id", clientID, "err", err)
 	}
 }
 

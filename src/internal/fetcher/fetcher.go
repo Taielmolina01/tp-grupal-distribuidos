@@ -7,11 +7,17 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/shard"
+	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
@@ -48,6 +54,10 @@ func createFetcherImpl(config FetcherConfig) (worker.Worker, error) {
 		Hostname: config.MomHost,
 		Port:     config.MomPort,
 	}
+	newConnSettings := newmiddleware.ConnSettings{
+		Hostname: config.MomHost,
+		Port:     config.MomPort,
+	}
 
 	inputQueue, err := middleware.CreateExchangeMiddleware(
 		config.InputExchange,
@@ -60,21 +70,36 @@ func createFetcherImpl(config FetcherConfig) (worker.Worker, error) {
 		return nil, err
 	}
 
-	outputQueue, err := middleware.CreateQueueMiddleware(
-		config.OutputQueue,
-		connSettings,
-	)
-
-	if err != nil {
-		return nil, err
+	outputClusters := make([]outputCluster, 0, len(config.OutputClusters))
+	for _, c := range config.OutputClusters {
+		m, err := newmiddleware.NewShardedMiddleware(newConnSettings, c.Prefix, "", "")
+		if err != nil {
+			for _, cl := range outputClusters {
+				if closeErr := cl.middleware.Close(); closeErr != nil {
+					slog.Error("while closing output cluster middleware after creation failure", "err", closeErr)
+				}
+			}
+			return nil, err
+		}
+		outputClusters = append(outputClusters, outputCluster{
+			middleware: m,
+			hasher:     shard.New(c.NodeCount),
+		})
 	}
 
 	return &Fetcher{
-		inputQueue:  inputQueue,
-		outputQueue: outputQueue,
-		queryId:     config.QueryID,
-		quote:       config.Quote,
-		ratesCache:  make(map[string]float64),
+		inputQueue:     inputQueue,
+		outputClusters: outputClusters,
+		queryId:        config.QueryID,
+		quote:          config.Quote,
+		ratesCache:     make(map[string]float64),
+		expectedSenders: config.ExpectedInputSenders,
+		states: statemap.New(func() *clientState {
+			return &clientState{
+				tracker:       sendertracker.New(10_000_000),
+				outputTracker: outputtracker.New(),
+			}
+		}),
 	}, nil
 }
 
@@ -96,57 +121,96 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 		return
 	}
 
-	if input.EOF {
-		eofBody := batch.WriteEOF(input.ClientID, fetcher.queryId, 0, 0, fetcher.forwarded)
+	clientID := input.ClientID
+	state := fetcher.states.For(clientID)
+	tracker := state.tracker
 
-		if err := fetcher.outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
-			slog.Error("while sending EOF to filter amount", "err", err)
-		}
-
+	if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+		slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
 		return
 	}
 
-	var responses []fetcherresponse.FetcherResponse
+	if input.EOF {
+		tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+		tracker.Claim(int(input.SenderID), input.Seq)
+		if !tracker.IsComplete(fetcher.expectedSenders) {
+			return
+		}
+		for ci, cluster := range fetcher.outputClusters {
+			for i := range cluster.hasher.TotalShards() {
+				rk := fmt.Sprintf("shard-%d", i)
+				key := fmt.Sprintf("%d_%s", ci, rk)
+				count := uint32(state.outputTracker.CountFor(key))
+				eofBody := batch.WriteEOF(clientID, fetcher.queryId, 0, 0, count)
+				if err := cluster.middleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+					slog.Error("while sending EOF to filter amount", "err", err)
+				}
+			}
+		}
+		return
+	}
+
+	tracker.RegisterBatch(int(input.SenderID))
+	tracker.Claim(int(input.SenderID), input.Seq)
+
+	type clusterKey struct {
+		index int
+		rk    string
+	}
+	byCluster := make(map[clusterKey][]fetcherresponse.FetcherResponse)
+
 	for i := range input.Records {
 		t := input.Records[i]
 		if t.Currency == "Bitcoin" {
 			continue
 		}
-		fetcher.forwarded++
 		base := datasetToFrank[t.Currency]
+		var response fetcherresponse.FetcherResponse
 		if base == fetcher.quote {
-			responses = append(responses, fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid})
-			continue
-		}
-		dateKey := t.Timestamp.Format(DATE_LAYOUT)
-		cacheKey := dateKey + ":" + base
-		rate, ok := fetcher.ratesCache[cacheKey]
-		if !ok {
-			var err error
-			rate, err = fetcher.fetchExchangeRate(t)
-			if err != nil {
-				slog.Error("while fetching exchange rate", "err", err)
-				continue
-			}
-			if len(fetcher.ratesCache) >= CACHE_MAX_SIZE {
-				toDelete := ""
-				for key := range fetcher.ratesCache {
-					toDelete = key
-					break // me quedo con el primero del iterador, que es "random"
+			response = fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid}
+		} else {
+			dateKey := t.Timestamp.Format(DATE_LAYOUT)
+			cacheKey := dateKey + ":" + base
+			rate, ok := fetcher.ratesCache[cacheKey]
+			if !ok {
+				var err error
+				rate, err = fetcher.fetchExchangeRate(t)
+				if err != nil {
+					slog.Error("while fetching exchange rate", "err", err)
+					continue
 				}
-				delete(fetcher.ratesCache, toDelete)
+				if len(fetcher.ratesCache) >= CACHE_MAX_SIZE {
+					toDelete := ""
+					for key := range fetcher.ratesCache {
+						toDelete = key
+						break
+					}
+					delete(fetcher.ratesCache, toDelete)
+				}
+				fetcher.ratesCache[cacheKey] = rate
 			}
-			fetcher.ratesCache[cacheKey] = rate
+			response = fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * rate}
 		}
-		responses = append(responses, fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * rate})
+
+		keys := []string{strconv.FormatFloat(t.AmountPaid, 'f', -1, 64)}
+		for ci, cluster := range fetcher.outputClusters {
+			rk := fmt.Sprintf("shard-%d", cluster.hasher.ShardFor(input.ClientID, keys...))
+			ck := clusterKey{ci, rk}
+			byCluster[ck] = append(byCluster[ck], response)
+		}
 	}
 
-	if len(responses) == 0 {
+	if len(byCluster) == 0 {
 		return
 	}
-	body := batch.Write(input.ClientID, fetcher.queryId, 0, 0, responses, records.FetcherResponseCodec)
-	if err := fetcher.outputQueue.Send(middleware.Message{Body: body}); err != nil {
-		slog.Error("while publishing batch to output queue", "err", err)
+
+	for ck, group := range byCluster {
+		cluster := fetcher.outputClusters[ck.index]
+		body := batch.Write(input.ClientID, fetcher.queryId, 0, 0, group, records.FetcherResponseCodec)
+		if err := cluster.middleware.Send(newmiddleware.Message{Body: body, RoutingKey: ck.rk}); err != nil {
+			slog.Error("while publishing batch to output cluster", "err", err)
+		}
+		state.outputTracker.RegisterBatch(fmt.Sprintf("%d_%s", ck.index, ck.rk))
 	}
 }
 
@@ -190,7 +254,9 @@ func (fetcher *Fetcher) close() {
 		slog.Error("while closing input queue", "err", err)
 	}
 
-	if err := fetcher.outputQueue.Close(); err != nil {
-		slog.Error("while closing output queue", "err", err)
+	for _, cluster := range fetcher.outputClusters {
+		if err := cluster.middleware.Close(); err != nil {
+			slog.Error("while closing output cluster middleware", "err", err)
+		}
 	}
 }
