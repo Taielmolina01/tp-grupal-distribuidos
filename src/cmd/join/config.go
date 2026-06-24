@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"time"
 
 	"tp-grupal-distribuidos/internal/join"
 )
@@ -12,11 +13,6 @@ func loadConfig() (join.JoinConfig, error) {
 	id, err := strconv.Atoi(os.Getenv("ID"))
 	if err != nil {
 		return join.JoinConfig{}, errors.New("ID environment variable is required and must be a number")
-	}
-
-	joinAmount, err := strconv.Atoi(os.Getenv("JOIN_AMOUNT"))
-	if err != nil {
-		return join.JoinConfig{}, errors.New("JOIN_AMOUNT environment variable is required and must be a number")
 	}
 
 	momPort, err := strconv.Atoi(os.Getenv("MOM_PORT"))
@@ -29,37 +25,16 @@ func loadConfig() (join.JoinConfig, error) {
 		return join.JoinConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	outputExchange := os.Getenv("OUTPUT_EXCHANGE")
-	if outputExchange == "" {
-		return join.JoinConfig{}, errors.New("OUTPUT_EXCHANGE environment variable is required")
+	leftEofsNum, err := strconv.Atoi(os.Getenv("LEFT_EOFS_EXPECTED"))
+	if err != nil || leftEofsNum < 1 {
+		return join.JoinConfig{}, errors.New("LEFT_EOFS_EXPECTED environment variable is required and must be a number >= 1")
 	}
 
-	leftEofs := os.Getenv("LEFT_EOFS_EXPECTED")
-	if leftEofs == "" {
-		return join.JoinConfig{}, errors.New("LEFT_EOFS_EXPECTED environment variable is required")
-	}
-	leftEofsNum, err := strconv.Atoi(leftEofs)
-	if err != nil {
-		return join.JoinConfig{}, errors.New("LEFT_EOFS_EXPECTED environment variable is required and must be a number")
+	rightEofsNum, err := strconv.Atoi(os.Getenv("RIGHT_EOFS_EXPECTED"))
+	if err != nil || rightEofsNum < 1 {
+		return join.JoinConfig{}, errors.New("RIGHT_EOFS_EXPECTED environment variable is required and must be a number >= 1")
 	}
 
-	if leftEofsNum < 1 {
-		return join.JoinConfig{}, errors.New("LEFT_EOFS_EXPECTED must be at least 1")
-	}
-
-	rightEofs := os.Getenv("RIGHT_EOFS_EXPECTED")
-	if rightEofs == "" {
-		return join.JoinConfig{}, errors.New("RIGHT_EOFS_EXPECTED environment variable is required")
-	}
-
-	rightEofsNum, err := strconv.Atoi(rightEofs)
-	if err != nil {
-		return join.JoinConfig{}, errors.New("RIGHT_EOFS_EXPECTED environment variable is required and must be a number")
-	}
-
-	if rightEofsNum < 1 {
-		return join.JoinConfig{}, errors.New("RIGHT_EOFS_EXPECTED must be at least 1")
-	}
 	leftInputQueue := os.Getenv("LEFT_INPUT_QUEUE")
 	if leftInputQueue == "" {
 		return join.JoinConfig{}, errors.New("LEFT_INPUT_QUEUE environment variable is required")
@@ -75,15 +50,32 @@ func loadConfig() (join.JoinConfig, error) {
 		return join.JoinConfig{}, errors.New("OUTPUT_QUEUE environment variable is required")
 	}
 
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return join.JoinConfig{}, errors.New("PERSIST_PATH environment variable is required")
+	}
+
+	persistBatchSize, err := strconv.Atoi(os.Getenv("PERSIST_BATCH_SIZE"))
+	if err != nil {
+		return join.JoinConfig{}, errors.New("PERSIST_BATCH_SIZE environment variable is required and must be a number")
+	}
+
+	persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
+	if err != nil {
+		return join.JoinConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
+	}
+
 	return join.JoinConfig{
-		Id:                id,
-		Amount:            joinAmount,
-		MomHost:           momHost,
-		MomPort:           momPort,
-		LeftInputQueue:    leftInputQueue,
-		RightInputQueue:   rightInputQueue,
-		OutputQueue:       outputQueue,
-		LeftEofsExpected:  leftEofsNum,
-		RightEofsExpected: rightEofsNum,
+		Id:                   id,
+		MomHost:              momHost,
+		MomPort:              momPort,
+		LeftInputQueue:       leftInputQueue,
+		RightInputQueue:      rightInputQueue,
+		OutputQueue:          outputQueue,
+		LeftEofsExpected:     leftEofsNum,
+		RightEofsExpected:    rightEofsNum,
+		PersistPath:          persistPath,
+		PersistBatchSize:     persistBatchSize,
+		PersistFlushInterval: persistFlushInterval,
 	}, nil
 }

@@ -25,9 +25,7 @@ func CreateReducerMaxAmountFromBank(config ReducerConfig) (worker.Worker, error)
 		},
 		func(t transfer.TransferAfterCurrency) string { return normalizer.NormalizeBankID(t.FromBank) },
 		transfer.ProjectForQ2,
-		records.TransferAfterCurrencyCodec,
 		records.TransferForQ2Codec,
-		config.QueryID,
 	)
 }
 

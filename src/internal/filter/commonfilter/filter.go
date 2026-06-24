@@ -35,16 +35,17 @@ func NewFilter[T any, O any](
 		constructErr  error
 	)
 	defer func() {
-		if constructErr != nil {
-			if inputExchange != nil {
-				if err := inputExchange.Close(); err != nil {
-					slog.Error("While closing input exchange after construction failure", "err", err)
-				}
+		if constructErr == nil {
+			return
+		}
+		if inputExchange != nil {
+			if err := inputExchange.Close(); err != nil {
+				slog.Error("While closing input exchange after construction failure", "err", err)
 			}
-			for _, cl := range outputClusters {
-				if err := cl.Middleware.Close(); err != nil {
-					slog.Error("While closing output cluster middleware after construction failure", "err", err)
-				}
+		}
+		for _, cl := range outputClusters {
+			if err := cl.Middleware.Close(); err != nil {
+				slog.Error("While closing output cluster middleware after construction failure", "err", err)
 			}
 		}
 	}()

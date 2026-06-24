@@ -66,6 +66,7 @@ type Gateway struct {
 	reaperInterval     time.Duration
 	disconnectMu       sync.Mutex
 	disconnectedAt     map[int]time.Time
+	transfersMu        sync.Mutex
 	transfersTrackers  map[int]*outputtracker.OutputTracker
 }
 
@@ -185,10 +186,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		return nil, err
 	}
 
-	checkpointEvery := config.SeqCheckpointEvery
-	if checkpointEvery == 0 {
-		checkpointEvery = 1
-	}
+	checkpointEvery := 1000
 
 	gateway := &Gateway{
 		accountQueues:      accountQueues,
@@ -198,7 +196,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		sessions:           sessions,
 		buffer:             buffer,
 		queryEOFsExpected:  config.QueryEOFsExpected,
-		seqCheckpointEvery: checkpointEvery,
+		seqCheckpointEvery: uint64(checkpointEvery),
 		clientTimeout:      config.ClientTimeout,
 		reaperInterval:     config.ReaperInterval,
 		disconnectedAt:     map[int]time.Time{},
@@ -364,10 +362,8 @@ func (gateway *Gateway) handleClientRequest(conn net.Conn) {
 		return
 	}
 
-	if phase == tcpproto.PhaseAccounts {
-		if !gateway.runAccountsPhase(client, r) {
-			return
-		}
+	if phase == tcpproto.PhaseAccounts && !gateway.runAccountsPhase(client, r) {
+		return
 	}
 
 	if !gateway.runTransfersPhase(client, r) {
@@ -654,6 +650,11 @@ func (gateway *Gateway) reapDeadClients() {
 func (gateway *Gateway) abortClient(clientID int) {
 	slog.Info("Client declared dead (no reconnect within timeout)", "client_id", clientID)
 	gateway.clearDisconnected(clientID)
+
+	lock := gateway.buffer.lock(clientID)
+	lock.Lock()
+	defer lock.Unlock()
+
 	if err := gateway.sessions.moveToPendingAbort(clientID); err != nil {
 		slog.Error("While moving client to pending abort", "client_id", clientID, "err", err)
 	}
@@ -817,6 +818,8 @@ func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState, 
 }
 
 func (gateway *Gateway) transfersTrackerFor(clientID int) *outputtracker.OutputTracker {
+	gateway.transfersMu.Lock()
+	defer gateway.transfersMu.Unlock()
 	t, ok := gateway.transfersTrackers[clientID]
 	if !ok {
 		t = outputtracker.New()

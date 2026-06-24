@@ -6,7 +6,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
-	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
 )
 
@@ -16,7 +15,6 @@ type AggregateConfig struct {
 
 	InputMiddlewarePrefix  string
 	OutputMiddlewarePrefix string
-	OutputAmount           int
 
 	MaxBatchSize  int
 	MaxBatchBytes int
@@ -43,8 +41,6 @@ type AvgAggregator struct {
 	outputMiddleware newmiddleware.Middleware
 
 	prevNodeAmt   int
-	outputAmount  int
-	hasher        shard.Hasher
 	maxBatchSize  int
 	maxBatchBytes int
 

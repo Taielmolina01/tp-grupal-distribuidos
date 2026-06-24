@@ -1,7 +1,6 @@
 package checkpoint
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,9 +50,7 @@ func (c *Checkpoint[S]) SaveClient(clientID int, state *S) error {
 
 func (c *Checkpoint[S]) DeleteClient(clientID int) {
 	path := c.clientPath(clientID)
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		_ = err
-	}
+	os.Remove(path)
 }
 
 func (c *Checkpoint[S]) Load() (map[int]*S, error) {

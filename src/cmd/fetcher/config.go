@@ -4,7 +4,9 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 
+	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/splitter"
 	"tp-grupal-distribuidos/internal/fetcher"
 )
@@ -37,9 +39,33 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 		inputRoutingKeys = splitter.Split(inputRoutingKeysStr, QUEUES_SEPARATOR)
 	}
 
-	outputQueue := os.Getenv("OUTPUT_QUEUE")
-	if outputQueue == "" {
-		return fetcher.FetcherConfig{}, errors.New("OUTPUT_QUEUES environment variable is required")
+	var outputClusters []shard.ClusterConfig
+	if clustersStr := os.Getenv("OUTPUT_CLUSTERS"); clustersStr == "" {
+		return fetcher.FetcherConfig{}, errors.New("OUTPUT_CLUSTERS environment variable is required")
+	} else {
+		for _, part := range strings.Split(clustersStr, ",") {
+			prefixAndCount := strings.SplitN(part, ":", 2)
+			if len(prefixAndCount) != 2 {
+				return fetcher.FetcherConfig{}, errors.New("invalid OUTPUT_CLUSTERS format, expected prefix:count,prefix:count")
+			}
+			count, err := strconv.Atoi(prefixAndCount[1])
+			if err != nil {
+				return fetcher.FetcherConfig{}, errors.New("invalid OUTPUT_CLUSTERS node count")
+			}
+			outputClusters = append(outputClusters, shard.ClusterConfig{
+				Prefix:    prefixAndCount[0],
+				NodeCount: count,
+			})
+		}
+	}
+
+	inputSendersStr := os.Getenv("INPUT_SENDERS")
+	if inputSendersStr == "" {
+		return fetcher.FetcherConfig{}, errors.New("INPUT_SENDERS environment variable is required")
+	}
+	inputSenders, err := strconv.Atoi(inputSendersStr)
+	if err != nil {
+		return fetcher.FetcherConfig{}, errors.New("INPUT_SENDERS environment variable must be a number")
 	}
 
 	queryIdStr := os.Getenv("QUERY_ID")
@@ -57,13 +83,14 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 	}
 
 	return fetcher.FetcherConfig{
-		MomHost:          momHost,
-		MomPort:          momPort,
-		InputQueue:       inputQueue,
-		InputExchange:    inputExchange,
-		InputRoutingKeys: inputRoutingKeys,
-		Quote:            quote,
-		OutputQueue:      outputQueue,
-		QueryID:          uint8(queryId),
+		MomHost:              momHost,
+		MomPort:              momPort,
+		InputQueue:           inputQueue,
+		InputExchange:        inputExchange,
+		InputRoutingKeys:     inputRoutingKeys,
+		Quote:                quote,
+		OutputClusters:       outputClusters,
+		ExpectedInputSenders: inputSenders,
+		QueryID:              uint8(queryId),
 	}, nil
 }
