@@ -135,7 +135,7 @@ func (s *sessionStore) claimResult(clientID int, queryID uint8, senderID uint8, 
 	}
 	t.Claim(int(senderID), seq)
 	t.RegisterBatch(int(senderID))
-	return s.persist()
+	return nil
 }
 
 func (s *sessionStore) registerEOFResult(clientID int, queryID uint8, senderID uint8, total uint32, seq uint64) error {
@@ -147,7 +147,7 @@ func (s *sessionStore) registerEOFResult(clientID int, queryID uint8, senderID u
 	}
 	t := s.trackerFor(state, queryID)
 	t.RegisterEOF(int(senderID), uint64(total), seq)
-	return s.persist()
+	return nil
 }
 
 func (s *sessionStore) queryReported(clientID int, queryID uint8) bool {
@@ -227,6 +227,12 @@ func (s *sessionStore) pendingAbortIDs() []int {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+func (s *sessionStore) flush() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.persist()
 }
 
 func (s *sessionStore) persist() error {

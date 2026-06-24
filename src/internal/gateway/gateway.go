@@ -32,19 +32,20 @@ import (
 )
 
 type GatewayConfig struct {
-	AccountQueues      []string
-	TransfersClusters  []shard.ClusterConfig
-	ResultsQueue       string
-	ServerHost         string
-	ServerPort         string
-	MomHost            string
-	MomPort            int
-	MaxBatchSize       int
-	QueryEOFsExpected  map[uint8]int
-	SessionStorePath   string
-	SeqCheckpointEvery uint64
-	ClientTimeout      time.Duration
-	ReaperInterval     time.Duration
+	AccountQueues             []string
+	TransfersClusters         []shard.ClusterConfig
+	ResultsQueue              string
+	ServerHost                string
+	ServerPort                string
+	MomHost                   string
+	MomPort                   int
+	MaxBatchSize              int
+	QueryEOFsExpected         map[uint8]int
+	SessionStorePath          string
+	SeqCheckpointEvery        uint64
+	ClientTimeout             time.Duration
+	ReaperInterval            time.Duration
+	ResultsBatchFlushInterval time.Duration
 }
 
 const gatewaySenderID uint8 = 0
@@ -52,21 +53,23 @@ const gatewaySenderID uint8 = 0
 const readBufferSize = 64 * 1024
 
 type Gateway struct {
-	registry           clientregistry.ClientRegistry
-	accountQueues      []middleware.Middleware
-	transferClusters   []newmiddleware.ShardedCluster
-	resultsQueue       middleware.Middleware
-	listener           net.Listener
-	running            atomic.Bool
-	sessions           *sessionStore
-	buffer             *resultBuffer
-	queryEOFsExpected  map[uint8]int
-	seqCheckpointEvery uint64
-	clientTimeout      time.Duration
-	reaperInterval     time.Duration
-	disconnectMu       sync.Mutex
-	disconnectedAt     map[int]time.Time
-	transfersTrackers  map[int]*outputtracker.OutputTracker
+	registry                  clientregistry.ClientRegistry
+	accountQueues             []middleware.Middleware
+	transferClusters          []newmiddleware.ShardedCluster
+	resultsQueue              newmiddleware.Middleware
+	listener                  net.Listener
+	running                   atomic.Bool
+	sessions                  *sessionStore
+	buffer                    *resultBuffer
+	queryEOFsExpected         map[uint8]int
+	seqCheckpointEvery        uint64
+	clientTimeout             time.Duration
+	reaperInterval            time.Duration
+	disconnectMu              sync.Mutex
+	disconnectedAt            map[int]time.Time
+	transfersTrackers         map[int]*outputtracker.OutputTracker
+	pendingClose              map[int]struct{}
+	resultsBatchFlushInterval time.Duration
 }
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
@@ -109,8 +112,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		})
 	}
 
-	//TODO PASAR A NUEVO MIDDLEAWRE
-	resultsQueue, err := middleware.CreateQueueMiddleware(config.ResultsQueue, connSettings)
+	resultsQueue, err := newmiddleware.NewQueueMiddleware(newConnSettings, config.ResultsQueue)
 	if err != nil {
 		for _, q := range accountQueues {
 			if closeErr := q.Close(); closeErr != nil {
@@ -141,6 +143,11 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 			slog.Error("While closing results queue", "err", closeErr)
 		}
 		return nil, err
+	}
+
+	checkpointEvery := config.SeqCheckpointEvery
+	if checkpointEvery == 0 {
+		checkpointEvery = 1
 	}
 
 	sessions, err := newSessionStore(config.SessionStorePath)
@@ -185,24 +192,21 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		return nil, err
 	}
 
-	checkpointEvery := config.SeqCheckpointEvery
-	if checkpointEvery == 0 {
-		checkpointEvery = 1
-	}
-
 	gateway := &Gateway{
-		accountQueues:      accountQueues,
-		transferClusters:   clusters,
-		resultsQueue:       resultsQueue,
-		listener:           listener,
-		sessions:           sessions,
-		buffer:             buffer,
-		queryEOFsExpected:  config.QueryEOFsExpected,
-		seqCheckpointEvery: checkpointEvery,
-		clientTimeout:      config.ClientTimeout,
-		reaperInterval:     config.ReaperInterval,
-		disconnectedAt:     map[int]time.Time{},
-		transfersTrackers:  map[int]*outputtracker.OutputTracker{},
+		accountQueues:             accountQueues,
+		transferClusters:          clusters,
+		resultsQueue:              resultsQueue,
+		listener:                  listener,
+		sessions:                  sessions,
+		buffer:                    buffer,
+		queryEOFsExpected:         config.QueryEOFsExpected,
+		seqCheckpointEvery:        checkpointEvery,
+		clientTimeout:             config.ClientTimeout,
+		reaperInterval:            config.ReaperInterval,
+		disconnectedAt:            map[int]time.Time{},
+		transfersTrackers:         map[int]*outputtracker.OutputTracker{},
+		pendingClose:              map[int]struct{}{},
+		resultsBatchFlushInterval: config.ResultsBatchFlushInterval,
 	}
 
 	now := time.Now()
@@ -218,8 +222,8 @@ func (gateway *Gateway) Run() error {
 	defer gateway.close()
 
 	go func() {
-		if err := gateway.resultsQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-			gateway.handleClientResponse(msg, ack, nack)
+		if err := gateway.resultsQueue.StartConsumingBatch(int(gateway.seqCheckpointEvery), gateway.resultsBatchFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+			gateway.handleBatch(msgs, ack, nack)
 		}); err != nil {
 			slog.Error("While consuming results queue", "err", err)
 		}
@@ -331,7 +335,7 @@ func (gateway *Gateway) handshake(conn net.Conn, r io.Reader) (clientregistry.Cl
 	lock.Lock()
 	defer lock.Unlock()
 	if err := gateway.buffer.flush(clientID, func(body []byte) error {
-		return gateway.deliverResult(client, body)
+		return gateway.deliverResult(client, body, nil)
 	}); err != nil {
 		return clientregistry.ClientState{}, 0, err
 	}
@@ -439,43 +443,68 @@ func (gateway *Gateway) runTransfersPhase(client clientregistry.ClientState, r i
 	}
 }
 
-func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
-	_, info, err := batch.ReadHeader(msg.Body)
-	if err != nil {
-		slog.Error("While deserializing result header", "err", err)
+func (gateway *Gateway) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
+	failed := false
+	for _, msg := range msgs {
+		_, info, err := batch.ReadHeader(msg.Body)
+		if err != nil {
+			slog.Error("While deserializing result header", "err", err)
+			continue
+		}
+		if err := gateway.processResult(info, msg.Body, gateway.pendingClose); err != nil {
+			failed = true
+		}
+	}
+
+	if !failed {
+		if err := gateway.sessions.flush(); err != nil {
+			slog.Error("While persisting results batch", "err", err)
+			failed = true
+		}
+	}
+
+	if failed {
 		nack()
 		return
 	}
 
+	for clientID := range gateway.pendingClose {
+		lock := gateway.buffer.lock(clientID)
+		lock.Lock()
+		gateway.closeClient(clientID)
+		lock.Unlock()
+		delete(gateway.pendingClose, clientID)
+	}
+	ack()
+}
+
+func (gateway *Gateway) processResult(info batch.Info, body []byte, completed map[int]struct{}) error {
 	lock := gateway.buffer.lock(info.ClientID)
 	lock.Lock()
 	defer lock.Unlock()
 
 	if client, ok := gateway.findClient(info.ClientID); ok {
-		err := gateway.deliverResult(client, msg.Body)
-		if err == nil {
-			ack() //efectivamente se entrego, le aviso a rabbit que descarte
-			return
+		if err := gateway.deliverResult(client, body, completed); err == nil {
+			return nil
+		} else {
+			slog.Debug("Delivery failed, treating client as disconnected", "client_id", info.ClientID, "err", err)
+			gateway.markDisconnected(client)
 		}
-		slog.Debug("Delivery failed, treating client as disconnected", "client_id", info.ClientID, "err", err)
-		gateway.markDisconnected(client)
 	}
 
 	if _, alive := gateway.sessions.session(info.ClientID); alive {
-		if err := gateway.buffer.append(info.ClientID, msg.Body); err != nil {
+		if err := gateway.buffer.append(info.ClientID, body); err != nil {
 			slog.Error("While buffering result for disconnected client", "client_id", info.ClientID, "err", err)
-			nack() //fallo la escritura, le aviso a rabbit que no descarte
-			return
+			return err
 		}
-		ack() //efectivamente se escribio, le aviso a rabbit que descarte
-		return
+		return nil
 	}
 
 	slog.Warn("Result for dead or unknown client, dropping", "client_id", info.ClientID)
-	ack() //estado muerto o desconocido, no tiene sentido guardar esto, le aviso a rabbit que descarte
+	return nil
 }
 
-func (gateway *Gateway) deliverResult(client clientregistry.ClientState, body []byte) error {
+func (gateway *Gateway) deliverResult(client clientregistry.ClientState, body []byte, completed map[int]struct{}) error {
 	reader, info, err := batch.ReadHeader(body)
 	if err != nil {
 		return err
@@ -485,7 +514,7 @@ func (gateway *Gateway) deliverResult(client clientregistry.ClientState, body []
 		if err := gateway.sessions.registerEOFResult(info.ClientID, info.QueryID, info.SenderID, info.Total, info.Seq); err != nil {
 			return err
 		}
-		return gateway.maybeCompleteQuery(client, info.QueryID)
+		return gateway.maybeCompleteQuery(client, info.QueryID, completed)
 	}
 
 	if !gateway.sessions.isDuplicateResult(info.ClientID, info.QueryID, info.SenderID, info.Seq) {
@@ -496,10 +525,10 @@ func (gateway *Gateway) deliverResult(client clientregistry.ClientState, body []
 			return err
 		}
 	}
-	return gateway.maybeCompleteQuery(client, info.QueryID)
+	return gateway.maybeCompleteQuery(client, info.QueryID, completed)
 }
 
-func (gateway *Gateway) maybeCompleteQuery(client clientregistry.ClientState, queryID uint8) error {
+func (gateway *Gateway) maybeCompleteQuery(client clientregistry.ClientState, queryID uint8, completed map[int]struct{}) error {
 	if gateway.sessions.queryReported(client.ID, queryID) {
 		return nil
 	}
@@ -515,7 +544,11 @@ func (gateway *Gateway) maybeCompleteQuery(client clientregistry.ClientState, qu
 	}
 	slog.Info("Query completed", "client_id", client.ID, "query_id", queryID)
 	if allReported {
-		gateway.closeClient(client.ID)
+		if completed != nil {
+			completed[client.ID] = struct{}{}
+		} else {
+			gateway.closeClient(client.ID)
+		}
 	}
 	return nil
 }
