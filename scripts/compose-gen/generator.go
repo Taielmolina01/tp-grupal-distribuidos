@@ -157,7 +157,7 @@ func writeRabbitmq(b *strings.Builder) {
 
 func writeGateway(b *strings.Builder, cfg *Config) {
 	accountQueues := queues("Q2_accounts", cfg.FilterBankIdAlreadySeen)
-	queryEofs := fmt.Sprintf("1:1,2:%d,3:%d,4:%d,5:1", cfg.JoinQ2, cfg.AverageFilterQ3, cfg.FilterAccountSeenQ4)
+	queryEofs := fmt.Sprintf("1:%d,2:%d,3:%d,4:%d,5:1", cfg.FilterAmount, cfg.JoinQ2, cfg.AverageFilterQ3, cfg.FilterAccountSeenQ4)
 
 	b.WriteString("  gateway:\n")
 	b.WriteString("    build:\n")
@@ -173,6 +173,7 @@ func writeGateway(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - RESULTS_QUEUE=results_queue\n")
 	b.WriteString("      - MOM_HOST=rabbitmq\n")
 	b.WriteString("      - MOM_PORT=5672\n")
+	b.WriteString("      - SEQ_CHECKPOINT_EVERY=100\n")
 	b.WriteString("      - SERVER_HOST=gateway\n")
 	b.WriteString("      - SERVER_PORT=5678\n")
 	fmt.Fprintf(b, "      - QUERY_EOFS_EXPECTED=%s\n", queryEofs)
