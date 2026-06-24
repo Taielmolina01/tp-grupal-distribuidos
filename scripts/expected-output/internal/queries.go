@@ -77,7 +77,7 @@ func getQuery2Result(inputDir string, n int, accs []Account, outPath string) err
 		if !ok || t.AmountPaid > cur.AmountPaid {
 			maxes[normalizeBank(t.FromBank)] = t
 		} else if ok && t.AmountPaid == cur.AmountPaid {
-			if t.FromBank > cur.FromBank {
+			if t.FromAccount > cur.FromAccount {
 				maxes[normalizeBank(t.FromBank)] = t
 			}
 		}
