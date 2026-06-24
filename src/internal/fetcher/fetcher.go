@@ -176,49 +176,7 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 		if base == fetcher.quote {
 			response = fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid}
 		} else {
-			dateKey := t.Timestamp.Format(DATE_LAYOUT)
-			cacheKey := dateKey + ":" + base
-			oldValueCache, ok := fetcher.ratesCache[cacheKey]
-			if !ok {
-				var err error
-				fetchedRate, err := fetcher.fetchExchangeRate(t)
-				if err != nil {
-					slog.Error("while fetching exchange rate", "err", err)
-					continue
-				}
-				if len(fetcher.ratesCache) >= CACHE_MAX_SIZE && !fetcher.ratesCacheHeap.IsEmpty() {
-					oldest := fetcher.ratesCacheHeap.Dequeue()
-					delete(fetcher.ratesCache, oldest.apiResponseRateVal.Date+":"+oldest.apiResponseRateVal.Base)
-				}
-				dto := heapDTO{
-					time: time.Now(),
-					apiResponseRateVal: &apiResponseRate{
-						Date:  dateKey,
-						Base:  base,
-						Rate:  fetchedRate,
-						Quote: fetcher.quote,
-					},
-				}
-				fetcher.ratesCacheHeap.Enqueue(dto)
-				fetcher.ratesCache[cacheKey] = dto
-				response = fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * fetchedRate}
-			} else {
-				new := heapDTO{
-					time: time.Now(),
-					apiResponseRateVal: &apiResponseRate{
-						Date:  dateKey,
-						Base:  base,
-						Rate:  oldValueCache.apiResponseRateVal.Rate,
-						Quote: fetcher.quote,
-					},
-				}
-				fetcher.ratesCacheHeap.Update(
-					oldValueCache,
-					new,
-				)
-				fetcher.ratesCache[cacheKey] = new
-				response = fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * oldValueCache.apiResponseRateVal.Rate}
-			}
+			fetcher.fetchExchangeRateWithCache(&response, t, base)
 		}
 		keys := []string{strconv.FormatFloat(t.AmountPaid, 'f', -1, 64)}
 		for ci, cluster := range fetcher.outputClusters {
@@ -239,6 +197,56 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 			slog.Error("while publishing batch to output cluster", "err", err)
 		}
 		state.outputTracker.RegisterBatch(fmt.Sprintf("%d_%s", ck.index, ck.rk))
+	}
+}
+
+func (fetcher *Fetcher) fetchExchangeRateWithCache(
+	response *fetcherresponse.FetcherResponse,
+	t transfer.TransferForQ5Filter,
+	base string,
+) {
+	dateKey := t.Timestamp.Format(DATE_LAYOUT)
+	cacheKey := dateKey + ":" + base
+	oldValueCache, ok := fetcher.ratesCache[cacheKey]
+	if !ok {
+		var err error
+		fetchedRate, err := fetcher.fetchExchangeRate(t)
+		if err != nil {
+			slog.Error("while fetching exchange rate", "err", err)
+			return
+		}
+		if len(fetcher.ratesCache) >= CACHE_MAX_SIZE && !fetcher.ratesCacheHeap.IsEmpty() {
+			oldest := fetcher.ratesCacheHeap.Dequeue()
+			delete(fetcher.ratesCache, oldest.apiResponseRateVal.Date+":"+oldest.apiResponseRateVal.Base)
+		}
+		dto := heapDTO{
+			time: time.Now(),
+			apiResponseRateVal: &apiResponseRate{
+				Date:  dateKey,
+				Base:  base,
+				Rate:  fetchedRate,
+				Quote: fetcher.quote,
+			},
+		}
+		fetcher.ratesCacheHeap.Enqueue(dto)
+		fetcher.ratesCache[cacheKey] = dto
+		response = &fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * fetchedRate}
+	} else {
+		new := heapDTO{
+			time: time.Now(),
+			apiResponseRateVal: &apiResponseRate{
+				Date:  dateKey,
+				Base:  base,
+				Rate:  oldValueCache.apiResponseRateVal.Rate,
+				Quote: fetcher.quote,
+			},
+		}
+		fetcher.ratesCacheHeap.Update(
+			oldValueCache,
+			new,
+		)
+		fetcher.ratesCache[cacheKey] = new
+		response = &fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * oldValueCache.apiResponseRateVal.Rate}
 	}
 }
 
