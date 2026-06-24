@@ -157,7 +157,7 @@ func writeRabbitmq(b *strings.Builder) {
 
 func writeGateway(b *strings.Builder, cfg *Config) {
 	accountQueues := queues("Q2_accounts", cfg.FilterBankIdAlreadySeen)
-	queryEofs := fmt.Sprintf("1:1,2:%d,3:%d,4:%d,5:1", cfg.JoinQ2, cfg.AverageFilterQ3, cfg.FilterAccountSeenQ4)
+	queryEofs := fmt.Sprintf("1:%d,2:%d,3:%d,4:%d,5:1", cfg.FilterAmount, cfg.JoinQ2, cfg.AverageFilterQ3, cfg.FilterAccountSeenQ4)
 
 	b.WriteString("  gateway:\n")
 	b.WriteString("    build:\n")
@@ -216,6 +216,9 @@ func writeCountReducerQ5(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - OUTPUT_QUEUES=results_queue\n")
 	b.WriteString("      - REDUCER_TYPE=COUNT\n")
 	b.WriteString("      - QUERY_ID=5\n")
+	b.WriteString("      - PERSIST_PATH=/var/bkp/q5_count_reducer\n")
+	b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+	b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 	b.WriteString("\n")
 }
 

@@ -12,6 +12,11 @@ import (
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
+type countClientState struct {
+	tracker *sendertracker.SenderTracker
+	count   uint32
+}
+
 type ReducerType string
 
 const (
@@ -64,10 +69,13 @@ type clientState struct {
 }
 
 type CountReducer struct {
-	countByClient     map[int]uint32
-	eofsByClient      map[int]uint32
-	inputQueue        middleware.Middleware
-	outputQueue       middleware.Middleware
-	queryId           uint8
-	inputEofsExpected uint32
+	id                   int
+	queryID              uint8
+	inputQueue           newmiddleware.Middleware
+	outputQueue          middleware.Middleware
+	prevNodeAmt          int
+	states               statemap.StateMap[countClientState]
+	checkpoint           *checkpoint.Checkpoint[countClientState]
+	persistBatchSize     int
+	persistFlushInterval time.Duration
 }
