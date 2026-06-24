@@ -33,9 +33,10 @@ services:
       - RESULTS_QUEUE=results_queue
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
+      - SEQ_CHECKPOINT_EVERY=100
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
-      - QUERY_EOFS_EXPECTED=1:1,2:2,3:2,4:2,5:1
+      - QUERY_EOFS_EXPECTED=1:2,2:2,3:2,4:2,5:1
 
   client_0:
     build:
@@ -72,7 +73,7 @@ services:
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
       - INPUT_MIDDLEWARE_PREFIX=Q1234_filter_currency
-      - OUTPUT_CLUSTERS=Q1_filtered:2,Q3_filtered:2,Q4_filtered:2
+      - OUTPUT_CLUSTERS=Q1_filtered:2,Q2_filtered:2,Q3_filtered:2,Q4_filtered:2
       - CURRENCIES=US Dollar
       - EXPECTED_EOFS=1
       - QUERY_ID=1
@@ -98,7 +99,7 @@ services:
       - MOM_PORT=5672
       - MOM_HOST=rabbitmq
       - INPUT_MIDDLEWARE_PREFIX=Q1234_filter_currency
-      - OUTPUT_CLUSTERS=Q1_filtered:2,Q3_filtered:2,Q4_filtered:2
+      - OUTPUT_CLUSTERS=Q1_filtered:2,Q2_filtered:2,Q3_filtered:2,Q4_filtered:2
       - CURRENCIES=US Dollar
       - EXPECTED_EOFS=1
       - QUERY_ID=1

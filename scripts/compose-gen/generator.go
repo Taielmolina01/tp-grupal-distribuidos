@@ -173,6 +173,7 @@ func writeGateway(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - RESULTS_QUEUE=results_queue\n")
 	b.WriteString("      - MOM_HOST=rabbitmq\n")
 	b.WriteString("      - MOM_PORT=5672\n")
+	b.WriteString("      - SEQ_CHECKPOINT_EVERY=100\n")
 	b.WriteString("      - SERVER_HOST=gateway\n")
 	b.WriteString("      - SERVER_PORT=5678\n")
 	fmt.Fprintf(b, "      - QUERY_EOFS_EXPECTED=%s\n", queryEofs)
