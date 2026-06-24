@@ -12,6 +12,7 @@ type heap[T comparable] struct {
 	len        int
 	datos      []T
 	comparador func(T, T) int
+	positions  map[T]int
 }
 
 // Crea un heap vacío, guardando la función de comparación correspondiente.
@@ -19,6 +20,7 @@ func NewHeap[T comparable](funcion_cmp func(T, T) int) PriorityQueue[T] {
 	heap := new(heap[T])
 	heap.datos = make([]T, _INITIAL_LEN)
 	heap.comparador = funcion_cmp
+	heap.positions = make(map[T]int)
 	return heap
 }
 
@@ -29,7 +31,8 @@ func (heap *heap[T]) IsEmpty() bool {
 func (heap *heap[T]) Enqueue(dato T) {
 	heap.redimensionarSiSeRequiere()
 	heap.datos[heap.len] = dato
-	upHeap(heap.datos, heap.comparador, heap.len)
+	pos := upHeap(heap.datos, heap.comparador, heap.len)
+	heap.positions[dato] = pos
 	heap.len++
 }
 
@@ -49,7 +52,24 @@ func (heap *heap[T]) Dequeue() T {
 	heap.redimensionarSiSeRequiere()
 	swap(heap.datos, 0, heap.len)
 	downHeap(heap.datos, heap.comparador, 0, heap.len)
+	delete(heap.positions, datoADevolver)
 	return datoADevolver
+}
+
+func (heap *heap[T]) Update(old, new T) {
+	pos, ok := heap.positions[old]
+	if !ok {
+		return
+	}
+
+	heap.datos[pos] = new
+	delete(heap.positions, old)
+
+	if heap.comparador(new, old) > 0 {
+		heap.positions[new] = upHeap(heap.datos, heap.comparador, pos)
+	} else {
+		heap.positions[new] = downHeap(heap.datos, heap.comparador, pos, heap.len)
+	}
 }
 
 func (heap *heap[T]) Len() int {
@@ -116,19 +136,19 @@ func (heap *heap[T]) redimensionarSiSeRequiere() {
 
 // Realiza el algoritmo UpHeap, que se basa en comparar un  hijo con su padre, y chequear que el hijo
 // sea menor que su padre; caso contrario, swapea los datos.
-func upHeap[T any](arr []T, compareFunc func(T, T) int, posActual int) {
+func upHeap[T any](arr []T, compareFunc func(T, T) int, posActual int) int {
 	posPadre := modulo((posActual - 1) / 2)
 
 	if posPadre == posActual || compareFunc(arr[posActual], arr[posPadre]) <= 0 {
-		return
+		return posActual
 	}
 	swap(arr, posActual, posPadre)
-	upHeap(arr, compareFunc, posPadre)
+	return upHeap(arr, compareFunc, posPadre)
 }
 
 // Realiza el algoritmo DownHeap, que se basa en comparar un  hijo con su padre, y chequear que el hijo
 // sea menor que su padre; caso contrario, swapea los datos.
-func downHeap[T any](arr []T, compareFunc func(T, T) int, posActual int, len int) {
+func downHeap[T any](arr []T, compareFunc func(T, T) int, posActual int, len int) int {
 	posHijoIzq := 2*posActual + 1
 	posHijoDer := 2*posActual + 2
 	var posMayor int
@@ -137,16 +157,19 @@ func downHeap[T any](arr []T, compareFunc func(T, T) int, posActual int, len int
 		posMayor = maxPos(arr, compareFunc, posHijoIzq, posHijoDer)
 		if compareFunc(arr[posMayor], arr[posActual]) > 0 {
 			swap(arr, posActual, posMayor)
-			downHeap(arr, compareFunc, posMayor, len)
+			return downHeap(arr, compareFunc, posMayor, len)
 		}
+		return posActual
 	}
 	if posHijoIzq < len {
 		posMayor = posHijoIzq
 		if compareFunc(arr[posMayor], arr[posActual]) > 0 {
 			swap(arr, posActual, posMayor)
-			downHeap(arr, compareFunc, posMayor, len)
+			return downHeap(arr, compareFunc, posMayor, len)
 		}
 	}
+
+	return posActual
 }
 
 // Devuelve el módulo de un número.

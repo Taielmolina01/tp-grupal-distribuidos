@@ -76,7 +76,7 @@ func createFetcherImpl(config FetcherConfig) (worker.Worker, error) {
 		outputQueue: outputQueue,
 		queryId:     config.QueryID,
 		quote:       config.Quote,
-		ratesCache:  make(map[string]float64),
+		ratesCache:  make(map[string]heapDTO),
 		ratesCacheHeap: priorityqueue.NewHeap(func(a, b heapDTO) int {
 			if a.time.Before(b.time) {
 				return 1
@@ -131,32 +131,46 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 		}
 		dateKey := t.Timestamp.Format(DATE_LAYOUT)
 		cacheKey := dateKey + ":" + base
-		rate, ok := fetcher.ratesCache[cacheKey]
+		oldValueCache, ok := fetcher.ratesCache[cacheKey]
 		if !ok {
 			var err error
-			rate, err = fetcher.fetchExchangeRate(t)
+			fetchedRate, err := fetcher.fetchExchangeRate(t)
 			if err != nil {
 				slog.Error("while fetching exchange rate", "err", err)
 				continue
 			}
-			if len(fetcher.ratesCache) >= CACHE_MAX_SIZE {
-				if !fetcher.ratesCacheHeap.IsEmpty() {
-					oldest := fetcher.ratesCacheHeap.Dequeue()
-					delete(fetcher.ratesCache, oldest.rate.Date+":"+oldest.rate.Base)
-				}
+			if len(fetcher.ratesCache) >= CACHE_MAX_SIZE && !fetcher.ratesCacheHeap.IsEmpty() {
+				oldest := fetcher.ratesCacheHeap.Dequeue()
+				delete(fetcher.ratesCache, oldest.apiResponseRateVal.Date+":"+oldest.apiResponseRateVal.Base)
 			}
-			fetcher.ratesCache[cacheKey] = rate
-			fetcher.ratesCacheHeap.Enqueue(heapDTO{
+			dto := heapDTO{
 				time: time.Now(),
-				rate: &apiResponseRate{
+				apiResponseRateVal: &apiResponseRate{
 					Date:  dateKey,
 					Base:  base,
-					Rate:  rate,
+					Rate:  fetchedRate,
 					Quote: fetcher.quote,
 				},
-			})
+			}
+			fetcher.ratesCacheHeap.Enqueue(dto)
+			fetcher.ratesCache[cacheKey] = dto
+		} else {
+			new := heapDTO{
+				time: time.Now(),
+				apiResponseRateVal: &apiResponseRate{
+					Date:  dateKey,
+					Base:  base,
+					Rate:  oldValueCache.apiResponseRateVal.Rate,
+					Quote: fetcher.quote,
+				},
+			}
+			fetcher.ratesCacheHeap.Update(
+				oldValueCache,
+				new,
+			)
+			fetcher.ratesCache[cacheKey] = new
 		}
-		responses = append(responses, fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * rate})
+		responses = append(responses, fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * oldValueCache.apiResponseRateVal.Rate})
 	}
 
 	if len(responses) == 0 {

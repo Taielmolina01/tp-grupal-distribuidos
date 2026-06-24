@@ -12,6 +12,8 @@ type PriorityQueue[T comparable] interface {
 	// "La cola está vacia".
 	GetMax() T
 
+	Update(T, T)
+
 	// Desencolar elimina el elemento con máxima prioridad, y lo devuelve. Si está vacía, entra en pánico con un
 	// mensaje "El heap esta vacia"
 	Dequeue() T
