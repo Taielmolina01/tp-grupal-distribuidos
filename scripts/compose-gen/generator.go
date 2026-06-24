@@ -217,6 +217,9 @@ func writeCountReducerQ5(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - OUTPUT_QUEUES=results_queue\n")
 	b.WriteString("      - REDUCER_TYPE=COUNT\n")
 	b.WriteString("      - QUERY_ID=5\n")
+	b.WriteString("      - PERSIST_PATH=/var/bkp/q5_count_reducer\n")
+	b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
+	b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 	b.WriteString("\n")
 }
 

@@ -1016,6 +1016,9 @@ services:
       - OUTPUT_QUEUES=results_queue
       - REDUCER_TYPE=COUNT
       - QUERY_ID=5
+      - PERSIST_PATH=/var/bkp/q5_count_reducer
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
 
 
   # Tolerancia a fallas

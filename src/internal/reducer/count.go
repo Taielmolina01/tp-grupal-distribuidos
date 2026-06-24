@@ -5,127 +5,183 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
+	"tp-grupal-distribuidos/internal/common/sendertracker"
+	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-func newCountReducer(
-	config ReducerConfig,
-) (worker.Worker, error) {
-	connSettings := middleware.ConnSettings{
-		Hostname: config.MomHost,
-		Port:     config.MomPort,
-	}
+func newCountReducer(config ReducerConfig) (worker.Worker, error) {
+	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	legacyConn := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputQueue, err := middleware.CreateQueueMiddleware(
-		config.InputQueue,
-		connSettings,
-	)
-
+	inputQueue, err := newmiddleware.NewQueueMiddleware(connSettings, config.InputQueue)
 	if err != nil {
 		return nil, err
 	}
 
-	out, err := middleware.CreateQueueMiddleware(
-		config.OutputQueues[0],
-		connSettings,
-	)
-
+	outputQueue, err := middleware.CreateQueueMiddleware(config.OutputQueues[0], legacyConn)
 	if err != nil {
-		if err := inputQueue.Close(); err != nil {
-			slog.Error("while closing input queue", "err", err)
+		inputQueue.Close()
+		return nil, err
+	}
+
+	ckpt, err := checkpoint.New(config.PersistPath, marshalCountClientState, unmarshalCountClientState)
+	if err != nil {
+		inputQueue.Close()
+		outputQueue.Close()
+		return nil, err
+	}
+
+	recovered, err := ckpt.Load()
+	if err != nil {
+		inputQueue.Close()
+		outputQueue.Close()
+		return nil, err
+	}
+
+	states := statemap.New(func() *countClientState {
+		return &countClientState{
+			tracker: sendertracker.New(10_000_000),
 		}
-		return nil, err
+	})
+	for clientID, state := range recovered {
+		states.Set(clientID, state)
+		slog.Info("recovered client state", "clientID", clientID)
 	}
 
 	return &CountReducer{
-		inputQueue:        inputQueue,
-		outputQueue:       out,
-		queryId:           config.QueryID,
-		countByClient:     map[int]uint32{},
-		eofsByClient:      map[int]uint32{},
-		inputEofsExpected: uint32(config.InputEofsExpected),
+		id:                   config.Id,
+		queryID:              config.QueryID,
+		inputQueue:           inputQueue,
+		outputQueue:          outputQueue,
+		prevNodeAmt:          config.InputEofsExpected,
+		states:               states,
+		checkpoint:           ckpt,
+		persistBatchSize:     config.PersistBatchSize,
+		persistFlushInterval: config.PersistFlushInterval,
 	}, nil
 }
 
-func (count *CountReducer) Run() {
-	defer count.close()
-	if err := count.inputQueue.StartConsuming(count.handleMessage); err != nil {
-		slog.Error("while consuming from input queue", "err", err)
+func (r *CountReducer) Run() {
+	defer r.close()
+	if err := r.inputQueue.StartConsumingBatch(r.persistBatchSize, r.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+		r.handleBatch(msgs, ack, nack)
+	}); err != nil {
+		slog.Error("While consuming from input queue", "err", err)
 	}
 }
 
-func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func()) {
-	defer ack()
-	input, err := batch.Read(msg.Body, records.FinalTransferForQ5Codec)
-	if err != nil {
-		slog.Error("while deserializing input batch", "err", err)
-		return
+func (r *CountReducer) HandleSignals() {
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	<-signals
+	slog.Info("SIGTERM signal received, stopping consumer")
+	r.stopConsuming()
+}
+
+func (r *CountReducer) stopConsuming() {
+	if err := r.inputQueue.StopConsuming(); err != nil {
+		slog.Error("While stopping input consumer", "err", err)
+	}
+}
+
+func (r *CountReducer) close() {
+	if err := r.inputQueue.Close(); err != nil {
+		slog.Error("While closing input queue", "err", err)
+	}
+	if err := r.outputQueue.Close(); err != nil {
+		slog.Error("While closing output queue", "err", err)
+	}
+}
+
+func (r *CountReducer) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {
+	modified := make(map[int]*countClientState)
+	completed := make(map[int]struct{})
+
+	for _, msg := range msgs {
+		input, err := batch.Read(msg.Body, records.FinalTransferForQ5Codec)
+		if err != nil {
+			slog.Error("decode failed", "err", err)
+			continue
+		}
+
+		clientID := input.ClientID
+		state := r.states.For(clientID)
+		tracker := state.tracker
+
+		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
+			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
+			continue
+		}
+
+		if input.EOF {
+			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
+		} else {
+			tracker.RegisterBatch(int(input.SenderID))
+			state.count += uint32(len(input.Records))
+		}
+
+		tracker.Claim(int(input.SenderID), input.Seq)
+		modified[clientID] = state
+
+		if tracker.IsComplete(r.prevNodeAmt) {
+			if err := r.finishStep(clientID, state); err != nil {
+				slog.Error("finish step failed", "err", err)
+				nack()
+				r.stopConsuming()
+				return
+			}
+			completed[clientID] = struct{}{}
+		}
 	}
 
-	if !input.EOF {
-		count.countByClient[input.ClientID] += uint32(len(input.Records))
-		return
+	for clientID, state := range modified {
+		if _, done := completed[clientID]; done {
+			r.states.Delete(clientID)
+			r.checkpoint.DeleteClient(clientID)
+			continue
+		}
+		if err := r.checkpoint.SaveClient(clientID, state); err != nil {
+			slog.Error("persist failed, stopping", "err", err)
+			nack()
+			r.stopConsuming()
+			return
+		}
 	}
 
-	count.eofsByClient[input.ClientID]++
-	slog.Info("received EOF",
-		"clientID", input.ClientID,
-		"senderID", input.SenderID,
-		"seq", input.Seq,
-		"total", input.Total,
-		"eofsReceived", count.eofsByClient[input.ClientID],
-		"eofsExpected", count.inputEofsExpected,
-	)
+	ack()
+}
 
-	if count.eofsByClient[input.ClientID] < count.inputEofsExpected {
-		return
-	}
-
-	total := count.countByClient[input.ClientID]
+func (r *CountReducer) finishStep(clientID int, state *countClientState) error {
+	total := state.count
 	slog.Info("all EOFs received, sending result",
-		"clientID", input.ClientID,
+		"clientID", clientID,
 		"totalCount", total,
 	)
 
 	resultBody := batch.Write(
-		input.ClientID,
-		count.queryId,
-		0,
+		clientID,
+		r.queryID,
+		uint8(r.id),
 		0,
 		[]queryresult.Query5Result{{Qty: total}},
 		records.Query5ResultCodec,
 	)
-	if err := count.outputQueue.Send(middleware.Message{Body: resultBody}); err != nil {
-		slog.Error("while sending result message", "err", err)
+	if err := r.outputQueue.Send(middleware.Message{Body: resultBody}); err != nil {
+		return err
 	}
 
-	eofBody := batch.WriteEOF(input.ClientID, count.queryId, 0, 0, 1)
-	if err := count.outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
-		slog.Error("while sending EOF message", "err", err)
+	eofBody := batch.WriteEOF(clientID, r.queryID, uint8(r.id), 0, 1)
+	if err := r.outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
+		return err
 	}
 
-	delete(count.countByClient, input.ClientID)
-}
-
-func (count *CountReducer) HandleSignals() {
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	<-signals
-	slog.Info("SIGTERM signal received")
-	if err := count.inputQueue.StopConsuming(); err != nil {
-		slog.Error("while stopping consuming from input queue", "err", err)
-	}
-}
-
-func (count *CountReducer) close() {
-	if err := count.inputQueue.Close(); err != nil {
-		slog.Error("while closing input queue", "err", err)
-	}
-	if err := count.outputQueue.Close(); err != nil {
-		slog.Error("while closing output queue", "err", err)
-	}
+	return nil
 }
