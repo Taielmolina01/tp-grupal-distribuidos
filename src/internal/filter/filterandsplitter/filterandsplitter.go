@@ -20,11 +20,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/worker"
 )
 
-const (
-	_EOF_RING_QUEUE_PREFIX = "FILTER_AND_SPLIITER_EOF"
-	_EOF_OUTPUT_KEY        = "__eof"
-)
-
 func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 

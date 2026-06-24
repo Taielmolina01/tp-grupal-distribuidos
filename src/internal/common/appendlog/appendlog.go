@@ -123,7 +123,7 @@ func (l *Log[T]) validPrefixLen() (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("appendlog: open for recover: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var offset int64
 	for {
@@ -146,7 +146,7 @@ func (l *Log[T]) readAll(tracker *sendertracker.SenderTracker, fn func(Entry[T])
 	if err != nil {
 		return fmt.Errorf("appendlog: open for read: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var offset int64
 	for {

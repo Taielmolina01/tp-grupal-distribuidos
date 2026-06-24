@@ -44,7 +44,7 @@ func (p *peersMonitorImpl) DeleteAll() {
 	defer p.mutex.Unlock()
 
 	for id := range p.peers {
-		p.peers[id].conn.Close()
+		_ = p.peers[id].conn.Close()
 		delete(p.peers, id)
 	}
 }

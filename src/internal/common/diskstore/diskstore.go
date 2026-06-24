@@ -14,7 +14,7 @@ func WriteTmp(path string, data map[string][]byte) error {
 	if err != nil {
 		return fmt.Errorf("diskstore: create tmp: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err := writeMap(f, data); err != nil {
 		return err
@@ -45,7 +45,7 @@ func Read(path string) (map[string][]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("diskstore: open: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return readMap(f)
 }
 

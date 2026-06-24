@@ -105,21 +105,21 @@ func (client *Client) connectAndHandshake() (net.Conn, tcpproto.Phase, uint64, e
 	}
 
 	if err := tcpproto.WriteHello(conn, client.sessionID); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, 0, 0, err
 	}
 	msgType, err := tcpproto.ReadMsgType(conn)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, 0, 0, err
 	}
 	if msgType != tcpproto.Welcome {
-		conn.Close()
+		_ = conn.Close()
 		return nil, 0, 0, fmt.Errorf("expected WELCOME message, got %d", msgType)
 	}
 	sessionID, phase, resumeSeq, err := tcpproto.ReadWelcome(conn)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, 0, 0, err
 	}
 
@@ -132,24 +132,24 @@ func (client *Client) runSession(conn net.Conn, phase tcpproto.Phase, resumeSeq 
 	var wg sync.WaitGroup
 	var sendErr, recvErr error
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		recvErr = client.recvResults(conn)
 		if recvErr != nil {
-			conn.Close()
+			if err := conn.Close(); err != nil {
+				slog.Debug("While closing connection after receive error", "err", err)
+			}
 		}
-	}()
+	})
 
 	if phase != tcpproto.PhaseResults {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sendErr = client.sendRecords(conn, phase, resumeSeq)
 			if sendErr != nil {
-				conn.Close()
+				if err := conn.Close(); err != nil {
+					slog.Debug("While closing connection after send error", "err", err)
+				}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

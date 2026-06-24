@@ -50,7 +50,7 @@ func (c *Checkpoint[S]) SaveClient(clientID int, state *S) error {
 
 func (c *Checkpoint[S]) DeleteClient(clientID int) {
 	path := c.clientPath(clientID)
-	os.Remove(path)
+	_ = os.Remove(path)
 }
 
 func (c *Checkpoint[S]) Load() (map[int]*S, error) {

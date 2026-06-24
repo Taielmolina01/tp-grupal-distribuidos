@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -69,7 +70,7 @@ func (b *resultBuffer) truncateTorn(clientID int) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var offset int64
 	for {
@@ -98,15 +99,21 @@ func (b *resultBuffer) append(clientID int, body []byte) error {
 	var hdr [4]byte
 	binary.BigEndian.PutUint32(hdr[:], uint32(len(body)))
 	if _, err := f.Write(hdr[:]); err != nil {
-		f.Close()
+		if err := f.Close(); err != nil {
+			slog.Debug("While closing result file after write error", "err", err)
+		}
 		return err
 	}
 	if _, err := f.Write(body); err != nil {
-		f.Close()
+		if err := f.Close(); err != nil {
+			slog.Debug("While closing result file after write error", "err", err)
+		}
 		return err
 	}
 	if err := f.Sync(); err != nil {
-		f.Close()
+		if err := f.Close(); err != nil {
+			slog.Debug("While closing result file after sync error", "err", err)
+		}
 		return err
 	}
 	return f.Close()
@@ -132,21 +139,29 @@ func (b *resultBuffer) flush(clientID int, send func(body []byte) error) error {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			f.Close()
+			if err := f.Close(); err != nil {
+				slog.Debug("While closing result file after read error", "err", err)
+			}
 			return err
 		}
 		body := make([]byte, binary.BigEndian.Uint32(hdr[:]))
 		if _, err := io.ReadFull(f, body); err != nil {
-			f.Close()
+			if err := f.Close(); err != nil {
+				slog.Debug("While closing result file after read error", "err", err)
+			}
 			return err
 		}
 		if err := send(body); err != nil {
-			f.Close()
+			if err := f.Close(); err != nil {
+				slog.Debug("While closing result file after send error", "err", err)
+			}
 			return err
 		}
 	}
 
-	f.Close()
+	if err := f.Close(); err != nil {
+		slog.Debug("While closing result file", "err", err)
+	}
 	return os.Remove(path)
 }
 

@@ -15,9 +15,9 @@ func New(totalShards int) Hasher {
 
 func (h Hasher) ShardFor(clientID int, keys ...string) int {
 	hash := fnv.New32a()
-	fmt.Fprintf(hash, "%d", clientID)
+	_, _ = fmt.Fprintf(hash, "%d", clientID)
 	for _, k := range keys {
-		fmt.Fprintf(hash, ",%s", k)
+		_, _ = fmt.Fprintf(hash, ",%s", k)
 	}
 	return int(hash.Sum32() % uint32(h.totalShards))
 }

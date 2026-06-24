@@ -28,21 +28,21 @@ func newCountReducer(config ReducerConfig) (worker.Worker, error) {
 
 	outputQueue, err := middleware.CreateQueueMiddleware(config.OutputQueues[0], legacyConn)
 	if err != nil {
-		inputQueue.Close()
+		_ = inputQueue.Close()
 		return nil, err
 	}
 
 	ckpt, err := checkpoint.New(config.PersistPath, marshalCountClientState, unmarshalCountClientState)
 	if err != nil {
-		inputQueue.Close()
-		outputQueue.Close()
+		_ = inputQueue.Close()
+		_ = outputQueue.Close()
 		return nil, err
 	}
 
 	recovered, err := ckpt.Load()
 	if err != nil {
-		inputQueue.Close()
-		outputQueue.Close()
+		_ = inputQueue.Close()
+		_ = outputQueue.Close()
 		return nil, err
 	}
 

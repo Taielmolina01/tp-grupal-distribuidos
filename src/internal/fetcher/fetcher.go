@@ -230,7 +230,7 @@ func (fetcher *Fetcher) fetchExchangeRateWithCache(
 		}
 		fetcher.ratesCacheHeap.Enqueue(dto)
 		fetcher.ratesCache[cacheKey] = dto
-		response = &fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * fetchedRate}
+		response.ConvertedAmount = t.AmountPaid * fetchedRate
 	} else {
 		new := heapDTO{
 			time: time.Now(),
@@ -246,7 +246,7 @@ func (fetcher *Fetcher) fetchExchangeRateWithCache(
 			new,
 		)
 		fetcher.ratesCache[cacheKey] = new
-		response = &fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * oldValueCache.apiResponseRateVal.Rate}
+		response.ConvertedAmount = t.AmountPaid * oldValueCache.apiResponseRateVal.Rate
 	}
 }
 

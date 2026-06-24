@@ -90,7 +90,7 @@ func (b *BullyImpl) Run() error {
 		id, err := node.conn.ReadMessage(1)
 		if err != nil {
 			slog.Error("Failed to read node ID", "err", err)
-			node.conn.Close()
+			_ = node.conn.Close()
 			return err
 		}
 
@@ -102,7 +102,7 @@ func (b *BullyImpl) Run() error {
 }
 
 func (b *BullyImpl) close() {
-	b.socket.Close()
+	_ = b.socket.Close()
 
 	b.peersMonitor.DeleteAll()
 }
@@ -113,7 +113,7 @@ func (b *BullyImpl) GetStatus() bullyStatus {
 
 func (b *BullyImpl) handleClient(node NodeInfo) {
 	defer func() {
-		node.conn.Close()
+		_ = node.conn.Close()
 		b.removePeer(node)
 	}()
 
@@ -167,7 +167,7 @@ func (b *BullyImpl) reconnectPeer(nodeId byte) {
 	err = node.conn.SendMessage([]byte{byte(b.id)})
 	if err != nil {
 		slog.Error("Failed to send ID to reconnected peer", "peerId", nodeId, "err", err)
-		node.conn.Close()
+		_ = node.conn.Close()
 		return
 	}
 

@@ -42,3 +42,4 @@ loop.sh
 resultados_loop.md
 loop_logs/*
 bkp/*
+chaos-monkey
