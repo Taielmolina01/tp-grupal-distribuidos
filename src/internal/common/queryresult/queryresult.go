@@ -47,10 +47,6 @@ type BatchResults struct {
 	Query5 []Query5Result
 }
 
-type QueryResult interface {
-	GetHeaders() []string
-}
-
 func (q Query1Result) GetHeaders() []string {
 	return []string{"From Bank", "Account", "To Bank", "Account.1", "Amount Paid"}
 }

@@ -96,14 +96,6 @@ func ProjectAfterCurrency(t Transfer) TransferAfterCurrency {
 	}
 }
 
-type TransferForQ5 struct {
-	Timestamp time.Time `json:"timestamp"`
-}
-
-func ProjectForQ5(t Transfer) TransferForQ5 {
-	return TransferForQ5{Timestamp: t.Timestamp}
-}
-
 type TransferForQ5Filter struct {
 	Timestamp  time.Time `json:"timestamp"`
 	Currency   string    `json:"currency"`

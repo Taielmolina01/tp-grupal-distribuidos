@@ -400,7 +400,7 @@ func (af *AverageFilter) finalize(clientID int, state *clientState) error {
 	}
 
 	total := ot.CountFor("")
-	eofBody := batch.WriteEOF(clientID, uint8(af.queryID), uint8(af.id), total+1, uint32(total))
+	eofBody := batch.WriteEOF(clientID, af.queryID, uint8(af.id), total+1, uint32(total))
 	if err := af.outputQueue.Send(newmiddleware.Message{Body: eofBody}); err != nil {
 		return err
 	}
@@ -452,6 +452,6 @@ func (af *AverageFilter) flushResultBatch(
 	ot *outputtracker.OutputTracker,
 ) error {
 	seq := ot.RegisterBatch("")
-	body := builder.Flush(clientID, uint8(af.queryID), uint8(af.id), seq)
+	body := builder.Flush(clientID, af.queryID, uint8(af.id), seq)
 	return af.outputQueue.Send(newmiddleware.Message{Body: body})
 }

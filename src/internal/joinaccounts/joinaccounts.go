@@ -35,26 +35,27 @@ func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
 	)
 
 	defer func() {
-		if err != nil {
-			if outputMiddleware != nil {
-				if err := outputMiddleware.Close(); err != nil {
-					slog.Error("While closing output middleware", "err", err)
-				}
+		if err == nil {
+			return
+		}
+		if outputMiddleware != nil {
+			if err := outputMiddleware.Close(); err != nil {
+				slog.Error("While closing output middleware", "err", err)
 			}
-			if qualifiedOutputMiddleware != nil {
-				if err := qualifiedOutputMiddleware.Close(); err != nil {
-					slog.Error("While closing qualified output middleware", "err", err)
-				}
+		}
+		if qualifiedOutputMiddleware != nil {
+			if err := qualifiedOutputMiddleware.Close(); err != nil {
+				slog.Error("While closing qualified output middleware", "err", err)
 			}
-			if qualifiedInputMiddleware != nil {
-				if err := qualifiedInputMiddleware.Close(); err != nil {
-					slog.Error("While closing qualified input middleware", "err", err)
-				}
+		}
+		if qualifiedInputMiddleware != nil {
+			if err := qualifiedInputMiddleware.Close(); err != nil {
+				slog.Error("While closing qualified input middleware", "err", err)
 			}
-			if inputMiddleware != nil {
-				if err := inputMiddleware.Close(); err != nil {
-					slog.Error("While closing input middleware", "err", err)
-				}
+		}
+		if inputMiddleware != nil {
+			if err := inputMiddleware.Close(); err != nil {
+				slog.Error("While closing input middleware", "err", err)
 			}
 		}
 	}()
@@ -447,8 +448,7 @@ func (j *JoinAccounts) handleQualifiedBatch(msgs []newmiddleware.Message, ack fu
 
 		tracker.Claim(int(input.SenderID), input.Seq)
 		modified[clientID] = state
-
-		if tracker.IsComplete(int(j.peerAmount)) {
+		if tracker.IsComplete(j.peerAmount) {
 			slog.Info("QUALIFIED COMPLETE")
 			if err := j.finishQualifiedStep(clientID, state); err != nil {
 				slog.Error("finishing qualified step failed", "err", err)

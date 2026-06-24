@@ -8,15 +8,6 @@ type Account struct {
 	EntityName    string `json:"entity_name"`
 }
 
-// Capaz sobren comparaciones idk
-func (account Account) Equals(other Account) bool {
-	return account.BankName == other.BankName &&
-		account.BankId == other.BankId &&
-		account.AccountNumber == other.AccountNumber &&
-		account.EntityId == other.EntityId &&
-		account.EntityName == other.EntityName
-}
-
 type AccountChain struct {
 	// Left -> Middle -> Right
 	Left   AccountIdentifier `json:"left"`
@@ -37,9 +28,4 @@ type AccountIdentifier struct {
 
 func (a AccountIdentifier) GetKey() string {
 	return a.BankID + "_" + a.AccountNumber
-}
-
-type Bank struct {
-	ID   string `json:"bank_id"`
-	Name string `json:"bank_name"`
 }
