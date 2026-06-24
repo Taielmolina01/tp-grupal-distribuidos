@@ -10,6 +10,10 @@ LIME  := \033[38;2;138;206;0m
 RED   := \033[31m
 RESET := \033[0m
 
+ROUNDS=5 
+SLEEP_ROUND=10
+AMOUNT_OF_CONTAINERS_TO_RESTART=3
+
 up:
 	mkdir -p output
 	COMPOSE_HTTP_TIMEOUT=300 docker compose -f docker-compose.yaml up --build --remove-orphans --detach
@@ -51,7 +55,7 @@ switch:
 
 EXPECTED_ENV = INPUT_DIR=$(PWD)/$(INPUT_DIR) EXPECTED_DIR=$(PWD)/$(EXPECTED_DIR) OUTPUT_DIR=$(PWD)/$(OUTPUT_DIR) N_CLIENTS=$(N_CLIENTS)
 
-CHAOS_MONKEY_EXPECTED_ENV = ROUNDS SLEEP_ROUND AMOUNT_OF_CONTAINERS_TO_RESTART
+CHAOS_MONKEY_EXPECTED_ENV = YAML_PATH=$(PWD)/docker-compose.yaml ROUNDS=$(ROUNDS) SLEEP_ROUND=$(SLEEP_ROUND) AMOUNT_OF_CONTAINERS_TO_RESTART=$(AMOUNT_OF_CONTAINERS_TO_RESTART)
 
 build-expected:
 	@cd scripts/expected-output && GOWORK=off $(EXPECTED_ENV) go run . build
@@ -70,5 +74,5 @@ build-race:
 .PHONY: build-race
 
 chaos-monkey:
-	@cd scripts/chaos-monkey && GOWORK=off & $(CHAOS_MONKEY_EXPECTED_ENV) go run . chaos-monkey
+	@cd scripts/chaos-monkey && GOWORK=off $(CHAOS_MONKEY_EXPECTED_ENV) go run . chaos-monkey
 .PHONY: chaos-monkey

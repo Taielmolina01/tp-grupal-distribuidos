@@ -7,9 +7,13 @@ import (
 	"time"
 )
 
-const YAML_PATH = "docker-compose.yml"
+const DEFAULT_YAML_PATH = "docker-compose.yaml"
 
 func main() {
+	yamlPath := os.Getenv("YAML_PATH")
+	if yamlPath == "" {
+		yamlPath = DEFAULT_YAML_PATH
+	}
 	roundsStr := os.Getenv("ROUNDS")
 	rounds, err := strconv.Atoi(roundsStr)
 	if err != nil || rounds <= 0 {
@@ -25,7 +29,7 @@ func main() {
 	if err != nil || amountOfContainersToRestart <= 0 {
 		log.Fatalf("Invalid AMOUNT_OF_CONTAINERS_TO_RESTART value: %v", err)
 	}
-	containers, err := ListServices(YAML_PATH)
+	containers, err := ListServices(yamlPath)
 	if err != nil {
 		log.Fatal(err)
 	}

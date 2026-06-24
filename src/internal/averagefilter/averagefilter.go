@@ -180,6 +180,7 @@ func (af *AverageFilter) handleTransferBatch(msgs []newmiddleware.Message, ack, 
 
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
+	pendingEntries := make(map[int][]appendlog.Entry[transfer.TransferForQ3Filter])
 
 	for _, msg := range msgs {
 		input, err := q3filter.Read(msg.Body)
@@ -201,16 +202,28 @@ func (af *AverageFilter) handleTransferBatch(msgs []newmiddleware.Message, ack, 
 			tracker.RegisterEOF(int(input.SenderID), uint64(input.Total), input.Seq)
 		} else {
 			tracker.RegisterBatch(int(input.SenderID))
-			if err := af.processTransferBatch(input.ClientID, input.SenderID, input.Seq, input.Records); err != nil {
-				slog.Error("process batch failed", "err", err)
-				nack()
-				af.stopConsuming()
-				return
-			}
+			pendingEntries[clientID] = append(pendingEntries[clientID], appendlog.Entry[transfer.TransferForQ3Filter]{
+				SenderID: input.SenderID,
+				Seq:      input.Seq,
+				Records:  input.Records,
+			})
 		}
 
 		tracker.Claim(int(input.SenderID), input.Seq)
 		modified[input.ClientID] = state
+
+		if state.transfersTracker.IsComplete(af.expectedTransfersEofs) &&
+			state.avgsTracker.IsComplete(af.avgsExpectedEofs) {
+			if entries := pendingEntries[clientID]; len(entries) > 0 {
+				if err := af.appendEntries(clientID, entries); err != nil {
+					slog.Error("append entries failed", "clientID", clientID, "err", err)
+					nack()
+					af.stopConsuming()
+					return
+				}
+				delete(pendingEntries, clientID)
+			}
+		}
 
 		done, err := af.tryFinalize(clientID, state)
 		if err != nil {
@@ -221,6 +234,16 @@ func (af *AverageFilter) handleTransferBatch(msgs []newmiddleware.Message, ack, 
 		}
 		if done {
 			completed[clientID] = struct{}{}
+		}
+	}
+
+	// Un solo write+sync por cliente no completado
+	for clientID, entries := range pendingEntries {
+		if err := af.appendEntries(clientID, entries); err != nil {
+			slog.Error("append entries failed", "clientID", clientID, "err", err)
+			nack()
+			af.stopConsuming()
+			return
 		}
 	}
 
@@ -241,17 +264,12 @@ func (af *AverageFilter) handleTransferBatch(msgs []newmiddleware.Message, ack, 
 	ack()
 }
 
-func (af *AverageFilter) processTransferBatch(
-	clientID int,
-	senderID uint8,
-	seq uint64,
-	records []transfer.TransferForQ3Filter,
-) error {
+func (af *AverageFilter) appendEntries(clientID int, entries []appendlog.Entry[transfer.TransferForQ3Filter]) error {
 	log, err := af.transferLog(clientID)
 	if err != nil {
 		return err
 	}
-	return log.Append(senderID, seq, records)
+	return log.AppendAll(entries)
 }
 
 func (af *AverageFilter) transferLog(clientID int) (*appendlog.Log[transfer.TransferForQ3Filter], error) {
