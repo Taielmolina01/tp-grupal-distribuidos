@@ -1,0 +1,22 @@
+src/internal/common/appendlog/appendlog.go
+  s_e4643afbd94e40::t_891827dcfc0bcd 54-69,71-72,81
+src/internal/averagefilter/averagefilter.go
+  s_e4643afbd94e40::t_376de255f29a4c 183,205-209,215-227,240-246
+  s_e4643afbd94e40::t_1b250569523d0c 267,272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "cae3faf5c35868ca563ba6f7239fea1862066a30",
+  "prompts": {},
+  "sessions": {
+    "s_e4643afbd94e40": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0a86bc0b-61a5-48d4-a16e-e065c799454d",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
