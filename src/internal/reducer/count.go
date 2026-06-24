@@ -68,7 +68,6 @@ func (count *CountReducer) handleMessage(msg middleware.Message, ack, nack func(
 
 	if !input.EOF {
 		count.countByClient[input.ClientID] += uint32(len(input.Records))
-		slog.Info("received data batch")
 		return
 	}
 
