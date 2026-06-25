@@ -2,7 +2,7 @@ package fetcher
 
 import (
 	"time"
-	"tp-grupal-distribuidos/internal/common/middleware"
+	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/priorityqueue"
@@ -12,31 +12,30 @@ import (
 )
 
 type FetcherConfig struct {
-	MomHost              string
-	MomPort              int
-	InputQueue           string
-	InputExchange        string
-	InputRoutingKeys     []string
-	OutputClusters       []shard.ClusterConfig
-	ExpectedInputSenders int
-	Quote                string
-	QueryID              uint8
-}
-
-type outputCluster struct {
-	middleware newmiddleware.Middleware
-	hasher     shard.Hasher
+	MomHost                string
+	MomPort                int
+	InputMiddlewarePrefix  string
+	Id                     int
+	OutputMiddlewarePrefix string
+	ExpectedInputSenders   int
+	Quote                  string
+	QueryID                uint8
+	PersistPath            string
+	OutputAmount           int
 }
 
 type Fetcher struct {
-	inputQueue      middleware.Middleware
-	outputClusters  []outputCluster
-	queryId         uint8
-	quote           string
-	ratesCache      map[string]heapDTO
-	states          statemap.StateMap[clientState]
-	expectedSenders int
-	ratesCacheHeap  priorityqueue.PriorityQueue[heapDTO]
+	inputQueue       newmiddleware.Middleware
+	outputMiddleware newmiddleware.Middleware
+	queryId          uint8
+	quote            string
+	ratesCache       map[string]heapDTO
+	states           statemap.StateMap[clientState]
+	expectedSenders  int
+	ratesCacheHeap   priorityqueue.PriorityQueue[heapDTO]
+	checkpoint       *checkpoint.Checkpoint[clientState]
+	outputAmount     int
+	hasher           shard.Hasher
 }
 
 type heapDTO struct {
