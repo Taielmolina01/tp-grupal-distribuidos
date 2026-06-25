@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -18,16 +17,12 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/csvutil"
-	"tp-grupal-distribuidos/internal/common/diskstore"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
 const numQueries = 5
-
-const sessionKey = "session"
 
 type ClientConfig struct {
 	ServerHost               string
@@ -39,7 +34,6 @@ type ClientConfig struct {
 	MaxBatchBytes            int
 	ConnectionAttempts       int
 	ConnectionAttemptDelayMs int
-	SessionFilePath          string
 }
 
 type Client struct {
@@ -70,10 +64,6 @@ func (client *Client) Run() error {
 	client.running.Store(true)
 	go client.handleSignals()
 
-	if err := client.loadSession(); err != nil {
-		return err
-	}
-
 	if err := client.setupOutputFiles(); err != nil {
 		return err
 	}
@@ -97,7 +87,6 @@ func (client *Client) Run() error {
 		client.closeConn()
 
 		if err == nil {
-			client.clearSession()
 			return nil
 		}
 		if !client.running.Load() {
@@ -135,50 +124,8 @@ func (client *Client) connectAndHandshake() (net.Conn, tcpproto.Phase, uint64, e
 	}
 
 	client.sessionID = sessionID
-	if err := client.persistSession(); err != nil {
-		conn.Close()
-		return nil, 0, 0, err
-	}
 	slog.Info("Session established", "session_id", sessionID, "phase", phase, "resume_seq", resumeSeq)
 	return conn, phase, resumeSeq, nil
-}
-
-func (client *Client) loadSession() error {
-	if client.config.SessionFilePath == "" {
-		return nil
-	}
-	data, err := diskstore.Read(client.config.SessionFilePath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if raw, ok := data[sessionKey]; ok {
-		client.sessionID = wire.NewReader(raw).Uint32()
-		slog.Info("Recovered persisted session", "session_id", client.sessionID)
-	}
-	return nil
-}
-
-func (client *Client) persistSession() error {
-	if client.config.SessionFilePath == "" {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(client.config.SessionFilePath), 0755); err != nil {
-		return err
-	}
-	data := map[string][]byte{sessionKey: wire.AppendUint32(nil, client.sessionID)}
-	return diskstore.WriteAtomic(client.config.SessionFilePath, data)
-}
-
-func (client *Client) clearSession() {
-	if client.config.SessionFilePath == "" {
-		return
-	}
-	if err := diskstore.RemoveIfExists(client.config.SessionFilePath); err != nil {
-		slog.Error("While removing session file", "err", err)
-	}
 }
 
 func (client *Client) runSession(conn net.Conn, phase tcpproto.Phase, resumeSeq uint64) error {
@@ -413,17 +360,9 @@ func (client *Client) setupOutputFiles() error {
 		queryresult.Query5Result{}.GetHeaders(),
 	}
 
-	resuming := client.sessionID != 0
-
 	for i := range numQueries {
 		path := fmt.Sprintf("%s_%d.csv", client.config.OutputFilePrefix, i+1)
-		var f *os.File
-		var err error
-		if resuming {
-			f, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
-		} else {
-			f, err = os.Create(path)
-		}
+		f, err := os.Create(path)
 		if err != nil {
 			slog.Debug("Error while creating output file", "query", i+1, "err", err)
 			return err
@@ -431,15 +370,9 @@ func (client *Client) setupOutputFiles() error {
 		client.files[i] = f
 		client.writers[i] = csv.NewWriter(f)
 
-		info, err := f.Stat()
-		if err != nil {
+		if err := client.writers[i].Write(headers[i]); err != nil {
+			slog.Error("While writing header to output file", "query", i+1, "err", err)
 			return err
-		}
-		if info.Size() == 0 {
-			if err := client.writers[i].Write(headers[i]); err != nil {
-				slog.Error("While writing header to output file", "query", i+1, "err", err)
-				return err
-			}
 		}
 	}
 	return nil
