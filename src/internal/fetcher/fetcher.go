@@ -160,16 +160,7 @@ func (fetcher *Fetcher) consume(msg newmiddleware.Message, ack, nack func()) {
 			ack()
 			return
 		}
-		for i := range fetcher.outputAmount {
-			rk := fmt.Sprintf("shard-%d", i)
-			count := uint32(state.outputTracker.CountFor(rk))
-			eofBody := batch.WriteEOF(clientID, fetcher.queryId, 0, 0, count)
-			if err := fetcher.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
-				slog.Error("while sending EOF to filter amount", "err", err)
-			}
-		}
-		fetcher.states.Delete(clientID)
-		fetcher.checkpoint.DeleteClient(clientID)
+		fetcher.finishTransfersStep(clientID, state)
 		ack()
 		return
 	}
@@ -209,6 +200,19 @@ func (fetcher *Fetcher) consume(msg newmiddleware.Message, ack, nack func()) {
 		state.outputTracker.RegisterBatch(rk)
 	}
 
+	if tracker.IsComplete(fetcher.expectedSenders) {
+		if err := fetcher.finishTransfersStep(clientID, state); err != nil {
+			slog.Error("while finishing transfers step", "err", err)
+			nack()
+			if err := fetcher.inputQueue.StopConsuming(); err != nil {
+				slog.Error("while stopping consuming from input queue", "err", err)
+			}
+			return
+		}
+		fetcher.states.Delete(clientID)
+		fetcher.checkpoint.DeleteClient(clientID)
+	}
+
 	if err := fetcher.checkpoint.SaveClient(clientID, state); err != nil {
 		slog.Error("persist failed, stopping", "err", err)
 		nack()
@@ -218,6 +222,20 @@ func (fetcher *Fetcher) consume(msg newmiddleware.Message, ack, nack func()) {
 		return
 	}
 	ack()
+}
+
+func (fetcher *Fetcher) finishTransfersStep(clientID int, state *clientState) error {
+	for i := range fetcher.outputAmount {
+		rk := fmt.Sprintf("shard-%d", i)
+		count := uint32(state.outputTracker.CountFor(rk))
+		eofBody := batch.WriteEOF(clientID, fetcher.queryId, 0, 0, count)
+		if err := fetcher.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+			return err
+		}
+	}
+	fetcher.states.Delete(clientID)
+	fetcher.checkpoint.DeleteClient(clientID)
+	return nil
 }
 
 func (fetcher *Fetcher) fetchExchangeRateWithCache(
