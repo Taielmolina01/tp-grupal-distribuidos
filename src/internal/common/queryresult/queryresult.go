@@ -26,7 +26,7 @@ type Query2Result struct {
 type Query3Result struct {
 	FromBank      string  `json:"from_bank"`
 	FromAccount   string  `json:"from_account"`
-	PaymentFormat string  `json:"payment_format"` // revisar
+	PaymentFormat string  `json:"payment_format"`
 	Amount        float64 `json:"amount"`
 }
 
@@ -45,10 +45,6 @@ type BatchResults struct {
 	Query3 []Query3Result
 	Query4 []Query4Result
 	Query5 []Query5Result
-}
-
-type QueryResult interface {
-	GetHeaders() []string
 }
 
 func (q Query1Result) GetHeaders() []string {

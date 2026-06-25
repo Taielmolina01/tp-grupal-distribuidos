@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"syscall"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/splittransfer"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
@@ -18,11 +19,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
-)
-
-const (
-	_EOF_RING_QUEUE_PREFIX = "FILTER_AND_SPLIITER_EOF"
-	_EOF_OUTPUT_KEY        = "__eof"
 )
 
 func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error) {
@@ -36,16 +32,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 
 	defer func() {
 		if err != nil {
-			if outputMiddleware != nil {
-				if err := outputMiddleware.Close(); err != nil {
-					slog.Error("While closing output middleware", "err", err)
-				}
-			}
-			if inputMiddleware != nil {
-				if err := inputMiddleware.Close(); err != nil {
-					slog.Error("While closing input middleware", "err", err)
-				}
-			}
+			cleanup.Close(outputMiddleware, inputMiddleware)
 		}
 	}()
 
@@ -127,13 +114,7 @@ func (f *FilterAndSplitter) HandleSignals() {
 }
 
 func (f *FilterAndSplitter) close() {
-	if err := f.inputMiddleware.Close(); err != nil {
-		slog.Error("While closing input middleware", "err", err)
-	}
-
-	if err := f.outputMiddleware.Close(); err != nil {
-		slog.Error("While closing output middleware", "err", err)
-	}
+	cleanup.Close(f.inputMiddleware, f.outputMiddleware)
 }
 
 func (f *FilterAndSplitter) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {

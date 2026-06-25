@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
@@ -230,7 +231,7 @@ func (fetcher *Fetcher) fetchExchangeRateWithCache(
 		}
 		fetcher.ratesCacheHeap.Enqueue(dto)
 		fetcher.ratesCache[cacheKey] = dto
-		response = &fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * fetchedRate}
+		response.ConvertedAmount = t.AmountPaid * fetchedRate
 	} else {
 		new := heapDTO{
 			time: time.Now(),
@@ -246,7 +247,7 @@ func (fetcher *Fetcher) fetchExchangeRateWithCache(
 			new,
 		)
 		fetcher.ratesCache[cacheKey] = new
-		response = &fetcherresponse.FetcherResponse{ConvertedAmount: t.AmountPaid * oldValueCache.apiResponseRateVal.Rate}
+		response.ConvertedAmount = t.AmountPaid * oldValueCache.apiResponseRateVal.Rate
 	}
 }
 
@@ -286,13 +287,8 @@ func (fetcher *Fetcher) HandleSignals() {
 }
 
 func (fetcher *Fetcher) close() {
-	if err := fetcher.inputQueue.Close(); err != nil {
-		slog.Error("while closing input queue", "err", err)
-	}
-
+	cleanup.Close(fetcher.inputQueue)
 	for _, cluster := range fetcher.outputClusters {
-		if err := cluster.middleware.Close(); err != nil {
-			slog.Error("while closing output cluster middleware", "err", err)
-		}
+		cleanup.Close(cluster.middleware)
 	}
 }

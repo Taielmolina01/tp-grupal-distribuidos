@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/daterange"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/summethod"
@@ -32,13 +33,7 @@ func NewSumByPaymentFormat(config SumConfig) (worker.Worker, error) {
 
 	defer func() {
 		if err != nil {
-			for _, m := range []newmiddleware.Middleware{outputMiddleware, inputMiddleware} {
-				if m != nil {
-					if closeErr := m.Close(); closeErr != nil {
-						slog.Error("While closing middleware", "err", closeErr)
-					}
-				}
-			}
+			cleanup.Close(outputMiddleware, inputMiddleware)
 		}
 	}()
 
@@ -117,12 +112,7 @@ func (s *SumByPaymentFormat) stopConsuming() {
 }
 
 func (s *SumByPaymentFormat) close() {
-	if err := s.inputMiddleware.Close(); err != nil {
-		slog.Error("While closing input middleware", "sum_id", s.id, "err", err)
-	}
-	if err := s.outputMiddleware.Close(); err != nil {
-		slog.Error("While closing output middleware", "sum_id", s.id, "err", err)
-	}
+	cleanup.Close(s.inputMiddleware, s.outputMiddleware)
 }
 
 func (s *SumByPaymentFormat) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {

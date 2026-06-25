@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/daterange"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/q3filter"
@@ -34,13 +35,7 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (worker.Worker, error)
 
 	defer func() {
 		if err != nil {
-			for _, m := range []newmiddleware.Middleware{filterMiddleware, avgMiddleware, inputExchange} {
-				if m != nil {
-					if closeErr := m.Close(); closeErr != nil {
-						slog.Error("While closing middleware", "err", closeErr)
-					}
-				}
-			}
+			cleanup.Close(filterMiddleware, avgMiddleware, inputExchange)
 		}
 	}()
 
@@ -133,15 +128,7 @@ func (s *DateRangeSplitter) stopConsuming() {
 }
 
 func (s *DateRangeSplitter) close() {
-	if err := s.inputExchange.Close(); err != nil {
-		slog.Error("While closing input exchange", "splitter_id", s.id, "err", err)
-	}
-	if err := s.avgMiddleware.Close(); err != nil {
-		slog.Error("While closing avg output middleware", "splitter_id", s.id, "err", err)
-	}
-	if err := s.filterMiddleware.Close(); err != nil {
-		slog.Error("While closing filter output middleware", "splitter_id", s.id, "err", err)
-	}
+	cleanup.Close(s.inputExchange, s.avgMiddleware, s.filterMiddleware)
 }
 
 func (s *DateRangeSplitter) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {

@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/summethod"
@@ -31,13 +32,7 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 
 	defer func() {
 		if err != nil {
-			for _, m := range []newmiddleware.Middleware{outputMiddleware, inputMiddleware} {
-				if m != nil {
-					if closeErr := m.Close(); closeErr != nil {
-						slog.Error("While closing middleware", "err", closeErr)
-					}
-				}
-			}
+			cleanup.Close(outputMiddleware, inputMiddleware)
 		}
 	}()
 
@@ -91,6 +86,7 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 
 func (a *AvgAggregator) Run() {
 	defer a.close()
+
 	slog.Info("Starting avg-aggregator consumers", "aggregate_id", a.id)
 	if err := a.inputMiddleware.StartConsumingBatch(a.persistBatchSize, a.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
 		a.handleBatch(msgs, ack, nack)
@@ -114,12 +110,7 @@ func (a *AvgAggregator) stopConsuming() {
 }
 
 func (a *AvgAggregator) close() {
-	if err := a.inputMiddleware.Close(); err != nil {
-		slog.Error("While closing input middleware", "aggregate_id", a.id, "err", err)
-	}
-	if err := a.outputMiddleware.Close(); err != nil {
-		slog.Error("While closing output middleware", "aggregate_id", a.id, "err", err)
-	}
+	cleanup.Close(a.inputMiddleware, a.outputMiddleware)
 }
 
 func (a *AvgAggregator) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {

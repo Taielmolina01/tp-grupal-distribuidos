@@ -96,14 +96,6 @@ func ProjectAfterCurrency(t Transfer) TransferAfterCurrency {
 	}
 }
 
-type TransferForQ5 struct {
-	Timestamp time.Time `json:"timestamp"`
-}
-
-func ProjectForQ5(t Transfer) TransferForQ5 {
-	return TransferForQ5{Timestamp: t.Timestamp}
-}
-
 type TransferForQ5Filter struct {
 	Timestamp  time.Time `json:"timestamp"`
 	Currency   string    `json:"currency"`
@@ -138,19 +130,4 @@ type SumByMethod struct {
 type AvgByMethod struct {
 	Avg    float64 `json:"average"`
 	Method string  `json:"method"`
-}
-
-// Capaz sobren comparaciones idk
-func (t Transfer) Equals(other Transfer) bool {
-	return t.Timestamp.Equal(other.Timestamp) &&
-		t.FromBank == other.FromBank &&
-		t.FromBankAccount == other.FromBankAccount &&
-		t.ToBank == other.ToBank &&
-		t.ToBankAccount == other.ToBankAccount &&
-		t.AmountReceived == other.AmountReceived &&
-		t.ReceivingCurrency == other.ReceivingCurrency &&
-		t.AmountPaid == other.AmountPaid &&
-		t.PaymentCurrency == other.PaymentCurrency &&
-		t.PaymentFormat == other.PaymentFormat &&
-		t.IsLaundering == other.IsLaundering
 }

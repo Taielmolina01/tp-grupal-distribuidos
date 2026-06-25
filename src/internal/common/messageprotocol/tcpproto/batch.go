@@ -61,14 +61,6 @@ func writeBatchHeader(dst []byte, msgType uint8, seq uint64, count uint16, paylo
 	return wire.AppendUint32(dst, payloadSize)
 }
 
-func maxPayloadBytes(maxBytes int, headerSize uint32) int {
-	maxPayloadBytes := maxBytes - int(headerSize)
-	if maxPayloadBytes < 0 {
-		return 0
-	}
-	return maxPayloadBytes
-}
-
 func NewAccountBatchBuilder(maxCount, maxBytes int) *BatchBuilder[account.Account] {
 	return &BatchBuilder[account.Account]{
 		maxBytes: maxBytes - int(batchHeaderSize),

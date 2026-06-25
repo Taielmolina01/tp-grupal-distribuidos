@@ -8,6 +8,10 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+const (
+	_DEFAULT_QOS = 1000
+)
+
 type baseMiddleware struct {
 	queue         amqp.Queue
 	channel       *amqp.Channel
@@ -193,7 +197,7 @@ func setupConn(settings ConnSettings) (*amqp.Connection, *amqp.Channel, error) {
 		return nil, nil, ErrDisconnected
 	}
 
-	if err := ch.Qos(1000, 0, false); err != nil {
+	if err := ch.Qos(_DEFAULT_QOS, 0, false); err != nil {
 		if err := ch.Close(); err != nil {
 			slog.Error("While closing channel on Qos failure", "err", err)
 		}
