@@ -1,0 +1,125 @@
+src/cmd/fetcher/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 8,79-83,95
+src/cmd/daterangesplitter/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 9,75-79,98
+src/cmd/filterandsplitter/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 11,78-82,97
+src/internal/sum/types.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 32-33
+src/internal/averagefilter/averagefilter.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 78-79,103,377
+src/internal/join/types.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 36-37
+src/internal/reducer/count.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 57
+src/internal/reducer/reducer.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 71
+src/cmd/reducer/main.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 12,133-137
+src/internal/aggregate/types.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 29-30
+docker-compose.yaml
+  s_2c2cdc0ce2cb14::t_56b06fe67ed3b3 42,86,113,140,167,198,226,252,278,306,334,365,393,425,457,489,521,553,581,609,637,665,697,726,755,784,812,840,870,900,931,959,985,1008,1036,1064
+src/internal/filter/commondistinctfilter/distinctfilter.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 103
+src/internal/filter/filteraccountseen/filteraccountseen.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 66
+src/internal/filter/filterandsplitter/types.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 33-34
+src/internal/filter/commonfilter/filter.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 72
+src/cmd/averagefilter/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 80-84,100
+src/internal/aggregate/aggregate.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 64
+src/internal/joinaccounts/joinaccounts.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 95-96,100,135,144,156
+src/internal/acumaccounts/acumaccounts.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 66
+src/cmd/aggregate/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 74-78,92
+src/internal/common/filter/types.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 36-37
+src/cmd/join/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 9,69-73,81-86
+scripts/compose-gen/compose-config.yaml
+  s_2c2cdc0ce2cb14::t_56b06fe67ed3b3 3
+src/internal/acumaccounts/types.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 33-34
+src/internal/gateway/gateway.go
+  s_2c2cdc0ce2cb14::t_9e59e1949f0c30 141
+  s_2c2cdc0ce2cb14::t_c3fb5af5846476 49
+src/internal/filter/filterandsplitter/filterandsplitter.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 66
+src/internal/averagefilter/types.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 36-37,62
+src/cmd/gateway/main.go
+  s_2c2cdc0ce2cb14::t_b89ad075f5b17a 12
+  s_2c2cdc0ce2cb14::t_322730734119b0 137-141,158
+src/internal/join/adapter.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 68-69
+src/cmd/sum/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 79-83,98
+src/internal/sum/sum.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 65
+src/internal/daterangesplitter/types.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 38-39
+src/cmd/joinaccounts/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 94-98,116
+src/internal/fetcher/types.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 25-26
+src/cmd/currencyfilter/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 11,83-87
+src/internal/reducer/types.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 44-45
+src/cmd/convertedamountfilter/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 9,88-92
+src/internal/common/config/config.go
+  s_2c2cdc0ce2cb14::t_6976b0a6d4a67d 1-22
+src/internal/gateway/sessionstore.go
+  s_2c2cdc0ce2cb14::t_b9d6ae88a6a65c 37-40
+  s_2c2cdc0ce2cb14::t_73dbafc8048a67 35
+  s_2c2cdc0ce2cb14::t_254adfcc9288f6 105
+  s_2c2cdc0ce2cb14::t_cc02a4a523af0a 27-32
+src/internal/daterangesplitter/daterangesplitter.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 76
+scripts/compose-gen/generator.go
+  s_2c2cdc0ce2cb14::t_33ff20ff921b08 199
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 13-16,221,245,296,322,349,374,401,428,458,485,511,539,566,592,620,647,674
+src/cmd/amountfilter/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 9,79-83
+src/internal/joinaccounts/types.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 37-38
+src/cmd/filteraccountseen/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 74-78,92
+src/cmd/daterangeandpaymentfilter/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 11,91-95
+src/cmd/acumaccounts/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 9,74-78,92
+src/cmd/bankdistinctfilter/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 9,64-68,80
+src/internal/fetcher/fetcher.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 91
+src/internal/filter/filteraccountseen/types.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 31-32
+scripts/compose-gen/config.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 16-17,63-64
+scripts/compose-gen/main.go
+  s_2c2cdc0ce2cb14::t_2e16367e5c91a9 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "034193d108ab932a4e390fc0788834ddf5bbc635",
+  "prompts": {},
+  "sessions": {
+    "s_2c2cdc0ce2cb14": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e6699172-fd06-48aa-b229-161ed9559b26",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
