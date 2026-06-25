@@ -1,0 +1,29 @@
+src/cmd/bankdistinctfilter/config.go
+  s_d73af1bdb9a6a7::t_a92875e11b8dd8 33-35,37-40,64-73
+src/internal/common/filter/types.go
+  s_d73af1bdb9a6a7::t_4d35863862b795 17-21
+scripts/compose-gen/generator.go
+  s_d73af1bdb9a6a7::t_52bfc3fc9611b5 355-356
+src/internal/filter/commondistinctfilter/distinctfilter.go
+  s_d73af1bdb9a6a7::t_7ce590a49bf94c 50
+  s_d73af1bdb9a6a7::t_9dabee884ed1df 117
+docker-compose.yaml
+  s_d73af1bdb9a6a7::t_bb0a9fb9695f7c 263-264
+  s_d73af1bdb9a6a7::t_80657ed2534d35 238-239
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "ea3e16452bf7120baf10ec2f42741a4a07cd8a24",
+  "prompts": {},
+  "sessions": {
+    "s_d73af1bdb9a6a7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "519fcc35-4f69-4b0d-9575-d43739ef98bd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
