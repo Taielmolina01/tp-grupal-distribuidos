@@ -28,7 +28,8 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - ACCOUNT_QUEUES=Q2_accounts_0,Q2_accounts_1
+      - ACCOUNTS_CLUSTER_PREFIX=Q2_accounts
+      - ACCOUNTS_CLUSTER_AMOUNT=2
       - TRANSFERS_CLUSTERS=Q1234_filter_currency:2,Q5_filter:2
       - RESULTS_QUEUE=results_queue
       - MOM_HOST=rabbitmq
@@ -183,7 +184,8 @@ services:
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
       - INPUT_MIDDLEWARE_PREFIX=Q2_filtered
       - EXPECTED_EOFS=2
-      - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
+      - OUTPUT_MIDDLEWARE_PREFIX=Q2_reduced_transfers
+      - OUTPUT_AMOUNT=2
       - PERSIST_PATH=/var/bkp/q2_reducer_0
       - PERSIST_BATCH_SIZE=50
       - PERSIST_FLUSH_INTERVAL=1s
@@ -209,7 +211,8 @@ services:
       - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK
       - INPUT_MIDDLEWARE_PREFIX=Q2_filtered
       - EXPECTED_EOFS=2
-      - OUTPUT_QUEUES=Q2_reduced_transfers_0,Q2_reduced_transfers_1
+      - OUTPUT_MIDDLEWARE_PREFIX=Q2_reduced_transfers
+      - OUTPUT_AMOUNT=2
       - PERSIST_PATH=/var/bkp/q2_reducer_1
       - PERSIST_BATCH_SIZE=50
       - PERSIST_FLUSH_INTERVAL=1s
@@ -231,8 +234,9 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - ID=0
-      - INPUT_QUEUE=Q2_accounts_0
-      - OUTPUT_QUEUES=Q2_join_accounts_q_0,Q2_join_accounts_q_1
+      - INPUT_MIDDLEWARE_PREFIX=Q2_accounts
+      - OUTPUT_MIDDLEWARE_PREFIX=Q2_join_accounts
+      - OUTPUT_AMOUNT=2
       - QUERY_ID=2
       - PERSIST_PATH=/var/bkp/q2_filter_bank_distinct_0
       - PERSIST_BATCH_SIZE=50
@@ -255,8 +259,9 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - ID=1
-      - INPUT_QUEUE=Q2_accounts_1
-      - OUTPUT_QUEUES=Q2_join_accounts_q_0,Q2_join_accounts_q_1
+      - INPUT_MIDDLEWARE_PREFIX=Q2_accounts
+      - OUTPUT_MIDDLEWARE_PREFIX=Q2_join_accounts
+      - OUTPUT_AMOUNT=2
       - QUERY_ID=2
       - PERSIST_PATH=/var/bkp/q2_filter_bank_distinct_1
       - PERSIST_BATCH_SIZE=50
@@ -279,8 +284,8 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - JOIN_TYPE=transfer_account_by_bank
-      - LEFT_INPUT_QUEUE=Q2_reduced_transfers_0
-      - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_0
+      - LEFT_INPUT_MIDDLEWARE_PREFIX=Q2_reduced_transfers
+      - RIGHT_INPUT_MIDDLEWARE_PREFIX=Q2_join_accounts
       - OUTPUT_QUEUE=results_queue
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2
@@ -306,8 +311,8 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - JOIN_TYPE=transfer_account_by_bank
-      - LEFT_INPUT_QUEUE=Q2_reduced_transfers_1
-      - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_1
+      - LEFT_INPUT_MIDDLEWARE_PREFIX=Q2_reduced_transfers
+      - RIGHT_INPUT_MIDDLEWARE_PREFIX=Q2_join_accounts
       - OUTPUT_QUEUE=results_queue
       - LEFT_EOFS_EXPECTED=2
       - RIGHT_EOFS_EXPECTED=2

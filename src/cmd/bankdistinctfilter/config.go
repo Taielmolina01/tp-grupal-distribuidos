@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/filter"
@@ -26,14 +25,19 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	inputQueue := os.Getenv("INPUT_QUEUE")
-	if inputQueue == "" {
-		return filter.FilterConfig{}, errors.New("INPUT_QUEUE environment variable is required")
+	inputMiddlewarePrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
+	if inputMiddlewarePrefix == "" {
+		return filter.FilterConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	outputQueues := os.Getenv("OUTPUT_QUEUES")
-	if outputQueues == "" {
-		return filter.FilterConfig{}, errors.New("OUTPUT_QUEUES environment variable is required")
+	outputMiddlewarePrefix := os.Getenv("OUTPUT_MIDDLEWARE_PREFIX")
+	if outputMiddlewarePrefix == "" {
+		return filter.FilterConfig{}, errors.New("OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
+	}
+
+	outputAmount, err := strconv.Atoi(os.Getenv("OUTPUT_AMOUNT"))
+	if err != nil {
+		return filter.FilterConfig{}, errors.New("OUTPUT_AMOUNT environment variable is required and must be a number")
 	}
 
 	queryId, err := strconv.Atoi(os.Getenv("QUERY_ID"))
@@ -57,14 +61,15 @@ func loadConfig() (filter.FilterConfig, error) {
 	}
 
 	return filter.FilterConfig{
-		Id:                   id,
-		MomHost:              momHost,
-		MomPort:              momPort,
-		InputQueue:           inputQueue,
-		OutputQueues:         strings.Split(outputQueues, ","),
-		QueryID:              uint8(queryId),
-		PersistPath:          persistPath,
-		PersistBatchSize:     persistBatchSize,
-		PersistFlushInterval: persistFlushInterval,
+		Id:                     id,
+		MomHost:                momHost,
+		MomPort:                momPort,
+		InputMiddlewarePrefix:  inputMiddlewarePrefix,
+		OutputMiddlewarePrefix: outputMiddlewarePrefix,
+		OutputAmount:           outputAmount,
+		QueryID:                uint8(queryId),
+		PersistPath:            persistPath,
+		PersistBatchSize:       persistBatchSize,
+		PersistFlushInterval:   persistFlushInterval,
 	}, nil
 }

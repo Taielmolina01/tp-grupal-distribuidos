@@ -5,7 +5,6 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -31,10 +30,12 @@ type ReducerConfig struct {
 	QueryID     uint8
 	ReducerType ReducerType
 
-	InputMiddlewarePrefix string
-	ExpectedEOFs          int
-	OutputQueues          []string
-	PersistPath           string
+	InputMiddlewarePrefix  string
+	ExpectedEOFs           int
+	OutputMiddlewarePrefix string
+	OutputAmount           int
+	OutputQueues           []string // used only by COUNT
+	PersistPath            string
 	PersistBatchSize      int
 	PersistFlushInterval  time.Duration
 
@@ -46,8 +47,9 @@ type Reducer struct {
 	id      int
 	queryID uint8
 
-	inputMiddleware newmiddleware.Middleware
-	outputQueues    []middleware.Middleware
+	inputMiddleware  newmiddleware.Middleware
+	outputMiddleware newmiddleware.Middleware
+	outputAmount     int
 
 	prevNodeAmt int
 

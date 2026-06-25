@@ -35,12 +35,6 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		return reducer.ReducerConfig{}, errors.New("ID environment variable is required and must be a number")
 	}
 
-	outputQueues := os.Getenv("OUTPUT_QUEUES")
-	if outputQueues == "" {
-		return reducer.ReducerConfig{}, errors.New("OUTPUT_QUEUES environment variable is required")
-	}
-	outputQueuesStr := strings.Split(outputQueues, ",")
-
 	reducerTypeStr := os.Getenv("REDUCER_TYPE")
 	if reducerTypeStr == "" {
 		return reducer.ReducerConfig{}, errors.New("REDUCER_TYPE environment variable is required")
@@ -48,12 +42,11 @@ func loadConfig() (reducer.ReducerConfig, error) {
 	reducerType := reducer.ReducerType(reducerTypeStr)
 
 	config := reducer.ReducerConfig{
-		Id:           id,
-		MomHost:      momHost,
-		MomPort:      momPort,
-		QueryID:      uint8(queryId),
-		OutputQueues: outputQueuesStr,
-		ReducerType:  reducerType,
+		Id:          id,
+		MomHost:     momHost,
+		MomPort:     momPort,
+		QueryID:     uint8(queryId),
+		ReducerType: reducerType,
 	}
 
 	switch reducerType {
@@ -66,6 +59,16 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		expectedEOFs, err := strconv.Atoi(os.Getenv("EXPECTED_EOFS"))
 		if err != nil {
 			return reducer.ReducerConfig{}, errors.New("EXPECTED_EOFS environment variable is required and must be a number")
+		}
+
+		outputPrefix := os.Getenv("OUTPUT_MIDDLEWARE_PREFIX")
+		if outputPrefix == "" {
+			return reducer.ReducerConfig{}, errors.New("OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
+		}
+
+		outputAmount, err := strconv.Atoi(os.Getenv("OUTPUT_AMOUNT"))
+		if err != nil {
+			return reducer.ReducerConfig{}, errors.New("OUTPUT_AMOUNT environment variable is required and must be a number")
 		}
 
 		persistPath := os.Getenv("PERSIST_PATH")
@@ -85,10 +88,18 @@ func loadConfig() (reducer.ReducerConfig, error) {
 
 		config.InputMiddlewarePrefix = inputPrefix
 		config.ExpectedEOFs = expectedEOFs
+		config.OutputMiddlewarePrefix = outputPrefix
+		config.OutputAmount = outputAmount
 		config.PersistPath = persistPath
 		config.PersistBatchSize = persistBatchSize
 		config.PersistFlushInterval = persistFlushInterval
 	case reducer.COUNT:
+		outputQueues := os.Getenv("OUTPUT_QUEUES")
+		if outputQueues == "" {
+			return reducer.ReducerConfig{}, errors.New("OUTPUT_QUEUES environment variable is required")
+		}
+		outputQueuesStr := strings.Split(outputQueues, ",")
+
 		inputQueue := os.Getenv("INPUT_QUEUE")
 		if inputQueue == "" {
 			return reducer.ReducerConfig{}, errors.New("INPUT_QUEUE environment variable is required")
@@ -108,6 +119,7 @@ func loadConfig() (reducer.ReducerConfig, error) {
 			return reducer.ReducerConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
 		}
 
+		config.OutputQueues = outputQueuesStr
 		config.InputQueue = inputQueue
 		config.InputEofsExpected = inputEofsExpected
 		config.PersistPath = persistPath

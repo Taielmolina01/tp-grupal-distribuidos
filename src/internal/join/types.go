@@ -6,7 +6,6 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -25,9 +24,9 @@ type JoinConfig struct {
 	MomPort int
 	QueryID uint8
 
-	LeftInputQueue    string
-	RightInputQueue   string
-	OutputQueue       string
+	LeftInputMiddlewarePrefix  string
+	RightInputMiddlewarePrefix string
+	OutputQueue                string
 	LeftEofsExpected  int
 	RightEofsExpected int
 
@@ -50,7 +49,7 @@ type Join struct {
 
 	leftInput  newmiddleware.Middleware
 	rightInput newmiddleware.Middleware
-	output     middleware.Middleware
+	output     newmiddleware.Middleware
 
 	leftEofsExpected  int
 	rightEofsExpected int

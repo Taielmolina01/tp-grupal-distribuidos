@@ -14,9 +14,11 @@ type FilterConfig struct {
 	InputMiddlewarePrefix string
 	InputQueue            string
 
-	OutputQueue    string
-	OutputQueues   []string
-	OutputClusters []shard.ClusterConfig
+	OutputQueue            string
+	OutputQueues           []string
+	OutputClusters         []shard.ClusterConfig
+	OutputMiddlewarePrefix string
+	OutputAmount           int
 
 	Amount         float64
 	StartDateRange time.Time
