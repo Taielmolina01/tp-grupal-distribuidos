@@ -1,0 +1,20 @@
+src/internal/common/checkpoint/checkpoint.go
+  s_71a970d9c49840::t_bc2992f38a3c64 54,56-65
+  s_71a970d9c49840::t_a1fdb4919d7121 4,6,11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "4b6a6d837c83942aac4eca71bf171c4e75959d2a",
+  "prompts": {},
+  "sessions": {
+    "s_71a970d9c49840": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f5c010a4-fd9e-413e-b4ce-499ffb909b07",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
