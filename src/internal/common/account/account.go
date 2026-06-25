@@ -1,45 +1,31 @@
 package account
 
 type Account struct {
-	BankName      string `json:"bank_name"`
-	BankId        string `json:"bank_id"`
-	AccountNumber string `json:"account_number"`
-	EntityId      string `json:"entity_id"`
-	EntityName    string `json:"entity_name"`
-}
-
-// Capaz sobren comparaciones idk
-func (account Account) Equals(other Account) bool {
-	return account.BankName == other.BankName &&
-		account.BankId == other.BankId &&
-		account.AccountNumber == other.AccountNumber &&
-		account.EntityId == other.EntityId &&
-		account.EntityName == other.EntityName
+	BankName      string
+	BankId        string
+	AccountNumber string
+	EntityId      string
+	EntityName    string
 }
 
 type AccountChain struct {
 	// Left -> Middle -> Right
-	Left   AccountIdentifier `json:"left"`
-	Middle AccountIdentifier `json:"middle"`
-	Right  AccountIdentifier `json:"right"`
+	Left   AccountIdentifier
+	Middle AccountIdentifier
+	Right  AccountIdentifier
 }
 
 type AccountPair struct {
 	// Left -> Right
-	Left  AccountIdentifier `json:"left"`
-	Right AccountIdentifier `json:"right"`
+	Left  AccountIdentifier
+	Right AccountIdentifier
 }
 
 type AccountIdentifier struct {
-	BankID        string `json:"bank_id"`
-	AccountNumber string `json:"account_number"`
+	BankID        string
+	AccountNumber string
 }
 
 func (a AccountIdentifier) GetKey() string {
 	return a.BankID + "_" + a.AccountNumber
-}
-
-type Bank struct {
-	ID   string `json:"bank_id"`
-	Name string `json:"bank_name"`
 }

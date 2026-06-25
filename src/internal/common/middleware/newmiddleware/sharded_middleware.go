@@ -76,7 +76,7 @@ func (s *shardedMiddleware) Send(msg Message) error {
 		return ErrSend
 	}
 
-	if err := publishPersistent(s.channel, s.exchange, msg.RoutingKey, true, amqp.Publishing{Body: msg.Body}); err != nil {
+	if err := publish(s.channel, s.exchange, msg.RoutingKey, true, amqp.Publishing{Body: msg.Body}); err != nil {
 		return ErrSend
 	}
 

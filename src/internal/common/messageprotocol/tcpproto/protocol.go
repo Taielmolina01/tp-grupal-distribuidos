@@ -13,10 +13,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/queryresult"
 )
 
-func writeMsgType(writer io.Writer, msgType MsgType) error {
-	return safeio.WriteAll(writer, []byte{uint8(msgType)})
-}
-
 func ReadMsgType(reader io.Reader) (MsgType, error) {
 	b, err := safeio.ReadAll(reader, 1)
 	if err != nil {

@@ -3,33 +3,33 @@ package transfer
 import "time"
 
 type Transfer struct {
-	Timestamp         time.Time `json:"timestamp"`
-	FromBank          string    `json:"from_bank"`
-	FromBankAccount   string    `json:"from_bank_account"`
-	ToBank            string    `json:"to_bank"`
-	ToBankAccount     string    `json:"to_bank_account"`
-	AmountReceived    float64   `json:"amount_received"`
-	ReceivingCurrency string    `json:"receiving_currency"`
-	AmountPaid        float64   `json:"amount_paid"`
-	PaymentCurrency   string    `json:"payment_currency"`
-	PaymentFormat     string    `json:"payment_format"`
-	IsLaundering      bool      `json:"is_laundering"`
+	Timestamp         time.Time
+	FromBank          string
+	FromBankAccount   string
+	ToBank            string
+	ToBankAccount     string
+	AmountReceived    float64
+	ReceivingCurrency string
+	AmountPaid        float64
+	PaymentCurrency   string
+	PaymentFormat     string
+	IsLaundering      bool
 }
 
 type TransferAfterCurrency struct {
-	Timestamp       time.Time `json:"timestamp"`
-	FromBank        string    `json:"from_bank"`
-	FromBankAccount string    `json:"from_bank_account"`
-	ToBank          string    `json:"to_bank"`
-	ToBankAccount   string    `json:"to_bank_account"`
-	AmountPaid      float64   `json:"amount_paid"`
-	PaymentFormat   string    `json:"payment_format"`
+	Timestamp       time.Time
+	FromBank        string
+	FromBankAccount string
+	ToBank          string
+	ToBankAccount   string
+	AmountPaid      float64
+	PaymentFormat   string
 }
 
 type TransferForQ2 struct {
-	FromBank        string  `json:"from_bank"`
-	FromBankAccount string  `json:"from_bank_account"`
-	AmountPaid      float64 `json:"amount_paid"`
+	FromBank        string
+	FromBankAccount string
+	AmountPaid      float64
 }
 
 func ProjectForQ2(t TransferAfterCurrency) TransferForQ2 {
@@ -41,8 +41,8 @@ func ProjectForQ2(t TransferAfterCurrency) TransferForQ2 {
 }
 
 type TransferForQ3Avg struct {
-	PaymentFormat string  `json:"payment_format"`
-	AmountPaid    float64 `json:"amount_paid"`
+	PaymentFormat string
+	AmountPaid    float64
 }
 
 func ProjectForQ3Avg(t TransferAfterCurrency) TransferForQ3Avg {
@@ -53,10 +53,10 @@ func ProjectForQ3Avg(t TransferAfterCurrency) TransferForQ3Avg {
 }
 
 type TransferForQ3Filter struct {
-	PaymentFormat   string  `json:"payment_format"`
-	AmountPaid      float64 `json:"amount_paid"`
-	FromBank        string  `json:"from_bank"`
-	FromBankAccount string  `json:"from_bank_account"`
+	PaymentFormat   string
+	AmountPaid      float64
+	FromBank        string
+	FromBankAccount string
 }
 
 func ProjectForQ3Filter(t TransferAfterCurrency) TransferForQ3Filter {
@@ -69,10 +69,10 @@ func ProjectForQ3Filter(t TransferAfterCurrency) TransferForQ3Filter {
 }
 
 type TransferForQ4 struct {
-	FromBank        string `json:"from_bank"`
-	FromBankAccount string `json:"from_bank_account"`
-	ToBank          string `json:"to_bank"`
-	ToBankAccount   string `json:"to_bank_account"`
+	FromBank        string
+	FromBankAccount string
+	ToBank          string
+	ToBankAccount   string
 }
 
 func ProjectForQ4(t TransferAfterCurrency) TransferForQ4 {
@@ -96,18 +96,10 @@ func ProjectAfterCurrency(t Transfer) TransferAfterCurrency {
 	}
 }
 
-type TransferForQ5 struct {
-	Timestamp time.Time `json:"timestamp"`
-}
-
-func ProjectForQ5(t Transfer) TransferForQ5 {
-	return TransferForQ5{Timestamp: t.Timestamp}
-}
-
 type TransferForQ5Filter struct {
-	Timestamp  time.Time `json:"timestamp"`
-	Currency   string    `json:"currency"`
-	AmountPaid float64   `json:"amount_paid"`
+	Timestamp  time.Time
+	Currency   string
+	AmountPaid float64
 }
 
 func ProjectForQ5Filter(t Transfer) TransferForQ5Filter {
@@ -125,32 +117,17 @@ func ProjectForQ5Final() FinalTransferForQ5 {
 }
 
 type SplittedTransfer struct {
-	Transfer   TransferForQ4 `json:"transfer"`
-	IsLeftPart bool          `json:"is_left_part"`
+	Transfer   TransferForQ4
+	IsLeftPart bool
 }
 
 type SumByMethod struct {
-	Sum    float64 `json:"sum"`
-	Amount int     `json:"amount"`
-	Method string  `json:"method"`
+	Sum    float64
+	Amount int
+	Method string
 }
 
 type AvgByMethod struct {
-	Avg    float64 `json:"average"`
-	Method string  `json:"method"`
-}
-
-// Capaz sobren comparaciones idk
-func (t Transfer) Equals(other Transfer) bool {
-	return t.Timestamp.Equal(other.Timestamp) &&
-		t.FromBank == other.FromBank &&
-		t.FromBankAccount == other.FromBankAccount &&
-		t.ToBank == other.ToBank &&
-		t.ToBankAccount == other.ToBankAccount &&
-		t.AmountReceived == other.AmountReceived &&
-		t.ReceivingCurrency == other.ReceivingCurrency &&
-		t.AmountPaid == other.AmountPaid &&
-		t.PaymentCurrency == other.PaymentCurrency &&
-		t.PaymentFormat == other.PaymentFormat &&
-		t.IsLaundering == other.IsLaundering
+	Avg    float64
+	Method string
 }

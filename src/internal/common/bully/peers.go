@@ -44,7 +44,9 @@ func (p *peersMonitorImpl) DeleteAll() {
 	defer p.mutex.Unlock()
 
 	for id := range p.peers {
-		p.peers[id].conn.Close()
+		if err := p.peers[id].conn.Close(); err != nil {
+			slog.Error("Failed to close connection", "err", err)
+		}
 		delete(p.peers, id)
 	}
 }

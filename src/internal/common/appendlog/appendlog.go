@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -45,15 +46,33 @@ func Open[T any](path string, codec wire.Codec[T]) (*Log[T], error) {
 
 	log := &Log[T]{path: path, file: file, codec: codec}
 	if err := log.Recover(); err != nil {
-		_ = file.Close()
+		if err := file.Close(); err != nil {
+			return nil, fmt.Errorf("appendlog: recover: %w", err)
+		}
 		return nil, err
 	}
 	return log, nil
 }
 
-func (l *Log[T]) Append(senderID uint8, seq uint64, records []T) error {
-	payload := l.marshalRecords(records)
+func (l *Log[T]) AppendAll(entries []Entry[T]) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	var buf []byte
+	for _, e := range entries {
+		buf = append(buf, l.buildFrame(e.SenderID, e.Seq, e.Records)...)
+	}
+	if _, err := l.file.Write(buf); err != nil {
+		return fmt.Errorf("appendlog: append all: %w", err)
+	}
+	if err := l.file.Sync(); err != nil {
+		return fmt.Errorf("appendlog: sync: %w", err)
+	}
+	return nil
+}
 
+func (l *Log[T]) buildFrame(senderID uint8, seq uint64, records []T) []byte {
+	payload := l.marshalRecords(records)
 	frame := make([]byte, 0, headerSize+len(payload)+checksumSize)
 	frame = binary.BigEndian.AppendUint32(frame, keyword)
 	frame = append(frame, senderID)
@@ -62,14 +81,7 @@ func (l *Log[T]) Append(senderID uint8, seq uint64, records []T) error {
 	frame = binary.BigEndian.AppendUint32(frame, uint32(len(payload)))
 	frame = append(frame, payload...)
 	frame = binary.BigEndian.AppendUint32(frame, crc32.ChecksumIEEE(frame[4:]))
-
-	if _, err := l.file.Write(frame); err != nil {
-		return fmt.Errorf("appendlog: append: %w", err)
-	}
-	if err := l.file.Sync(); err != nil {
-		return fmt.Errorf("appendlog: sync: %w", err)
-	}
-	return nil
+	return frame
 }
 
 func (l *Log[T]) Recover() error {
@@ -114,7 +126,11 @@ func (l *Log[T]) validPrefixLen() (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("appendlog: open for recover: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Error("error while closing log error file", "err", err)
+		}
+	}()
 
 	var offset int64
 	for {
@@ -137,7 +153,11 @@ func (l *Log[T]) readAll(tracker *sendertracker.SenderTracker, fn func(Entry[T])
 	if err != nil {
 		return fmt.Errorf("appendlog: open for read: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			slog.Error("error while closing log file", "err", err)
+		}
+	}()
 
 	var offset int64
 	for {
@@ -237,7 +257,11 @@ func (l *Log[T]) unmarshalRecords(payload []byte, count uint32) ([]T, error) {
 
 func checksum(headerWithoutMagic []byte, payload []byte) uint32 {
 	h := crc32.NewIEEE()
-	_, _ = h.Write(headerWithoutMagic)
-	_, _ = h.Write(payload)
+	if _, err := h.Write(headerWithoutMagic); err != nil {
+		slog.Error("while writing header", "err", err)
+	}
+	if _, err := h.Write(payload); err != nil {
+		slog.Error("while writing payload", "err", err)
+	}
 	return h.Sum32()
 }

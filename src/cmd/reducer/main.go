@@ -95,8 +95,24 @@ func loadConfig() (reducer.ReducerConfig, error) {
 		}
 		inputEofsExpected, _ := strconv.Atoi(os.Getenv("INPUT_EOFS_EXPECTED"))
 
+		persistPath := os.Getenv("PERSIST_PATH")
+		if persistPath == "" {
+			return reducer.ReducerConfig{}, errors.New("PERSIST_PATH environment variable is required")
+		}
+		persistBatchSize, err := strconv.Atoi(os.Getenv("PERSIST_BATCH_SIZE"))
+		if err != nil {
+			return reducer.ReducerConfig{}, errors.New("PERSIST_BATCH_SIZE environment variable is required and must be a number")
+		}
+		persistFlushInterval, err := time.ParseDuration(os.Getenv("PERSIST_FLUSH_INTERVAL"))
+		if err != nil {
+			return reducer.ReducerConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
+		}
+
 		config.InputQueue = inputQueue
 		config.InputEofsExpected = inputEofsExpected
+		config.PersistPath = persistPath
+		config.PersistBatchSize = persistBatchSize
+		config.PersistFlushInterval = persistFlushInterval
 	default:
 		return reducer.ReducerConfig{}, fmt.Errorf("invalid REDUCER_TYPE: %s", reducerType)
 	}

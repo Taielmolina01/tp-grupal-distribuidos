@@ -1,9 +1,11 @@
 package fetcher
 
 import (
+	"time"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
+	"tp-grupal-distribuidos/internal/common/priorityqueue"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -27,13 +29,19 @@ type outputCluster struct {
 }
 
 type Fetcher struct {
-	inputQueue       middleware.Middleware
-	outputClusters   []outputCluster
-	queryId          uint8
-	quote            string
-	ratesCache       map[string]float64
-	states           statemap.StateMap[clientState]
-	expectedSenders  int
+	inputQueue      middleware.Middleware
+	outputClusters  []outputCluster
+	queryId         uint8
+	quote           string
+	ratesCache      map[string]heapDTO
+	states          statemap.StateMap[clientState]
+	expectedSenders int
+	ratesCacheHeap  priorityqueue.PriorityQueue[heapDTO]
+}
+
+type heapDTO struct {
+	time               time.Time
+	apiResponseRateVal *apiResponseRate
 }
 
 type apiResponseRate struct {

@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
@@ -161,13 +162,9 @@ func (d *DistinctFilter[T]) stopConsuming() {
 }
 
 func (d *DistinctFilter[T]) close() {
-	if err := d.inputMiddleware.Close(); err != nil {
-		slog.Error("While closing input middleware", "err", err)
-	}
+	cleanup.Close(d.inputMiddleware)
 	for _, q := range d.outputQueues {
-		if err := q.Close(); err != nil {
-			slog.Error("While closing output queue", "err", err)
-		}
+		cleanup.Close(q)
 	}
 }
 

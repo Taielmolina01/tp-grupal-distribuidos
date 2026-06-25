@@ -9,6 +9,29 @@ import (
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
 
+func marshalCountClientState(s *countClientState) []byte {
+	w := wire.NewWriter()
+	s.tracker.Marshal(w)
+	w.Uint32(s.count)
+	return w.Bytes()
+}
+
+func unmarshalCountClientState(data []byte) (*countClientState, error) {
+	r := wire.NewReader(data)
+	tracker, err := sendertracker.Unmarshal(r)
+	if err != nil {
+		return nil, fmt.Errorf("count reducer: unmarshal tracker: %w", err)
+	}
+	count := r.Uint32()
+	if r.Err() != nil {
+		return nil, fmt.Errorf("count reducer: unmarshal: %w", r.Err())
+	}
+	return &countClientState{
+		tracker: tracker,
+		count:   count,
+	}, nil
+}
+
 func marshalClientState(s *clientState) []byte {
 	w := wire.NewWriter()
 	s.tracker.Marshal(w)

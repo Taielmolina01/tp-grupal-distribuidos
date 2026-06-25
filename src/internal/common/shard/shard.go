@@ -3,6 +3,7 @@ package shard
 import (
 	"fmt"
 	"hash/fnv"
+	"log/slog"
 )
 
 type Hasher struct {
@@ -15,9 +16,13 @@ func New(totalShards int) Hasher {
 
 func (h Hasher) ShardFor(clientID int, keys ...string) int {
 	hash := fnv.New32a()
-	fmt.Fprintf(hash, "%d", clientID)
+	if _, err := fmt.Fprintf(hash, "%d", clientID); err != nil {
+		slog.Error("failed to write clientID to hash: %v", err)
+	}
 	for _, k := range keys {
-		fmt.Fprintf(hash, ",%s", k)
+		if _, err := fmt.Fprintf(hash, ",%s", k); err != nil {
+			slog.Error("failed to write key to hash: %v", err)
+		}
 	}
 	return int(hash.Sum32() % uint32(h.totalShards))
 }

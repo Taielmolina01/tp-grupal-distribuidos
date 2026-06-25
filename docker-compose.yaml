@@ -1017,6 +1017,9 @@ services:
       - OUTPUT_QUEUES=results_queue
       - REDUCER_TYPE=COUNT
       - QUERY_ID=5
+      - PERSIST_PATH=/var/bkp/q5_count_reducer
+      - PERSIST_BATCH_SIZE=50
+      - PERSIST_FLUSH_INTERVAL=1s
 
 
   # Tolerancia a fallas
@@ -1029,6 +1032,10 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      watchdog_1:
+        condition: service_started
+      watchdog_2:
+        condition: service_started
     environment:
       - ID=0
       - AMOUNT=3
@@ -1055,6 +1062,8 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      watchdog_2:
+        condition: service_started
     environment:
       - ID=1
       - AMOUNT=3

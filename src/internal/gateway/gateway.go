@@ -18,6 +18,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/clientregistry"
 	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
@@ -269,18 +270,12 @@ func (gateway *Gateway) Run() error {
 
 func (gateway *Gateway) close() {
 	for _, q := range gateway.accountQueues {
-		if err := q.Close(); err != nil {
-			slog.Error("While closing account queue", "err", err)
-		}
+		cleanup.Close(q)
 	}
 	for _, cl := range gateway.transferClusters {
-		if err := cl.Middleware.Close(); err != nil {
-			slog.Error("While closing transfer cluster middleware", "err", err)
-		}
+		cleanup.Close(cl.Middleware)
 	}
-	if err := gateway.resultsQueue.Close(); err != nil {
-		slog.Error("While closing results queue", "err", err)
-	}
+	cleanup.Close(gateway.resultsQueue)
 }
 
 func (gateway *Gateway) handleSignals() {
@@ -694,6 +689,11 @@ func (gateway *Gateway) reapDeadClients() {
 func (gateway *Gateway) abortClient(clientID int) {
 	slog.Info("Client declared dead (no reconnect within timeout)", "client_id", clientID)
 	gateway.clearDisconnected(clientID)
+
+	lock := gateway.buffer.lock(clientID)
+	lock.Lock()
+	defer lock.Unlock()
+
 	if err := gateway.sessions.moveToPendingAbort(clientID); err != nil {
 		slog.Error("While moving client to pending abort", "client_id", clientID, "err", err)
 	}

@@ -8,6 +8,10 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+const (
+	_DEFAULT_QOS = 1000
+)
+
 type exchangeMiddleware struct {
 	queue         amqp.Queue
 	exchange      string
@@ -48,7 +52,7 @@ func CreateExchangeMiddlewareHelper(
 
 	middleware.channel = ch
 
-	if err := ch.Qos(1000, 0, false); err != nil {
+	if err := ch.Qos(_DEFAULT_QOS, 0, false); err != nil {
 		if err := middleware.Close(); err != nil {
 			slog.Error("While closing middleware", "err", err)
 		}
@@ -248,7 +252,7 @@ func (e *exchangeMiddleware) Send(msg Message) (err error) {
 			true,
 			false,
 			amqp.Publishing{
-				DeliveryMode: amqp.Persistent,
+				DeliveryMode: amqp.Transient,
 				ContentType:  "application/octet-stream",
 				Body:         msg.Body,
 			})

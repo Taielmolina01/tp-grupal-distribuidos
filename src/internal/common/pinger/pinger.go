@@ -7,6 +7,8 @@ import (
 	"net"
 	"os"
 	"time"
+
+	"tp-grupal-distribuidos/internal/common/cleanup"
 )
 
 const (
@@ -91,9 +93,7 @@ func Check(addr string, timeout time.Duration) error {
 }
 
 func (p *Pinger) Close() {
-	if err := p.conn.Close(); err != nil {
-		slog.Error("While closing pinger", "err", err)
-	}
+	cleanup.Close(p.conn)
 }
 
 func Serve(addr string) *Pinger {
