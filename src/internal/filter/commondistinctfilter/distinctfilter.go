@@ -14,7 +14,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
@@ -27,11 +27,11 @@ func NewDistinctFilter[T comparable](
 	keyFunc func(T) string,
 	codec wire.Codec[T],
 ) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware  newmiddleware.Middleware
-		outputMiddleware newmiddleware.Middleware
+		inputMiddleware  middleware.Middleware
+		outputMiddleware middleware.Middleware
 		err              error
 	)
 
@@ -42,12 +42,12 @@ func NewDistinctFilter[T comparable](
 	}()
 
 	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
-	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, fmt.Sprintf("shard-%d", config.Id))
+	inputMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, fmt.Sprintf("shard-%d", config.Id))
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
+	outputMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
@@ -126,7 +126,7 @@ func NewDistinctFilter[T comparable](
 
 func (d *DistinctFilter[T]) Run() {
 	defer d.close()
-	if err := d.inputMiddleware.StartConsumingBatch(d.persistBatchSize, d.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := d.inputMiddleware.StartConsumingBatch(d.persistBatchSize, d.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		d.handleBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
@@ -151,7 +151,7 @@ func (d *DistinctFilter[T]) close() {
 	cleanup.Close(d.inputMiddleware, d.outputMiddleware)
 }
 
-func (d *DistinctFilter[T]) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {
+func (d *DistinctFilter[T]) handleBatch(msgs []middleware.Message, ack, nack func()) {
 	modified := make(map[int]*clientState[T])
 	completed := make(map[int]struct{})
 
@@ -233,7 +233,7 @@ func (d *DistinctFilter[T]) emit(clientID int, state *clientState[T]) error {
 		rk := fmt.Sprintf("shard-%d", idx)
 		seq := ot.RegisterBatch(rk)
 		body := batch.Write(clientID, d.queryId, uint8(d.id), seq, group, d.codec)
-		if err := d.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
+		if err := d.outputMiddleware.Send(middleware.Message{Body: body, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}
@@ -243,7 +243,7 @@ func (d *DistinctFilter[T]) emit(clientID int, state *clientState[T]) error {
 		total := ot.CountFor(rk)
 		seq := ot.RegisterBatch(rk)
 		eofBody := batch.WriteEOF(clientID, d.queryId, uint8(d.id), seq, uint32(total))
-		if err := d.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+		if err := d.outputMiddleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}

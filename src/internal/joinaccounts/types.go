@@ -6,7 +6,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -25,11 +25,11 @@ type JoinAccountsConfig struct {
 	QualifiedExchange     string
 	PeerAmount            int
 
-	Threshold          int
-	QueryID            int
-	MaxBatchSize       int
-	MaxBatchBytes      int
-	ExpectedEOFs int
+	Threshold     int
+	QueryID       int
+	MaxBatchSize  int
+	MaxBatchBytes int
+	ExpectedEOFs  int
 
 	PersistPath          string
 	PersistBatchSize     int
@@ -67,11 +67,11 @@ type JoinAccounts struct {
 	hasher       shard.Hasher
 	outputAmount int
 
-	inputMiddleware           newmiddleware.Middleware
+	inputMiddleware           middleware.Middleware
 	expectedEOFs              int
-	qualifiedInputMiddleware  newmiddleware.Middleware
-	qualifiedOutputMiddleware newmiddleware.Middleware
-	outputMiddleware          newmiddleware.Middleware
+	qualifiedInputMiddleware  middleware.Middleware
+	qualifiedOutputMiddleware middleware.Middleware
+	outputMiddleware          middleware.Middleware
 
 	peerAmount    int
 	threshold     int

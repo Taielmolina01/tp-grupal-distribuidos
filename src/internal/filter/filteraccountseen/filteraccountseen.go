@@ -14,7 +14,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -23,11 +23,11 @@ import (
 )
 
 func NewFilterAccountSeen(config FilterAccountSeenConfig) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware  newmiddleware.Middleware
-		outputMiddleware newmiddleware.Middleware
+		inputMiddleware  middleware.Middleware
+		outputMiddleware middleware.Middleware
 		err              error
 	)
 
@@ -40,12 +40,12 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (worker.Worker, error)
 	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
 	shardKey := fmt.Sprintf("shard-%d", config.Id)
 
-	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
+	inputMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewQueueMiddleware(connSettings, config.OutputQueue)
+	outputMiddleware, err = middleware.NewQueueMiddleware(connSettings, config.OutputQueue)
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
@@ -89,7 +89,7 @@ func NewFilterAccountSeen(config FilterAccountSeenConfig) (worker.Worker, error)
 func (f *FilterAccountSeen) Run() {
 	defer f.close()
 
-	if err := f.inputMiddleware.StartConsumingBatch(f.persistBatchSize, f.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := f.inputMiddleware.StartConsumingBatch(f.persistBatchSize, f.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		f.handleBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input queue", "err", err)
@@ -114,7 +114,7 @@ func (f *FilterAccountSeen) close() {
 	cleanup.Close(f.inputMiddleware, f.outputMiddleware)
 }
 
-func (f *FilterAccountSeen) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
+func (f *FilterAccountSeen) handleBatch(msgs []middleware.Message, ack func(), nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
 
@@ -185,7 +185,7 @@ func (f *FilterAccountSeen) emitResults(clientID int, state *clientState) error 
 		if !builder.TryAdd(&result) {
 			seq := ot.RegisterBatch("")
 			body := builder.Flush(clientID, uint8(f.queryID), uint8(f.id), seq)
-			if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
+			if err := f.outputMiddleware.Send(middleware.Message{Body: body}); err != nil {
 				return err
 			}
 			builder.TryAdd(&result)
@@ -195,12 +195,12 @@ func (f *FilterAccountSeen) emitResults(clientID int, state *clientState) error 
 	if !builder.IsEmpty() {
 		seq := ot.RegisterBatch("")
 		body := builder.Flush(clientID, uint8(f.queryID), uint8(f.id), seq)
-		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
+		if err := f.outputMiddleware.Send(middleware.Message{Body: body}); err != nil {
 			return err
 		}
 	}
 
 	total := ot.CountFor("")
 	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), uint8(f.id), total+1, uint32(total))
-	return f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody})
+	return f.outputMiddleware.Send(middleware.Message{Body: eofBody})
 }

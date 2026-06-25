@@ -5,7 +5,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -20,7 +20,7 @@ type AcumAccountsConfig struct {
 	MomHost string
 	MomPort int
 
-	ExpectedEOFs         int
+	ExpectedEOFs          int
 	InputMiddlewarePrefix string
 
 	QueryID int
@@ -43,8 +43,8 @@ type AcumAccounts struct {
 	outputAmount int
 
 	expectedEOFs     int
-	inputMiddleware  newmiddleware.Middleware
-	outputMiddleware newmiddleware.Middleware
+	inputMiddleware  middleware.Middleware
+	outputMiddleware middleware.Middleware
 
 	requiredAmt int8
 

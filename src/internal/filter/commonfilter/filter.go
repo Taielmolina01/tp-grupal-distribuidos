@@ -13,7 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -27,12 +27,12 @@ func NewFilter[T any, O any](
 	shardKeys func(O, uint64) []string,
 	inputCodec wire.Codec[T],
 	outputCodec wire.Codec[O],
-	outputClusters []newmiddleware.ShardedCluster,
+	outputClusters []middleware.ShardedCluster,
 ) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputExchange newmiddleware.Middleware
+		inputExchange middleware.Middleware
 		constructErr  error
 	)
 	defer func() {
@@ -47,7 +47,7 @@ func NewFilter[T any, O any](
 
 	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
 	shardKey := fmt.Sprintf("shard-%d", config.Id)
-	inputExchange, constructErr = newmiddleware.NewShardedMiddleware(
+	inputExchange, constructErr = middleware.NewShardedMiddleware(
 		connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey,
 	)
 	if constructErr != nil {
@@ -98,7 +98,7 @@ func NewFilter[T any, O any](
 func (f *Filter[T, O]) Run() {
 	defer f.close()
 
-	if err := f.inputExchange.StartConsumingBatch(f.persistBatchSize, f.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := f.inputExchange.StartConsumingBatch(f.persistBatchSize, f.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		f.handleBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
@@ -126,7 +126,7 @@ func (f *Filter[T, O]) close() {
 	}
 }
 
-func (f *Filter[T, O]) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
+func (f *Filter[T, O]) handleBatch(msgs []middleware.Message, ack func(), nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
 
@@ -213,7 +213,7 @@ func (f *Filter[T, O]) processBatch(input batch.Msg[T], state *clientState) erro
 	for ck, group := range byCluster {
 		cluster := f.outputClusters[ck.index]
 		body := batch.Write(input.ClientID, f.queryId, uint8(f.id), input.Seq, group, f.outputCodec)
-		if err := cluster.Middleware.Send(newmiddleware.Message{Body: body, RoutingKey: ck.rk}); err != nil {
+		if err := cluster.Middleware.Send(middleware.Message{Body: body, RoutingKey: ck.rk}); err != nil {
 			return err
 		}
 		state.outputTracker.RegisterBatch(fmt.Sprintf("%d_%s", ck.index, ck.rk))
@@ -228,7 +228,7 @@ func (f *Filter[T, O]) finishStep(clientID int, state *clientState) error {
 			rk := fmt.Sprintf("shard-%d", i)
 			total := state.outputTracker.CountFor(fmt.Sprintf("%d_%s", ci, rk))
 			eofBody := batch.WriteEOF(clientID, f.queryId, uint8(f.id), eofSeq, uint32(total))
-			if err := cluster.Middleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+			if err := cluster.Middleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 				slog.Error("finish step: send EOF failed", "cluster", ci, "routingKey", rk, "err", err)
 				return err
 			}

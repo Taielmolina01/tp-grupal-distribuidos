@@ -3,7 +3,7 @@ package fetcher
 import (
 	"time"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/priorityqueue"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -25,8 +25,8 @@ type FetcherConfig struct {
 }
 
 type Fetcher struct {
-	inputQueue       newmiddleware.Middleware
-	outputMiddleware newmiddleware.Middleware
+	inputQueue       middleware.Middleware
+	outputMiddleware middleware.Middleware
 	queryId          uint8
 	quote            string
 	ratesCache       map[string]heapDTO

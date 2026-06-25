@@ -6,7 +6,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -27,8 +27,8 @@ type JoinConfig struct {
 	LeftInputMiddlewarePrefix  string
 	RightInputMiddlewarePrefix string
 	OutputQueue                string
-	LeftEofsExpected  int
-	RightEofsExpected int
+	LeftEofsExpected           int
+	RightEofsExpected          int
 
 	PersistPath          string
 	PersistBatchSize     int
@@ -47,9 +47,9 @@ type Join struct {
 	id      int
 	queryID uint8
 
-	leftInput  newmiddleware.Middleware
-	rightInput newmiddleware.Middleware
-	output     newmiddleware.Middleware
+	leftInput  middleware.Middleware
+	rightInput middleware.Middleware
+	output     middleware.Middleware
 
 	leftEofsExpected  int
 	rightEofsExpected int

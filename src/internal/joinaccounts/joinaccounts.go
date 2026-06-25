@@ -15,7 +15,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountchain"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/splittransfer"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
@@ -25,13 +25,13 @@ import (
 )
 
 func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware           newmiddleware.Middleware
-		qualifiedInputMiddleware  newmiddleware.Middleware
-		qualifiedOutputMiddleware newmiddleware.Middleware
-		outputMiddleware          newmiddleware.Middleware
+		inputMiddleware           middleware.Middleware
+		qualifiedInputMiddleware  middleware.Middleware
+		qualifiedOutputMiddleware middleware.Middleware
+		outputMiddleware          middleware.Middleware
 		err                       error
 	)
 
@@ -44,23 +44,23 @@ func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
 	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
 	shardKey := fmt.Sprintf("shard-%d", config.Id)
 
-	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
+	inputMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
 	qualifiedQueue := fmt.Sprintf("%s_joinaccounts_%d", config.QualifiedExchange, config.Id)
-	qualifiedInputMiddleware, err = newmiddleware.NewFanoutMiddleware(connSettings, config.QualifiedExchange, qualifiedQueue)
+	qualifiedInputMiddleware, err = middleware.NewFanoutMiddleware(connSettings, config.QualifiedExchange, qualifiedQueue)
 	if err != nil {
 		return nil, fmt.Errorf("creating qualified input middleware: %w", err)
 	}
 
-	qualifiedOutputMiddleware, err = newmiddleware.NewFanoutMiddleware(connSettings, config.QualifiedExchange, "")
+	qualifiedOutputMiddleware, err = middleware.NewFanoutMiddleware(connSettings, config.QualifiedExchange, "")
 	if err != nil {
 		return nil, fmt.Errorf("creating qualified output middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
+	outputMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
@@ -188,7 +188,7 @@ func (j *JoinAccounts) Run() {
 	defer j.close()
 	go j.consumeQualified()
 
-	if err := j.inputMiddleware.StartConsumingBatch(j.persistBatchSize, j.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := j.inputMiddleware.StartConsumingBatch(j.persistBatchSize, j.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		j.handleTransferBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
@@ -196,7 +196,7 @@ func (j *JoinAccounts) Run() {
 }
 
 func (j *JoinAccounts) consumeQualified() {
-	if err := j.qualifiedInputMiddleware.StartConsumingBatch(j.persistBatchSize, j.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := j.qualifiedInputMiddleware.StartConsumingBatch(j.persistBatchSize, j.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		j.handleQualifiedBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from qualified middleware", "err", err)
@@ -225,7 +225,7 @@ func (j *JoinAccounts) close() {
 	cleanup.Close(j.inputMiddleware, j.qualifiedInputMiddleware, j.qualifiedOutputMiddleware, j.outputMiddleware)
 }
 
-func (j *JoinAccounts) handleTransferBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
+func (j *JoinAccounts) handleTransferBatch(msgs []middleware.Message, ack func(), nack func()) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
@@ -356,7 +356,7 @@ func (j *JoinAccounts) finishTransfersStep(clientID int, state *clientState) err
 		if !b.TryAdd(&qualified) {
 			seq := ot.RegisterBatch("")
 			body := b.Flush(clientID, uint8(j.queryID), uint8(j.id), seq)
-			if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
+			if err := j.qualifiedOutputMiddleware.Send(middleware.Message{Body: body}); err != nil {
 				slog.Error("While sending qualified batch", "err", err)
 				return err
 			}
@@ -366,7 +366,7 @@ func (j *JoinAccounts) finishTransfersStep(clientID int, state *clientState) err
 	if !b.IsEmpty() {
 		seq := ot.RegisterBatch("")
 		body := b.Flush(clientID, uint8(j.queryID), uint8(j.id), seq)
-		if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: body}); err != nil {
+		if err := j.qualifiedOutputMiddleware.Send(middleware.Message{Body: body}); err != nil {
 			slog.Error("While sending qualified batch", "err", err)
 			return err
 		}
@@ -374,14 +374,14 @@ func (j *JoinAccounts) finishTransfersStep(clientID int, state *clientState) err
 
 	eofSeq := ot.RegisterBatch("")
 	eofBody := qualifiedaccount.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), eofSeq, uint32(eofSeq-1))
-	if err := j.qualifiedOutputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
+	if err := j.qualifiedOutputMiddleware.Send(middleware.Message{Body: eofBody}); err != nil {
 		slog.Error("While sending qualified EOF", "err", err)
 		return err
 	}
 	return nil
 }
 
-func (j *JoinAccounts) handleQualifiedBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
+func (j *JoinAccounts) handleQualifiedBatch(msgs []middleware.Message, ack func(), nack func()) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
@@ -511,7 +511,7 @@ func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) err
 		total := ot.CountFor(rk)
 		seq := ot.RegisterBatch(rk)
 		eofBody := accountchain.WriteEOF(clientID, uint8(j.queryID), uint8(j.id), seq, uint32(total))
-		if err := j.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+		if err := j.outputMiddleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			slog.Error("While sending EOF message", "routingKey", rk, "err", err)
 			sendErr = err
 		}
@@ -530,5 +530,5 @@ func (j *JoinAccounts) builderFor(batches map[string]*batch.Builder[account.Acco
 
 func (j *JoinAccounts) flushChainBatch(clientID int, rk string, seqNumber uint64, b *batch.Builder[account.AccountChain]) error {
 	body := b.Flush(clientID, uint8(j.queryID), uint8(j.id), seqNumber)
-	return j.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk})
+	return j.outputMiddleware.Send(middleware.Message{Body: body, RoutingKey: rk})
 }

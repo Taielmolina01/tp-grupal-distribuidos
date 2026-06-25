@@ -15,7 +15,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/priorityqueue"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -54,20 +54,20 @@ var datasetToFrank = map[string]string{
 }
 
 func createFetcherImpl(config FetcherConfig) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{
+	connSettings := middleware.ConnSettings{
 		Hostname: config.MomHost,
 		Port:     config.MomPort,
 	}
 
 	inputQueue := fmt.Sprintf("%s_%d", config.InputMiddlewarePrefix, config.Id)
 	shardKey := fmt.Sprintf("shard-%d", config.Id)
-	inputMiddleware, err := newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
+	inputMiddleware, err := middleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
 
 	if err != nil {
 		return nil, err
 	}
 
-	outputMiddleware, err := newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
+	outputMiddleware, err := middleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
@@ -127,7 +127,7 @@ func (fetcher *Fetcher) Run() {
 	}
 }
 
-func (fetcher *Fetcher) consume(msg newmiddleware.Message, ack, nack func()) {
+func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 	input, err := batch.Read(msg.Body, records.TransferForQ5FilterCodec)
 	if err != nil {
 		slog.Error("while deserializing input batch", "err", err)
@@ -194,7 +194,7 @@ func (fetcher *Fetcher) consume(msg newmiddleware.Message, ack, nack func()) {
 
 	for rk, group := range byRoutingKeys {
 		body := batch.Write(input.ClientID, fetcher.queryId, 0, input.Seq, group, records.FetcherResponseCodec)
-		if err := fetcher.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
+		if err := fetcher.outputMiddleware.Send(middleware.Message{Body: body, RoutingKey: rk}); err != nil {
 			slog.Error("while publishing batch to output cluster", "err", err)
 		}
 		state.outputTracker.RegisterBatch(rk)
@@ -229,7 +229,7 @@ func (fetcher *Fetcher) finishTransfersStep(clientID int, state *clientState) er
 		rk := fmt.Sprintf("shard-%d", i)
 		count := uint32(state.outputTracker.CountFor(rk))
 		eofBody := batch.WriteEOF(clientID, fetcher.queryId, 0, 0, count)
-		if err := fetcher.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+		if err := fetcher.outputMiddleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}

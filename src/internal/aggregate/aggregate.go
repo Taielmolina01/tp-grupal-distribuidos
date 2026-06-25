@@ -13,7 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/summethod"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -22,11 +22,11 @@ import (
 )
 
 func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware  newmiddleware.Middleware
-		outputMiddleware newmiddleware.Middleware
+		inputMiddleware  middleware.Middleware
+		outputMiddleware middleware.Middleware
 		err              error
 	)
 
@@ -38,12 +38,12 @@ func NewAvgAggregator(config AggregateConfig) (worker.Worker, error) {
 
 	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
 	shardKey := fmt.Sprintf("shard-%d", config.Id)
-	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
+	inputMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewFanoutMiddleware(connSettings, config.OutputMiddlewarePrefix, "")
+	outputMiddleware, err = middleware.NewFanoutMiddleware(connSettings, config.OutputMiddlewarePrefix, "")
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
@@ -88,7 +88,7 @@ func (a *AvgAggregator) Run() {
 	defer a.close()
 
 	slog.Info("Starting avg-aggregator consumers", "aggregate_id", a.id)
-	if err := a.inputMiddleware.StartConsumingBatch(a.persistBatchSize, a.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := a.inputMiddleware.StartConsumingBatch(a.persistBatchSize, a.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		a.handleBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
@@ -113,7 +113,7 @@ func (a *AvgAggregator) close() {
 	cleanup.Close(a.inputMiddleware, a.outputMiddleware)
 }
 
-func (a *AvgAggregator) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {
+func (a *AvgAggregator) handleBatch(msgs []middleware.Message, ack, nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
 
@@ -219,7 +219,7 @@ func (a *AvgAggregator) finishStep(clientID int, state *clientState) error {
 	total := ot.CountFor("")
 	seq := ot.RegisterBatch("")
 	eofBody := avgmethod.WriteEOF(clientID, a.queryID, uint8(a.id), seq, uint32(total))
-	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
+	if err := a.outputMiddleware.Send(middleware.Message{Body: eofBody}); err != nil {
 		return err
 	}
 	return nil
@@ -227,5 +227,5 @@ func (a *AvgAggregator) finishStep(clientID int, state *clientState) error {
 
 func (a *AvgAggregator) flushBatch(clientID int, seq uint64, b *batch.Builder[transfer.AvgByMethod]) error {
 	body := b.Flush(clientID, a.queryID, uint8(a.id), seq)
-	return a.outputMiddleware.Send(newmiddleware.Message{Body: body})
+	return a.outputMiddleware.Send(middleware.Message{Body: body})
 }

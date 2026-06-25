@@ -13,7 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/daterange"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/summethod"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
@@ -23,11 +23,11 @@ import (
 )
 
 func NewSumByPaymentFormat(config SumConfig) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware  newmiddleware.Middleware
-		outputMiddleware newmiddleware.Middleware
+		inputMiddleware  middleware.Middleware
+		outputMiddleware middleware.Middleware
 		err              error
 	)
 
@@ -39,12 +39,12 @@ func NewSumByPaymentFormat(config SumConfig) (worker.Worker, error) {
 
 	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
 	shardKey := fmt.Sprintf("shard-%d", config.Id)
-	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
+	inputMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
+	outputMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
@@ -90,7 +90,7 @@ func NewSumByPaymentFormat(config SumConfig) (worker.Worker, error) {
 func (s *SumByPaymentFormat) Run() {
 	defer s.close()
 	slog.Info("Starting sum-by-payment-format consumers", "sum_id", s.id)
-	if err := s.inputMiddleware.StartConsumingBatch(s.persistBatchSize, s.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := s.inputMiddleware.StartConsumingBatch(s.persistBatchSize, s.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		s.handleBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
@@ -115,7 +115,7 @@ func (s *SumByPaymentFormat) close() {
 	cleanup.Close(s.inputMiddleware, s.outputMiddleware)
 }
 
-func (s *SumByPaymentFormat) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {
+func (s *SumByPaymentFormat) handleBatch(msgs []middleware.Message, ack, nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
 
@@ -223,7 +223,7 @@ func (s *SumByPaymentFormat) finishStep(clientID int, state *clientState) error 
 		total := ot.CountFor(rk)
 		seq := ot.RegisterBatch(rk)
 		eofBody := summethod.WriteEOF(clientID, s.queryID, uint8(s.id), seq, uint32(total))
-		if err := s.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+		if err := s.outputMiddleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}
@@ -241,5 +241,5 @@ func (s *SumByPaymentFormat) builderFor(builders map[string]*batch.Builder[trans
 
 func (s *SumByPaymentFormat) flushBatch(clientID int, rk string, seq uint64, b *batch.Builder[transfer.SumByMethod]) error {
 	body := b.Flush(clientID, s.queryID, uint8(s.id), seq)
-	return s.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk})
+	return s.outputMiddleware.Send(middleware.Message{Body: body, RoutingKey: rk})
 }

@@ -7,7 +7,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/transfer"
 	"tp-grupal-distribuidos/internal/common/worker"
@@ -19,11 +19,11 @@ func isValidPaymentMethod(t transfer.Transfer, config filter.FilterConfig) bool 
 }
 
 func CreateDateRangeAndPaymentMethod(config filter.FilterConfig) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	clusters := make([]newmiddleware.ShardedCluster, 0, len(config.OutputClusters))
+	clusters := make([]middleware.ShardedCluster, 0, len(config.OutputClusters))
 	for _, c := range config.OutputClusters {
-		m, err := newmiddleware.NewShardedMiddleware(connSettings, c.Prefix, "", "")
+		m, err := middleware.NewShardedMiddleware(connSettings, c.Prefix, "", "")
 		if err != nil {
 			for _, cl := range clusters {
 				if closeErr := cl.Middleware.Close(); closeErr != nil {
@@ -32,7 +32,7 @@ func CreateDateRangeAndPaymentMethod(config filter.FilterConfig) (worker.Worker,
 			}
 			return nil, err
 		}
-		clusters = append(clusters, newmiddleware.ShardedCluster{
+		clusters = append(clusters, middleware.ShardedCluster{
 			Middleware: m,
 			Hasher:     shard.New(c.NodeCount),
 		})

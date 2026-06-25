@@ -14,7 +14,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/daterange"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/q3filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
@@ -24,12 +24,12 @@ import (
 )
 
 func NewDateRangeSplitter(config DateRangeSplitterConfig) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputExchange    newmiddleware.Middleware
-		avgMiddleware    newmiddleware.Middleware
-		filterMiddleware newmiddleware.Middleware
+		inputExchange    middleware.Middleware
+		avgMiddleware    middleware.Middleware
+		filterMiddleware middleware.Middleware
 		err              error
 	)
 
@@ -41,19 +41,19 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (worker.Worker, error)
 
 	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
 	shardKey := fmt.Sprintf("shard-%d", config.Id)
-	inputExchange, err = newmiddleware.NewShardedMiddleware(
+	inputExchange, err = middleware.NewShardedMiddleware(
 		connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	avgMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.AvgOutputMiddlewarePrefix, "", "")
+	avgMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.AvgOutputMiddlewarePrefix, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating avg output middleware: %w", err)
 	}
 
-	filterMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.FilterOutputMiddlewarePrefix, "", "")
+	filterMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.FilterOutputMiddlewarePrefix, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating filter output middleware: %w", err)
 	}
@@ -106,7 +106,7 @@ func NewDateRangeSplitter(config DateRangeSplitterConfig) (worker.Worker, error)
 func (s *DateRangeSplitter) Run() {
 	defer s.close()
 
-	if err := s.inputExchange.StartConsumingBatch(s.persistBatchSize, s.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := s.inputExchange.StartConsumingBatch(s.persistBatchSize, s.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		s.handleBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input exchange", "err", err)
@@ -131,7 +131,7 @@ func (s *DateRangeSplitter) close() {
 	cleanup.Close(s.inputExchange, s.avgMiddleware, s.filterMiddleware)
 }
 
-func (s *DateRangeSplitter) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
+func (s *DateRangeSplitter) handleBatch(msgs []middleware.Message, ack func(), nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
 
@@ -211,14 +211,14 @@ func (s *DateRangeSplitter) processBatch(input batch.Msg[transfer.TransferAfterC
 
 	for rk, group := range byAvgShard {
 		body := daterange.WriteBatch(input.ClientID, s.queryID, uint8(s.id), input.Seq, group)
-		if err := s.avgMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
+		if err := s.avgMiddleware.Send(middleware.Message{Body: body, RoutingKey: rk}); err != nil {
 			return err
 		}
 		state.outputTracker.RegisterBatch("avg_" + rk)
 	}
 	for rk, group := range byFilterShard {
 		body := q3filter.WriteBatch(input.ClientID, s.queryID, uint8(s.id), input.Seq, group)
-		if err := s.filterMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
+		if err := s.filterMiddleware.Send(middleware.Message{Body: body, RoutingKey: rk}); err != nil {
 			return err
 		}
 		state.outputTracker.RegisterBatch("filter_" + rk)
@@ -233,7 +233,7 @@ func (s *DateRangeSplitter) finishStep(clientID int, state *clientState) error {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := state.outputTracker.CountFor("avg_" + rk)
 		body := daterange.WriteEOF(clientID, s.queryID, uint8(s.id), eofSeq, uint32(total))
-		if err := s.avgMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
+		if err := s.avgMiddleware.Send(middleware.Message{Body: body, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}
@@ -242,7 +242,7 @@ func (s *DateRangeSplitter) finishStep(clientID int, state *clientState) error {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := state.outputTracker.CountFor("filter_" + rk)
 		body := q3filter.WriteEOF(clientID, s.queryID, uint8(s.id), eofSeq, uint32(total))
-		if err := s.filterMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
+		if err := s.filterMiddleware.Send(middleware.Message{Body: body, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}

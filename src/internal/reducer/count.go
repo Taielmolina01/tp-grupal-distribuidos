@@ -10,7 +10,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -18,11 +18,11 @@ import (
 )
 
 func newCountReducer(config ReducerConfig) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputQueue  newmiddleware.Middleware
-		outputQueue newmiddleware.Middleware
+		inputQueue  middleware.Middleware
+		outputQueue middleware.Middleware
 		err         error
 	)
 
@@ -32,12 +32,12 @@ func newCountReducer(config ReducerConfig) (worker.Worker, error) {
 		}
 	}()
 
-	inputQueue, err = newmiddleware.NewQueueMiddleware(connSettings, config.InputQueue)
+	inputQueue, err = middleware.NewQueueMiddleware(connSettings, config.InputQueue)
 	if err != nil {
 		return nil, err
 	}
 
-	outputQueue, err = newmiddleware.NewQueueMiddleware(connSettings, config.OutputQueues[0])
+	outputQueue, err = middleware.NewQueueMiddleware(connSettings, config.OutputQueues[0])
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func newCountReducer(config ReducerConfig) (worker.Worker, error) {
 
 func (r *CountReducer) Run() {
 	defer r.close()
-	if err := r.inputQueue.StartConsumingBatch(r.persistBatchSize, r.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := r.inputQueue.StartConsumingBatch(r.persistBatchSize, r.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		r.handleBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input queue", "err", err)
@@ -102,7 +102,7 @@ func (r *CountReducer) close() {
 	cleanup.Close(r.inputQueue, r.outputQueue)
 }
 
-func (r *CountReducer) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {
+func (r *CountReducer) handleBatch(msgs []middleware.Message, ack, nack func()) {
 	modified := make(map[int]*countClientState)
 	completed := make(map[int]struct{})
 
@@ -175,12 +175,12 @@ func (r *CountReducer) finishStep(clientID int, state *countClientState) error {
 		[]queryresult.Query5Result{{Qty: total}},
 		records.Query5ResultCodec,
 	)
-	if err := r.outputQueue.Send(newmiddleware.Message{Body: resultBody}); err != nil {
+	if err := r.outputQueue.Send(middleware.Message{Body: resultBody}); err != nil {
 		return err
 	}
 
 	eofBody := batch.WriteEOF(clientID, r.queryID, uint8(r.id), 0, 1)
-	if err := r.outputQueue.Send(newmiddleware.Message{Body: eofBody}); err != nil {
+	if err := r.outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
 		return err
 	}
 

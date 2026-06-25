@@ -5,7 +5,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -22,8 +22,8 @@ type Filter[T any, O any] struct {
 	inputCodec      wire.Codec[T]
 	outputCodec     wire.Codec[O]
 
-	inputExchange  newmiddleware.Middleware
-	outputClusters []newmiddleware.ShardedCluster
+	inputExchange  middleware.Middleware
+	outputClusters []middleware.ShardedCluster
 
 	states               statemap.StateMap[clientState]
 	checkpoint           *checkpoint.Checkpoint[clientState]

@@ -5,7 +5,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
 )
@@ -37,8 +37,8 @@ type FilterAccountSeen struct {
 	maxBatchSize  int
 	maxBatchBytes int
 
-	inputMiddleware  newmiddleware.Middleware
-	outputMiddleware newmiddleware.Middleware
+	inputMiddleware  middleware.Middleware
+	outputMiddleware middleware.Middleware
 
 	states statemap.StateMap[clientState]
 

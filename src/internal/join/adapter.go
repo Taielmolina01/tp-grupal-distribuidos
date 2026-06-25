@@ -11,7 +11,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/cleanup"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -19,12 +19,12 @@ import (
 )
 
 func NewJoin(config JoinConfig) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		leftInput  newmiddleware.Middleware
-		rightInput newmiddleware.Middleware
-		output     newmiddleware.Middleware
+		leftInput  middleware.Middleware
+		rightInput middleware.Middleware
+		output     middleware.Middleware
 		err        error
 	)
 
@@ -35,18 +35,18 @@ func NewJoin(config JoinConfig) (worker.Worker, error) {
 	}()
 
 	leftInputQueue := config.LeftInputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
-	leftInput, err = newmiddleware.NewShardedMiddleware(connSettings, config.LeftInputMiddlewarePrefix, leftInputQueue, fmt.Sprintf("shard-%d", config.Id))
+	leftInput, err = middleware.NewShardedMiddleware(connSettings, config.LeftInputMiddlewarePrefix, leftInputQueue, fmt.Sprintf("shard-%d", config.Id))
 	if err != nil {
 		return nil, fmt.Errorf("creating left input middleware: %w", err)
 	}
 
 	rightInputQueue := config.RightInputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
-	rightInput, err = newmiddleware.NewShardedMiddleware(connSettings, config.RightInputMiddlewarePrefix, rightInputQueue, fmt.Sprintf("shard-%d", config.Id))
+	rightInput, err = middleware.NewShardedMiddleware(connSettings, config.RightInputMiddlewarePrefix, rightInputQueue, fmt.Sprintf("shard-%d", config.Id))
 	if err != nil {
 		return nil, fmt.Errorf("creating right input middleware: %w", err)
 	}
 
-	output, err = newmiddleware.NewQueueMiddleware(connSettings, config.OutputQueue)
+	output, err = middleware.NewQueueMiddleware(connSettings, config.OutputQueue)
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
@@ -93,7 +93,7 @@ func (j *Join) Run() {
 	defer j.close()
 	go j.consumeRight()
 
-	if err := j.leftInput.StartConsumingBatch(j.persistBatchSize, j.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := j.leftInput.StartConsumingBatch(j.persistBatchSize, j.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		j.handleLeftBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from left input", "err", err)
@@ -101,7 +101,7 @@ func (j *Join) Run() {
 }
 
 func (j *Join) consumeRight() {
-	if err := j.rightInput.StartConsumingBatch(j.persistBatchSize, j.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := j.rightInput.StartConsumingBatch(j.persistBatchSize, j.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		j.handleRightBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from right input", "err", err)
@@ -129,19 +129,19 @@ func (j *Join) close() {
 	cleanup.Close(j.leftInput, j.rightInput, j.output)
 }
 
-func (j *Join) handleLeftBatch(msgs []newmiddleware.Message, ack, nack func()) {
+func (j *Join) handleLeftBatch(msgs []middleware.Message, ack, nack func()) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.handleBatch(msgs, ack, nack, true)
 }
 
-func (j *Join) handleRightBatch(msgs []newmiddleware.Message, ack, nack func()) {
+func (j *Join) handleRightBatch(msgs []middleware.Message, ack, nack func()) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.handleBatch(msgs, ack, nack, false)
 }
 
-func (j *Join) handleBatch(msgs []newmiddleware.Message, ack, nack func(), isLeft bool) {
+func (j *Join) handleBatch(msgs []middleware.Message, ack, nack func(), isLeft bool) {
 	modified := make(map[int]*clientState)
 
 	for _, msg := range msgs {

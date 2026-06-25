@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
@@ -12,7 +12,7 @@ import (
 )
 
 type DateRangeSplitterConfig struct {
-	Id                int
+	Id           int
 	ExpectedEOFs int
 
 	MomHost string
@@ -40,9 +40,9 @@ type DateRangeSplitterConfig struct {
 type DateRangeSplitter struct {
 	id uint32
 
-	inputExchange    newmiddleware.Middleware
-	avgMiddleware    newmiddleware.Middleware
-	filterMiddleware newmiddleware.Middleware
+	inputExchange    middleware.Middleware
+	avgMiddleware    middleware.Middleware
+	filterMiddleware middleware.Middleware
 
 	avgOutputAmount    int
 	filterOutputAmount int

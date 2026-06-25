@@ -13,7 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountchain"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/shard"
@@ -22,11 +22,11 @@ import (
 )
 
 func NewAcumAccounts(config AcumAccountsConfig) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware  newmiddleware.Middleware
-		outputMiddleware newmiddleware.Middleware
+		inputMiddleware  middleware.Middleware
+		outputMiddleware middleware.Middleware
 		err              error
 	)
 
@@ -39,12 +39,12 @@ func NewAcumAccounts(config AcumAccountsConfig) (worker.Worker, error) {
 	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
 	shardKey := fmt.Sprintf("shard-%d", config.Id)
 
-	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
+	inputMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, shardKey)
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
+	outputMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
@@ -91,7 +91,7 @@ func NewAcumAccounts(config AcumAccountsConfig) (worker.Worker, error) {
 func (a *AcumAccounts) Run() {
 	defer a.close()
 
-	if err := a.inputMiddleware.StartConsumingBatch(a.persistBatchSize, a.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := a.inputMiddleware.StartConsumingBatch(a.persistBatchSize, a.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		a.handleBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming from input middleware", "err", err)
@@ -116,7 +116,7 @@ func (a *AcumAccounts) close() {
 	cleanup.Close(a.inputMiddleware, a.outputMiddleware)
 }
 
-func (a *AcumAccounts) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
+func (a *AcumAccounts) handleBatch(msgs []middleware.Message, ack func(), nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
 
@@ -203,7 +203,7 @@ func (a *AcumAccounts) emitResults(clientID int, state *clientState) error {
 	for rk, ids := range outgoing {
 		seq := ot.RegisterBatch(rk)
 		body := accountid.WriteBatch(clientID, uint8(a.queryID), uint8(a.id), seq, ids)
-		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
+		if err := a.outputMiddleware.Send(middleware.Message{Body: body, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}
@@ -212,7 +212,7 @@ func (a *AcumAccounts) emitResults(clientID int, state *clientState) error {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := ot.CountFor(rk)
 		eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), uint8(a.id), total+1, uint32(total))
-		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+		if err := a.outputMiddleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}

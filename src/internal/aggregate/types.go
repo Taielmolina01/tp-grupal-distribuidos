@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
 )
@@ -37,8 +37,8 @@ type AvgAggregator struct {
 	id      int
 	queryID uint8
 
-	inputMiddleware  newmiddleware.Middleware
-	outputMiddleware newmiddleware.Middleware
+	inputMiddleware  middleware.Middleware
+	outputMiddleware middleware.Middleware
 
 	prevNodeAmt   int
 	maxBatchSize  int

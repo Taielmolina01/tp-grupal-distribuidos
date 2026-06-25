@@ -6,7 +6,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/appendlog"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -39,9 +39,9 @@ type AverageFilter struct {
 	id      uint32
 	queryID uint8
 
-	inputTransfersMiddleware newmiddleware.Middleware
-	inputAvgsMiddleware      newmiddleware.Middleware
-	outputQueue              newmiddleware.Middleware
+	inputTransfersMiddleware middleware.Middleware
+	inputAvgsMiddleware      middleware.Middleware
+	outputQueue              middleware.Middleware
 
 	expectedTransfersEofs int
 	avgsExpectedEofs      int

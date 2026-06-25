@@ -16,7 +16,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/q3filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -28,12 +28,12 @@ import (
 const avgFractionThreshold = 100
 
 func NewAverageFilter(config AverageFilterConfig) (worker.Worker, error) {
-	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
+	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputTransfersMiddleware newmiddleware.Middleware
-		inputAvgsMiddleware      newmiddleware.Middleware
-		outputQueue              newmiddleware.Middleware
+		inputTransfersMiddleware middleware.Middleware
+		inputAvgsMiddleware      middleware.Middleware
+		outputQueue              middleware.Middleware
 		err                      error
 	)
 
@@ -45,18 +45,18 @@ func NewAverageFilter(config AverageFilterConfig) (worker.Worker, error) {
 
 	transfersQueue := config.InputTransfersMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
 	transfersShardKey := fmt.Sprintf("shard-%d", config.Id)
-	inputTransfersMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputTransfersMiddlewarePrefix, transfersQueue, transfersShardKey)
+	inputTransfersMiddleware, err = middleware.NewShardedMiddleware(connSettings, config.InputTransfersMiddlewarePrefix, transfersQueue, transfersShardKey)
 	if err != nil {
 		return nil, fmt.Errorf("creating input transfers middleware: %w", err)
 	}
 
 	avgsQueue := config.InputAvgsMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
-	inputAvgsMiddleware, err = newmiddleware.NewFanoutMiddleware(connSettings, config.InputAvgsMiddlewarePrefix, avgsQueue)
+	inputAvgsMiddleware, err = middleware.NewFanoutMiddleware(connSettings, config.InputAvgsMiddlewarePrefix, avgsQueue)
 	if err != nil {
 		return nil, fmt.Errorf("creating input avgs middleware: %w", err)
 	}
 
-	outputQueue, err = newmiddleware.NewQueueMiddleware(connSettings, config.OutputQueue)
+	outputQueue, err = middleware.NewQueueMiddleware(connSettings, config.OutputQueue)
 	if err != nil {
 		return nil, fmt.Errorf("creating output queue: %w", err)
 	}
@@ -106,7 +106,7 @@ func (af *AverageFilter) Run() {
 	defer af.close()
 
 	go af.consumeAvgs()
-	if err := af.inputTransfersMiddleware.StartConsumingBatch(af.persistBatchSize, af.persistFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+	if err := af.inputTransfersMiddleware.StartConsumingBatch(af.persistBatchSize, af.persistFlushInterval, func(msgs []middleware.Message, ack, nack func()) {
 		af.handleTransferBatch(msgs, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming transfers", "err", err)
@@ -114,7 +114,7 @@ func (af *AverageFilter) Run() {
 }
 
 func (af *AverageFilter) consumeAvgs() {
-	if err := af.inputAvgsMiddleware.StartConsuming(func(msg newmiddleware.Message, ack, nack func()) {
+	if err := af.inputAvgsMiddleware.StartConsuming(func(msg middleware.Message, ack, nack func()) {
 		af.handleAvgBatch(msg, ack, nack)
 	}); err != nil {
 		slog.Error("While consuming avgs", "err", err)
@@ -152,7 +152,7 @@ func (af *AverageFilter) close() {
 	cleanup.Close(af.inputTransfersMiddleware, af.inputAvgsMiddleware, af.outputQueue)
 }
 
-func (af *AverageFilter) handleTransferBatch(msgs []newmiddleware.Message, ack, nack func()) {
+func (af *AverageFilter) handleTransferBatch(msgs []middleware.Message, ack, nack func()) {
 	af.lock.Lock()
 	defer af.lock.Unlock()
 
@@ -276,7 +276,7 @@ func (af *AverageFilter) transferLogPath(clientID int) string {
 	return filepath.Join(af.transferLogDir, fmt.Sprintf("%d.log", clientID))
 }
 
-func (af *AverageFilter) handleAvgBatch(msg newmiddleware.Message, ack, nack func()) {
+func (af *AverageFilter) handleAvgBatch(msg middleware.Message, ack, nack func()) {
 	af.lock.Lock()
 	defer af.lock.Unlock()
 
@@ -379,7 +379,7 @@ func (af *AverageFilter) finalize(clientID int, state *clientState) error {
 
 	total := ot.CountFor("")
 	eofBody := batch.WriteEOF(clientID, af.queryID, uint8(af.id), total+1, uint32(total))
-	if err := af.outputQueue.Send(newmiddleware.Message{Body: eofBody}); err != nil {
+	if err := af.outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
 		return err
 	}
 
@@ -431,5 +431,5 @@ func (af *AverageFilter) flushResultBatch(
 ) error {
 	seq := ot.RegisterBatch("")
 	body := builder.Flush(clientID, af.queryID, uint8(af.id), seq)
-	return af.outputQueue.Send(newmiddleware.Message{Body: body})
+	return af.outputQueue.Send(middleware.Message{Body: body})
 }

@@ -1,4 +1,4 @@
-package newmiddleware
+package middleware
 
 import "tp-grupal-distribuidos/internal/common/shard"
 

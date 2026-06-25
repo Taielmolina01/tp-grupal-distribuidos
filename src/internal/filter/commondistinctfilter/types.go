@@ -5,7 +5,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
 )
@@ -20,8 +20,8 @@ type DistinctFilter[T comparable] struct {
 	queryId      uint8
 	expectedEOFs int
 
-	inputMiddleware  newmiddleware.Middleware
-	outputMiddleware newmiddleware.Middleware
+	inputMiddleware  middleware.Middleware
+	outputMiddleware middleware.Middleware
 	outputAmount     int
 
 	keyFunc func(T) string

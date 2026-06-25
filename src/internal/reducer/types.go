@@ -5,7 +5,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
+	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
 	"tp-grupal-distribuidos/internal/common/transfer"
@@ -36,8 +36,8 @@ type ReducerConfig struct {
 	OutputAmount           int
 	OutputQueues           []string // used only by COUNT
 	PersistPath            string
-	PersistBatchSize      int
-	PersistFlushInterval  time.Duration
+	PersistBatchSize       int
+	PersistFlushInterval   time.Duration
 
 	InputQueue        string
 	InputEofsExpected int
@@ -47,8 +47,8 @@ type Reducer struct {
 	id      int
 	queryID uint8
 
-	inputMiddleware  newmiddleware.Middleware
-	outputMiddleware newmiddleware.Middleware
+	inputMiddleware  middleware.Middleware
+	outputMiddleware middleware.Middleware
 	outputAmount     int
 
 	prevNodeAmt int
@@ -73,8 +73,8 @@ type clientState struct {
 type CountReducer struct {
 	id                   int
 	queryID              uint8
-	inputQueue           newmiddleware.Middleware
-	outputQueue          newmiddleware.Middleware
+	inputQueue           middleware.Middleware
+	outputQueue          middleware.Middleware
 	prevNodeAmt          int
 	states               statemap.StateMap[countClientState]
 	checkpoint           *checkpoint.Checkpoint[countClientState]
