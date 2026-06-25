@@ -1,6 +1,7 @@
 package msgsend
 
 import (
+	"log/slog"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 )
@@ -11,6 +12,7 @@ func SendEOF(mw newmiddleware.Middleware, rk string, clientID int, queryID uint8
 }
 
 func SendAbort(mw newmiddleware.Middleware, rk string, clientID int) error {
+	slog.Info("SEND ABORT", "clientID", clientID)
 	body := batch.WriteAbort(clientID)
 	return mw.Send(newmiddleware.Message{Body: body, RoutingKey: rk})
 }
