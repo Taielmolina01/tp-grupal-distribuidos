@@ -121,6 +121,7 @@ func (f *FilterAndSplitter) close() {
 func (f *FilterAndSplitter) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
@@ -132,6 +133,12 @@ func (f *FilterAndSplitter) handleBatch(msgs []newmiddleware.Message, ack func()
 		clientID := input.ClientID
 		state := f.states.For(clientID)
 		tracker := state.tracker
+
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
 
 		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
 			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
@@ -165,6 +172,17 @@ func (f *FilterAndSplitter) handleBatch(msgs []newmiddleware.Message, ack func()
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			if err := msgsend.SendAbort(f.outputMiddleware, newmiddleware.BroadcastRoutingKey, clientID); err != nil {
+				slog.Error("While emitting abort", "err", err)
+				nack()
+				f.stopConsuming()
+				return
+			}
+			f.states.Delete(clientID)
+			f.checkpoint.DeleteClient(clientID)
+			continue
+		}
 		if _, done := completed[clientID]; done {
 			f.states.Delete(clientID)
 			f.checkpoint.DeleteClient(clientID)

@@ -141,6 +141,7 @@ func (j *Join) handleRightBatch(msgs []newmiddleware.Message, ack, nack func()) 
 }
 
 func (j *Join) handleBatch(msgs []newmiddleware.Message, ack, nack func(), isLeft bool) {
+	//TODO REVISAR. En este no hay que enviar el ABORT pero si limpiar estado
 	modified := make(map[int]*clientState)
 
 	for _, msg := range msgs {

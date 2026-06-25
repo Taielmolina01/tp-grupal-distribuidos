@@ -14,8 +14,8 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountchain"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
-	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/splittransfer"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -231,6 +231,7 @@ func (j *JoinAccounts) handleTransferBatch(msgs []newmiddleware.Message, ack fun
 	defer j.mu.Unlock()
 
 	modified := make(map[int]*clientState)
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := splittransfer.Read(msg.Body)
@@ -242,6 +243,12 @@ func (j *JoinAccounts) handleTransferBatch(msgs []newmiddleware.Message, ack fun
 		clientID := input.ClientID
 		state := j.states.For(clientID)
 		tracker := state.transferTracker
+
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
 
 		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
 			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
@@ -275,6 +282,18 @@ func (j *JoinAccounts) handleTransferBatch(msgs []newmiddleware.Message, ack fun
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			if err := msgsend.SendAbort(j.qualifiedOutputMiddleware, newmiddleware.BroadcastRoutingKey, clientID); err != nil {
+				slog.Error("While emitting abort", "err", err)
+				nack()
+				j.stopConsuming()
+				return
+			}
+			j.states.Delete(clientID)
+			j.transferCheckpoint.DeleteClient(clientID)
+			continue
+		}
+
 		ts := &transferPartialState{
 			transferTracker: state.transferTracker,
 			left:            state.left,
@@ -387,6 +406,7 @@ func (j *JoinAccounts) handleQualifiedBatch(msgs []newmiddleware.Message, ack fu
 
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := qualifiedaccount.Read(msg.Body)
@@ -398,6 +418,12 @@ func (j *JoinAccounts) handleQualifiedBatch(msgs []newmiddleware.Message, ack fu
 		clientID := input.ClientID
 		state := j.states.For(clientID)
 		tracker := state.qualifiedTracker
+
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
 
 		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
 			continue
@@ -431,6 +457,17 @@ func (j *JoinAccounts) handleQualifiedBatch(msgs []newmiddleware.Message, ack fu
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			if err := msgsend.SendAbort(j.outputMiddleware, newmiddleware.BroadcastRoutingKey, clientID); err != nil {
+				slog.Error("While emitting abort", "err", err)
+				nack()
+				j.stopConsuming()
+				return
+			}
+			j.states.Delete(clientID)
+			j.qualifiedCheckpoint.DeleteClient(clientID)
+			continue
+		}
 		if _, done := completed[clientID]; done {
 			j.states.Delete(clientID)
 			j.transferCheckpoint.DeleteClient(clientID)

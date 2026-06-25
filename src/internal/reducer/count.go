@@ -105,6 +105,7 @@ func (r *CountReducer) close() {
 func (r *CountReducer) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {
 	modified := make(map[int]*countClientState)
 	completed := make(map[int]struct{})
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := batch.Read(msg.Body, records.FinalTransferForQ5Codec)
@@ -116,6 +117,12 @@ func (r *CountReducer) handleBatch(msgs []newmiddleware.Message, ack, nack func(
 		clientID := input.ClientID
 		state := r.states.For(clientID)
 		tracker := state.tracker
+
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
 
 		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
 			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
@@ -144,6 +151,11 @@ func (r *CountReducer) handleBatch(msgs []newmiddleware.Message, ack, nack func(
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			r.states.Delete(clientID)
+			r.checkpoint.DeleteClient(clientID)
+			continue
+		}
 		if _, done := completed[clientID]; done {
 			r.states.Delete(clientID)
 			r.checkpoint.DeleteClient(clientID)

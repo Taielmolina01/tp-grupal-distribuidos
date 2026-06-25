@@ -1,11 +1,14 @@
 package checkpoint
 
 import (
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 type Checkpoint[S any] struct {
@@ -48,9 +51,18 @@ func (c *Checkpoint[S]) SaveClient(clientID int, state *S) error {
 	return nil
 }
 
-func (c *Checkpoint[S]) DeleteClient(clientID int) {
+func (c *Checkpoint[S]) DeleteClient(clientID int) error {
 	path := c.clientPath(clientID)
-	os.Remove(path)
+	if err := os.Remove(path); err != nil {
+		slog.Error("checkpoint: delete client", "clientID", clientID, "err", err)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if errors.Is(err, syscall.EBUSY) {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *Checkpoint[S]) Load() (map[int]*S, error) {

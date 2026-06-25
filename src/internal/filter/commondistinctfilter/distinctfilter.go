@@ -171,6 +171,7 @@ func (d *DistinctFilter[T]) close() {
 func (d *DistinctFilter[T]) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {
 	modified := make(map[int]*clientState[T])
 	completed := make(map[int]struct{})
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := batch.Read(msg.Body, d.codec)
@@ -181,6 +182,12 @@ func (d *DistinctFilter[T]) handleBatch(msgs []newmiddleware.Message, ack, nack 
 
 		clientID := input.ClientID
 		state := d.states.For(clientID)
+
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
 
 		if state.tracker.IsDuplicate(int(input.SenderID), input.Seq) {
 			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
@@ -215,6 +222,18 @@ func (d *DistinctFilter[T]) handleBatch(msgs []newmiddleware.Message, ack, nack 
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			// TODO: Migrar a newgateway
+			// if err := msgsend.SendAbort(d.outputMiddleware, newmiddleware.BroadcastRoutingKey, clientID); err != nil {
+			// 	slog.Error("While emitting abort", "err", err)
+			// 	nack()
+			// 	d.stopConsuming()
+			// 	return
+			// }
+			// d.states.Delete(clientID)
+			// d.checkpoint.DeleteClient(clientID)
+			// continue
+		}
 		if _, done := completed[clientID]; done {
 			d.states.Delete(clientID)
 			d.checkpoint.DeleteClient(clientID)

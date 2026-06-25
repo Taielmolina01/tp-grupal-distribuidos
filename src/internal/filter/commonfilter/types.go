@@ -29,6 +29,7 @@ type Filter[T any, O any] struct {
 	checkpoint           *checkpoint.Checkpoint[clientState]
 	persistBatchSize     int
 	persistFlushInterval time.Duration
+	isLastNode           bool
 }
 
 type clientState struct {

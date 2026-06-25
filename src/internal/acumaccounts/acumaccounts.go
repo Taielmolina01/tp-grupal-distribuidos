@@ -120,6 +120,7 @@ func (a *AcumAccounts) close() {
 func (a *AcumAccounts) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := accountchain.Read(msg.Body)
@@ -131,6 +132,12 @@ func (a *AcumAccounts) handleBatch(msgs []newmiddleware.Message, ack func(), nac
 		clientID := input.ClientID
 		state := a.states.For(clientID)
 		tracker := state.transferTracker
+
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
 
 		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
 			slog.Warn("Discarding duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq, "EOF", input.EOF)
@@ -161,6 +168,17 @@ func (a *AcumAccounts) handleBatch(msgs []newmiddleware.Message, ack func(), nac
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			if err := msgsend.SendAbort(a.outputMiddleware, newmiddleware.BroadcastRoutingKey, clientID); err != nil {
+				slog.Error("While emitting abort", "err", err)
+				nack()
+				a.stopConsuming()
+				return
+			}
+			a.states.Delete(clientID)
+			a.checkpoint.DeleteClient(clientID)
+			continue
+		}
 		if _, done := completed[clientID]; done {
 			a.states.Delete(clientID)
 			a.checkpoint.DeleteClient(clientID)
