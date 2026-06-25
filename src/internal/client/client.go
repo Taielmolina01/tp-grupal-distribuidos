@@ -171,6 +171,8 @@ func (client *Client) handleSignals() {
 	client.closeConn()
 }
 
+const tcpUserTimeout = 0x12
+
 func enableKeepAlive(conn net.Conn) {
 	tcpConn, ok := conn.(*net.TCPConn)
 	if !ok {
@@ -183,6 +185,18 @@ func enableKeepAlive(conn net.Conn) {
 		Count:    3,
 	}); err != nil {
 		slog.Error("While enabling TCP keepalive", "err", err)
+	}
+	rawConn, err := tcpConn.SyscallConn()
+	if err != nil {
+		slog.Error("While getting raw conn for TCP_USER_TIMEOUT", "err", err)
+		return
+	}
+	if err := rawConn.Control(func(fd uintptr) {
+		if err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, tcpUserTimeout, 15000); err != nil {
+			slog.Error("While setting TCP_USER_TIMEOUT", "err", err)
+		}
+	}); err != nil {
+		slog.Error("While controlling raw conn for TCP_USER_TIMEOUT", "err", err)
 	}
 }
 
