@@ -34,6 +34,7 @@ services:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
       - SEQ_CHECKPOINT_EVERY=100
+      - RESULTS_BATCH_FLUSH_INTERVAL_MS=500
       - SERVER_HOST=gateway
       - SERVER_PORT=5678
       - QUERY_EOFS_EXPECTED=1:2,2:2,3:2,4:2,5:1

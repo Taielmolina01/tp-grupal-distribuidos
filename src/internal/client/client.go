@@ -369,6 +369,7 @@ func (client *Client) setupOutputFiles() error {
 		}
 		client.files[i] = f
 		client.writers[i] = csv.NewWriter(f)
+
 		if err := client.writers[i].Write(headers[i]); err != nil {
 			slog.Error("While writing header to output file", "query", i+1, "err", err)
 			return err
