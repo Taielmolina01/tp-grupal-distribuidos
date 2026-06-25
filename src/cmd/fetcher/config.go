@@ -4,14 +4,9 @@ import (
 	"errors"
 	"os"
 	"strconv"
-	"strings"
 
-	"tp-grupal-distribuidos/internal/common/shard"
-	"tp-grupal-distribuidos/internal/common/splitter"
 	"tp-grupal-distribuidos/internal/fetcher"
 )
-
-const QUEUES_SEPARATOR = ","
 
 func loadConfig() (fetcher.FetcherConfig, error) {
 	momPort, err := strconv.Atoi(os.Getenv("MOM_PORT"))
@@ -24,39 +19,32 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 		return fetcher.FetcherConfig{}, errors.New("MOM_HOST environment variable is required")
 	}
 
-	inputQueue := os.Getenv("INPUT_QUEUE")
-	if inputQueue == "" {
-		return fetcher.FetcherConfig{}, errors.New("INPUT_QUEUE environment variable is required")
+	inputMiddlewarePrefix := os.Getenv("INPUT_MIDDLEWARE_PREFIX")
+	if inputMiddlewarePrefix == "" {
+		return fetcher.FetcherConfig{}, errors.New("INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	inputExchange := os.Getenv("INPUT_EXCHANGE")
-	if inputExchange == "" {
-		return fetcher.FetcherConfig{}, errors.New("INPUT_EXCHANGE environment variable is required")
+	idStr := os.Getenv("ID")
+	if idStr == "" {
+		return fetcher.FetcherConfig{}, errors.New("ID environment variable is required")
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return fetcher.FetcherConfig{}, errors.New("ID environment variable must be a number")
 	}
 
-	inputRoutingKeys := []string{}
-	if inputRoutingKeysStr := os.Getenv("INPUT_ROUTING_KEYS"); inputRoutingKeysStr != "" {
-		inputRoutingKeys = splitter.Split(inputRoutingKeysStr, QUEUES_SEPARATOR)
+	outputMiddleware := os.Getenv("OUTPUT_MIDDLEWARE_PREFIX")
+	if outputMiddleware == "" {
+		return fetcher.FetcherConfig{}, errors.New("OUTPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	var outputClusters []shard.ClusterConfig
-	if clustersStr := os.Getenv("OUTPUT_CLUSTERS"); clustersStr == "" {
-		return fetcher.FetcherConfig{}, errors.New("OUTPUT_CLUSTERS environment variable is required")
-	} else {
-		for _, part := range strings.Split(clustersStr, ",") {
-			prefixAndCount := strings.SplitN(part, ":", 2)
-			if len(prefixAndCount) != 2 {
-				return fetcher.FetcherConfig{}, errors.New("invalid OUTPUT_CLUSTERS format, expected prefix:count,prefix:count")
-			}
-			count, err := strconv.Atoi(prefixAndCount[1])
-			if err != nil {
-				return fetcher.FetcherConfig{}, errors.New("invalid OUTPUT_CLUSTERS node count")
-			}
-			outputClusters = append(outputClusters, shard.ClusterConfig{
-				Prefix:    prefixAndCount[0],
-				NodeCount: count,
-			})
-		}
+	outputAmountStr := os.Getenv("OUTPUT_AMOUNT")
+	if outputAmountStr == "" {
+		return fetcher.FetcherConfig{}, errors.New("OUTPUT_AMOUNT environment variable is required")
+	}
+	outputAmount, err := strconv.Atoi(outputAmountStr)
+	if err != nil {
+		return fetcher.FetcherConfig{}, errors.New("OUTPUT_AMOUNT environment variable must be a number")
 	}
 
 	inputSendersStr := os.Getenv("INPUT_SENDERS")
@@ -82,15 +70,21 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 		return fetcher.FetcherConfig{}, errors.New("QUOTE environment variable is required")
 	}
 
+	persistPath := os.Getenv("PERSIST_PATH")
+	if persistPath == "" {
+		return fetcher.FetcherConfig{}, errors.New("PERSIST_PATH environment variable is required")
+	}
+
 	return fetcher.FetcherConfig{
-		MomHost:              momHost,
-		MomPort:              momPort,
-		InputQueue:           inputQueue,
-		InputExchange:        inputExchange,
-		InputRoutingKeys:     inputRoutingKeys,
-		Quote:                quote,
-		OutputClusters:       outputClusters,
-		ExpectedInputSenders: inputSenders,
-		QueryID:              uint8(queryId),
+		MomHost:                momHost,
+		MomPort:                momPort,
+		InputMiddlewarePrefix:  inputMiddlewarePrefix,
+		Id:                     id,
+		Quote:                  quote,
+		OutputMiddlewarePrefix: outputMiddleware,
+		OutputAmount:           outputAmount,
+		ExpectedInputSenders:   inputSenders,
+		QueryID:                uint8(queryId),
+		PersistPath:            persistPath,
 	}, nil
 }
