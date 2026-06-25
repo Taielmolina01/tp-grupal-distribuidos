@@ -18,6 +18,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/clientregistry"
 	"tp-grupal-distribuidos/internal/common/account"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
@@ -260,18 +261,12 @@ func (gateway *Gateway) Run() error {
 
 func (gateway *Gateway) close() {
 	for _, q := range gateway.accountQueues {
-		if err := q.Close(); err != nil {
-			slog.Error("While closing account queue", "err", err)
-		}
+		cleanup.Close(q)
 	}
 	for _, cl := range gateway.transferClusters {
-		if err := cl.Middleware.Close(); err != nil {
-			slog.Error("While closing transfer cluster middleware", "err", err)
-		}
+		cleanup.Close(cl.Middleware)
 	}
-	if err := gateway.resultsQueue.Close(); err != nil {
-		slog.Error("While closing results queue", "err", err)
-	}
+	cleanup.Close(gateway.resultsQueue)
 }
 
 func (gateway *Gateway) handleSignals() {

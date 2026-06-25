@@ -90,7 +90,9 @@ func (b *BullyImpl) Run() error {
 		id, err := node.conn.ReadMessage(1)
 		if err != nil {
 			slog.Error("Failed to read node ID", "err", err)
-			_ = node.conn.Close()
+			if err := node.conn.Close(); err != nil {
+				slog.Error("Failed to close connection", "err", err)
+			}
 			return err
 		}
 
@@ -102,8 +104,9 @@ func (b *BullyImpl) Run() error {
 }
 
 func (b *BullyImpl) close() {
-	_ = b.socket.Close()
-
+	if err := b.socket.Close(); err != nil {
+		slog.Error("Failed to close socket", "err", err)
+	}
 	b.peersMonitor.DeleteAll()
 }
 
@@ -113,7 +116,9 @@ func (b *BullyImpl) GetStatus() bullyStatus {
 
 func (b *BullyImpl) handleClient(node NodeInfo) {
 	defer func() {
-		_ = node.conn.Close()
+		if err := node.conn.Close(); err != nil {
+			slog.Error("Failed to close connection", "peer", node.id, "err", err)
+		}
 		b.removePeer(node)
 	}()
 

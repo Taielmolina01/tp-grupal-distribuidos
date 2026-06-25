@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/fetcherresponse"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
@@ -286,13 +287,8 @@ func (fetcher *Fetcher) HandleSignals() {
 }
 
 func (fetcher *Fetcher) close() {
-	if err := fetcher.inputQueue.Close(); err != nil {
-		slog.Error("while closing input queue", "err", err)
-	}
-
+	cleanup.Close(fetcher.inputQueue)
 	for _, cluster := range fetcher.outputClusters {
-		if err := cluster.middleware.Close(); err != nil {
-			slog.Error("while closing output cluster middleware", "err", err)
-		}
+		cleanup.Close(cluster.middleware)
 	}
 }

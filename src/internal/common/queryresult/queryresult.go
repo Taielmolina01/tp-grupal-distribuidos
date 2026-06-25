@@ -26,7 +26,7 @@ type Query2Result struct {
 type Query3Result struct {
 	FromBank      string  `json:"from_bank"`
 	FromAccount   string  `json:"from_account"`
-	PaymentFormat string  `json:"payment_format"` // revisar
+	PaymentFormat string  `json:"payment_format"`
 	Amount        float64 `json:"amount"`
 }
 

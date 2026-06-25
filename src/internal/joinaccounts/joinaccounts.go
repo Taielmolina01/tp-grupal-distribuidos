@@ -10,6 +10,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountchain"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/qualifiedaccount"
@@ -35,28 +36,8 @@ func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
 	)
 
 	defer func() {
-		if err == nil {
-			return
-		}
-		if outputMiddleware != nil {
-			if err := outputMiddleware.Close(); err != nil {
-				slog.Error("While closing output middleware", "err", err)
-			}
-		}
-		if qualifiedOutputMiddleware != nil {
-			if err := qualifiedOutputMiddleware.Close(); err != nil {
-				slog.Error("While closing qualified output middleware", "err", err)
-			}
-		}
-		if qualifiedInputMiddleware != nil {
-			if err := qualifiedInputMiddleware.Close(); err != nil {
-				slog.Error("While closing qualified input middleware", "err", err)
-			}
-		}
-		if inputMiddleware != nil {
-			if err := inputMiddleware.Close(); err != nil {
-				slog.Error("While closing input middleware", "err", err)
-			}
+		if err != nil {
+			cleanup.Close(outputMiddleware, qualifiedOutputMiddleware, qualifiedInputMiddleware, inputMiddleware)
 		}
 	}()
 
@@ -241,18 +222,7 @@ func (j *JoinAccounts) stopConsuming() {
 }
 
 func (j *JoinAccounts) close() {
-	if err := j.inputMiddleware.Close(); err != nil {
-		slog.Error("While closing input middleware", "join_id", j.id, "err", err)
-	}
-	if err := j.qualifiedInputMiddleware.Close(); err != nil {
-		slog.Error("While closing qualified input middleware", "join_id", j.id, "err", err)
-	}
-	if err := j.qualifiedOutputMiddleware.Close(); err != nil {
-		slog.Error("While closing qualified output middleware", "join_id", j.id, "err", err)
-	}
-	if err := j.outputMiddleware.Close(); err != nil {
-		slog.Error("While closing output middleware", "join_id", j.id, "err", err)
-	}
+	cleanup.Close(j.inputMiddleware, j.qualifiedInputMiddleware, j.qualifiedOutputMiddleware, j.outputMiddleware)
 }
 
 func (j *JoinAccounts) handleTransferBatch(msgs []newmiddleware.Message, ack func(), nack func()) {

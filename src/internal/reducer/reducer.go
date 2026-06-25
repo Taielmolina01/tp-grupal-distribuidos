@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
@@ -40,15 +41,9 @@ func newReducer(
 
 	defer func() {
 		if err != nil {
-			if inputMiddleware != nil {
-				if closeErr := inputMiddleware.Close(); closeErr != nil {
-					slog.Error("While closing input middleware", "err", closeErr)
-				}
-			}
+			cleanup.Close(inputMiddleware)
 			for _, q := range outputQueues {
-				if closeErr := q.Close(); closeErr != nil {
-					slog.Error("While closing output queue", "err", closeErr)
-				}
+				cleanup.Close(q)
 			}
 		}
 	}()
@@ -131,13 +126,9 @@ func (r *Reducer) stopConsuming() {
 }
 
 func (r *Reducer) close() {
-	if err := r.inputMiddleware.Close(); err != nil {
-		slog.Error("While closing input middleware", "err", err)
-	}
+	cleanup.Close(r.inputMiddleware)
 	for _, q := range r.outputQueues {
-		if err := q.Close(); err != nil {
-			slog.Error("While closing output queue", "err", err)
-		}
+		cleanup.Close(q)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
@@ -93,12 +94,7 @@ func (r *CountReducer) stopConsuming() {
 }
 
 func (r *CountReducer) close() {
-	if err := r.inputQueue.Close(); err != nil {
-		slog.Error("While closing input queue", "err", err)
-	}
-	if err := r.outputQueue.Close(); err != nil {
-		slog.Error("While closing output queue", "err", err)
-	}
+	cleanup.Close(r.inputQueue, r.outputQueue)
 }
 
 func (r *CountReducer) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {

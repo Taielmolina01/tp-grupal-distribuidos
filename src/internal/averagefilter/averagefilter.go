@@ -11,6 +11,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/appendlog"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/q3filter"
@@ -37,23 +38,8 @@ func NewAverageFilter(config AverageFilterConfig) (worker.Worker, error) {
 	)
 
 	defer func() {
-		if err == nil {
-			return
-		}
-		if outputQueue != nil {
-			if err := outputQueue.Close(); err != nil {
-				slog.Error("While closing output queue", "err", err)
-			}
-		}
-		if inputAvgsMiddleware != nil {
-			if err := inputAvgsMiddleware.Close(); err != nil {
-				slog.Error("While closing input avgs middleware", "err", err)
-			}
-		}
-		if inputTransfersMiddleware != nil {
-			if err := inputTransfersMiddleware.Close(); err != nil {
-				slog.Error("While closing input transfers middleware", "err", err)
-			}
+		if err != nil {
+			cleanup.Close(outputQueue, inputAvgsMiddleware, inputTransfersMiddleware)
 		}
 	}()
 
@@ -163,15 +149,7 @@ func (af *AverageFilter) close() {
 	}
 	af.lock.Unlock()
 
-	if err := af.inputTransfersMiddleware.Close(); err != nil {
-		slog.Error("While closing input transfers middleware", "filter_id", af.id, "err", err)
-	}
-	if err := af.inputAvgsMiddleware.Close(); err != nil {
-		slog.Error("While closing input avgs middleware", "filter_id", af.id, "err", err)
-	}
-	if err := af.outputQueue.Close(); err != nil {
-		slog.Error("While closing output queue", "filter_id", af.id, "err", err)
-	}
+	cleanup.Close(af.inputTransfersMiddleware, af.inputAvgsMiddleware, af.outputQueue)
 }
 
 func (af *AverageFilter) handleTransferBatch(msgs []newmiddleware.Message, ack, nack func()) {

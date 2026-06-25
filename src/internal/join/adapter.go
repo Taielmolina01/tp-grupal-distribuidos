@@ -9,6 +9,7 @@ import (
 
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -30,13 +31,7 @@ func NewJoin(config JoinConfig) (worker.Worker, error) {
 
 	defer func() {
 		if err != nil {
-			for _, m := range []interface{ Close() error }{leftInput, rightInput, output} {
-				if m != nil {
-					if closeErr := m.Close(); closeErr != nil {
-						slog.Error("While closing middleware", "err", closeErr)
-					}
-				}
-			}
+			cleanup.Close(leftInput, rightInput, output)
 		}
 	}()
 
@@ -130,15 +125,7 @@ func (j *Join) stopConsuming() {
 }
 
 func (j *Join) close() {
-	if err := j.leftInput.Close(); err != nil {
-		slog.Error("While closing left input middleware", "err", err)
-	}
-	if err := j.rightInput.Close(); err != nil {
-		slog.Error("While closing right input middleware", "err", err)
-	}
-	if err := j.output.Close(); err != nil {
-		slog.Error("While closing output middleware", "err", err)
-	}
+	cleanup.Close(j.leftInput, j.rightInput, j.output)
 }
 
 func (j *Join) handleLeftBatch(msgs []newmiddleware.Message, ack, nack func()) {

@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/checkpoint"
+	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
@@ -38,15 +39,9 @@ func NewFilter[T any, O any](
 		if constructErr == nil {
 			return
 		}
-		if inputExchange != nil {
-			if err := inputExchange.Close(); err != nil {
-				slog.Error("While closing input exchange after construction failure", "err", err)
-			}
-		}
+		cleanup.Close(inputExchange)
 		for _, cl := range outputClusters {
-			if err := cl.Middleware.Close(); err != nil {
-				slog.Error("While closing output cluster middleware after construction failure", "err", err)
-			}
+			cleanup.Close(cl.Middleware)
 		}
 	}()
 
@@ -125,13 +120,9 @@ func (f *Filter[T, O]) stopConsuming() {
 }
 
 func (f *Filter[T, O]) close() {
-	if err := f.inputExchange.Close(); err != nil {
-		slog.Error("While closing input exchange", "err", err)
-	}
+	cleanup.Close(f.inputExchange)
 	for _, cluster := range f.outputClusters {
-		if err := cluster.Middleware.Close(); err != nil {
-			slog.Error("While closing output cluster middleware", "err", err)
-		}
+		cleanup.Close(cluster.Middleware)
 	}
 }
 

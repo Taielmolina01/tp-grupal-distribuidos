@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -21,40 +20,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
-
-const numQueries = 5
-
-type ClientConfig struct {
-	ServerHost               string
-	ServerPort               string
-	InputFileAccounts        string
-	InputFileTrans           string
-	OutputFilePrefix         string
-	MaxBatchSize             int
-	MaxBatchBytes            int
-	ConnectionAttempts       int
-	ConnectionAttemptDelayMs int
-}
-
-type Client struct {
-	config    ClientConfig
-	running   atomic.Bool
-	sessionID uint32
-
-	connMu sync.Mutex
-	conn   net.Conn
-
-	files       []*os.File
-	writers     []*csv.Writer
-	doneCount   int
-	seenResults map[resultKey]struct{}
-}
-
-type resultKey struct {
-	queryID  uint8
-	senderID uint8
-	seq      uint64
-}
 
 func NewClient(config ClientConfig) (*Client, error) {
 	return &Client{config: config}, nil
@@ -223,10 +188,10 @@ func (client *Client) sendAccountRecords(conn net.Conn, seq *uint64, skip bool, 
 	}
 
 	var total uint32
-	var cols [5][]byte
+	var cols [accountColumns][]byte
 	scanner.Scan()
 	for scanner.Scan() {
-		if csvutil.SplitFields(scanner.Bytes(), cols[:]) < 5 {
+		if csvutil.SplitFields(scanner.Bytes(), cols[:]) < accountColumns {
 			continue
 		}
 		acc := account.Account{
@@ -283,10 +248,10 @@ func (client *Client) sendTransRecords(conn net.Conn, seq *uint64, skip bool, re
 	}
 
 	var total uint32
-	var cols [11][]byte
+	var cols [transferColumns][]byte
 	scanner.Scan()
 	for scanner.Scan() {
-		if csvutil.SplitFields(scanner.Bytes(), cols[:]) < 11 {
+		if csvutil.SplitFields(scanner.Bytes(), cols[:]) < transferColumns {
 			continue
 		}
 		tsUnix, ok := csvutil.ParseTimestampUnix(cols[0])
