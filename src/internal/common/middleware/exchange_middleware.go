@@ -248,7 +248,7 @@ func (e *exchangeMiddleware) Send(msg Message) (err error) {
 			true,
 			false,
 			amqp.Publishing{
-				DeliveryMode: amqp.Persistent,
+				DeliveryMode: amqp.Transient,
 				ContentType:  "application/octet-stream",
 				Body:         msg.Body,
 			})

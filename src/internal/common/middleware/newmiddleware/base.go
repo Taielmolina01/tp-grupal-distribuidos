@@ -216,11 +216,10 @@ func setupConn(settings ConnSettings) (*amqp.Connection, *amqp.Channel, error) {
 	return conn, ch, nil
 }
 
-func publishPersistent(ch *amqp.Channel, exchange, routingKey string, mandatory bool, publishing amqp.Publishing) error {
-	publishing.DeliveryMode = amqp.Persistent
-	if publishing.ContentType == "" {
-		publishing.ContentType = "application/octet-stream"
-	}
+func publish(ch *amqp.Channel, exchange, routingKey string, mandatory bool, publishing amqp.Publishing) error {
+	publishing.DeliveryMode = amqp.Transient
+	publishing.ContentType = "application/octet-stream"
+
 	confirmation, err := ch.PublishWithDeferredConfirm(exchange, routingKey, mandatory, false, publishing)
 	if err != nil {
 		return ErrSend
