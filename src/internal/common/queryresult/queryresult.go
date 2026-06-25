@@ -9,34 +9,34 @@ const (
 )
 
 type Query1Result struct {
-	FromBank    string  `json:"from_bank"`
-	FromAccount string  `json:"from_account"`
-	ToBank      string  `json:"to_bank"`
-	ToAccount   string  `json:"to_account"`
-	Amount      float64 `json:"amount"`
+	FromBank    string
+	FromAccount string
+	ToBank      string
+	ToAccount   string
+	Amount      float64
 }
 
 type Query2Result struct {
-	BankName    string  `json:"bank_name"`
-	FromBank    string  `json:"from_bank"`
-	FromAccount string  `json:"from_account"`
-	Amount      float64 `json:"amount"`
+	BankName    string
+	FromBank    string
+	FromAccount string
+	Amount      float64
 }
 
 type Query3Result struct {
-	FromBank      string  `json:"from_bank"`
-	FromAccount   string  `json:"from_account"`
-	PaymentFormat string  `json:"payment_format"`
-	Amount        float64 `json:"amount"`
+	FromBank      string
+	FromAccount   string
+	PaymentFormat string
+	Amount        float64
 }
 
 type Query4Result struct {
-	BankId        string `json:"bank_id"`
-	AccountNumber string `json:"account_number"`
+	BankId        string
+	AccountNumber string
 }
 
 type Query5Result struct {
-	Qty uint32 `json:"qty"`
+	Qty uint32
 }
 
 type BatchResults struct {

@@ -941,12 +941,13 @@ services:
     environment:
       - MOM_HOST=rabbitmq
       - MOM_PORT=5672
-      - INPUT_QUEUE=Q5_filtered_fetcher_q
-      - INPUT_EXCHANGE=Q5_filtered
-      - INPUT_ROUTING_KEYS=shard-0
-      - OUTPUT_CLUSTERS=Q5_fetcher_output:2
+      - INPUT_MIDDLEWARE_PREFIX=Q5_filtered
+      - ID=0
+      - OUTPUT_MIDDLEWARE_PREFIX=Q5_fetcher_output
       - INPUT_SENDERS=2
       - QUERY_ID=5
+      - PERSIST_PATH=/var/bkp/q5_fetcher
+      - OUTPUT_AMOUNT=2
       - QUOTE=USD
 
   q5_filter_amount_0:
