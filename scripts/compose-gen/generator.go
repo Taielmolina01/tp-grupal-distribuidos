@@ -188,6 +188,7 @@ func writeGateway(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - MOM_HOST=rabbitmq\n")
 	b.WriteString("      - MOM_PORT=5672\n")
 	b.WriteString("      - SEQ_CHECKPOINT_EVERY=100\n")
+	b.WriteString("      - PERSIST_FLUSH_INTERVAL=500ms\n")
 	b.WriteString("      - SERVER_HOST=gateway\n")
 	b.WriteString("      - SERVER_PORT=5678\n")
 	fmt.Fprintf(b, "      - QUERY_EOFS_EXPECTED=%s\n", queryEofs)

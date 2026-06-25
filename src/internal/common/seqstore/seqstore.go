@@ -33,21 +33,31 @@ func (s *SeqStore) isClaimed(seq uint64) bool {
 }
 
 func (s *SeqStore) Marshal() []byte {
-	buf := make([]byte, len(s.claimed)*8)
-	for i, v := range s.claimed {
-		binary.BigEndian.PutUint64(buf[i*8:], v)
+	prefix := len(s.claimed)
+	for prefix > 0 && s.claimed[prefix-1] == 0 {
+		prefix--
+	}
+	buf := make([]byte, 16+prefix*8)
+	binary.BigEndian.PutUint64(buf[0:], uint64(len(s.claimed)))
+	binary.BigEndian.PutUint64(buf[8:], uint64(prefix))
+	for i := 0; i < prefix; i++ {
+		binary.BigEndian.PutUint64(buf[16+i*8:], s.claimed[i])
 	}
 	return buf
 }
 
 func NewFromBytes(data []byte) (*SeqStore, error) {
-	if len(data)%8 != 0 {
+	if len(data) < 16 {
 		return nil, fmt.Errorf("seqstore: invalid data length %d", len(data))
 	}
-	words := len(data) / 8
-	claimed := make([]uint64, words)
-	for i := range words {
-		claimed[i] = binary.BigEndian.Uint64(data[i*8:])
+	capWords := binary.BigEndian.Uint64(data[0:])
+	prefix := binary.BigEndian.Uint64(data[8:])
+	if prefix > capWords || uint64(len(data)) != 16+prefix*8 {
+		return nil, fmt.Errorf("seqstore: invalid data length %d", len(data))
+	}
+	claimed := make([]uint64, capWords)
+	for i := uint64(0); i < prefix; i++ {
+		claimed[i] = binary.BigEndian.Uint64(data[16+i*8:])
 	}
 	return &SeqStore{claimed: claimed}, nil
 }

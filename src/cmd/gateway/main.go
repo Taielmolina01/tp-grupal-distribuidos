@@ -121,20 +121,30 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		reaperInterval = time.Duration(parsed) * time.Millisecond
 	}
 
+	resultsBatchFlushInterval := 500 * time.Millisecond
+	if v := os.Getenv("PERSIST_FLUSH_INTERVAL"); v != "" {
+		parsed, err := time.ParseDuration(v)
+		if err != nil || parsed <= 0 {
+			return gateway.GatewayConfig{}, errors.New("PERSIST_FLUSH_INTERVAL must be a positive duration")
+		}
+		resultsBatchFlushInterval = parsed
+	}
+
 	return gateway.GatewayConfig{
-		AccountQueues:      accountQueueList,
-		TransfersClusters:  transfersClusters,
-		ResultsQueue:       resultsQueue,
-		ServerHost:         serverHost,
-		ServerPort:         serverPort,
-		MomHost:            momHost,
-		MomPort:            momPort,
-		MaxBatchSize:       maxBatchSize,
-		QueryEOFsExpected:  queryEOFsExpected,
-		SessionStorePath:   sessionStorePath,
-		SeqCheckpointEvery: seqCheckpointEvery,
-		ClientTimeout:      clientTimeout,
-		ReaperInterval:     reaperInterval,
+		AccountQueues:             accountQueueList,
+		TransfersClusters:         transfersClusters,
+		ResultsQueue:              resultsQueue,
+		ServerHost:                serverHost,
+		ServerPort:                serverPort,
+		MomHost:                   momHost,
+		MomPort:                   momPort,
+		MaxBatchSize:              maxBatchSize,
+		QueryEOFsExpected:         queryEOFsExpected,
+		SessionStorePath:          sessionStorePath,
+		SeqCheckpointEvery:        seqCheckpointEvery,
+		ClientTimeout:             clientTimeout,
+		ReaperInterval:            reaperInterval,
+		ResultsBatchFlushInterval: resultsBatchFlushInterval,
 	}, nil
 }
 
