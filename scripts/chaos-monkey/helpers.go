@@ -14,7 +14,10 @@ type Compose struct {
 	Services map[string]any `yaml:"services"`
 }
 
-const _RABBITMQ_SERVICE = "rabbitmq"
+const (
+	_RABBITMQ_SERVICE = "rabbitmq"
+	_CLIENT_SHAPE     = "client_"
+)
 
 func ListServices(path string) ([]string, error) {
 	data, err := os.ReadFile(path)
@@ -27,7 +30,7 @@ func ListServices(path string) ([]string, error) {
 	}
 	names := make([]string, 0, len(c.Services))
 	for name := range c.Services {
-		if name == _RABBITMQ_SERVICE {
+		if name == _RABBITMQ_SERVICE || len(name) >= len(_CLIENT_SHAPE) && name[:len(_CLIENT_SHAPE)] == _CLIENT_SHAPE {
 			continue
 		}
 		names = append(names, name)

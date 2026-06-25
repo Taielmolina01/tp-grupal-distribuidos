@@ -23,29 +23,29 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/outputtracker"
-
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/normalizer"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/shard"
 )
 
 type GatewayConfig struct {
-	AccountQueues      []string
-	TransfersClusters  []shard.ClusterConfig
-	ResultsQueue       string
-	ServerHost         string
-	ServerPort         string
-	MomHost            string
-	MomPort            int
-	MaxBatchSize       int
-	QueryEOFsExpected  map[uint8]int
-	SessionStorePath   string
-	SeqCheckpointEvery uint64
-	ClientTimeout      time.Duration
-	ReaperInterval     time.Duration
+	TransfersClusters         []shard.ClusterConfig
+	ResultsQueue              string
+	ServerHost                string
+	ServerPort                string
+	MomHost                   string
+	MomPort                   int
+	MaxBatchSize              int
+	QueryEOFsExpected         map[uint8]int
+	SessionStorePath          string
+	SeqCheckpointEvery        uint64
+	ClientTimeout             time.Duration
+	ReaperInterval            time.Duration
+	ResultsBatchFlushInterval time.Duration
+	AccountsClusterPrefix     string
+	AccountsClusterAmount     int
 }
 
 const gatewaySenderID uint8 = 0
@@ -53,50 +53,42 @@ const gatewaySenderID uint8 = 0
 const readBufferSize = 64 * 1024
 
 type Gateway struct {
-	registry           clientregistry.ClientRegistry
-	accountQueues      []middleware.Middleware
-	transferClusters   []newmiddleware.ShardedCluster
-	resultsQueue       middleware.Middleware
-	listener           net.Listener
-	running            atomic.Bool
-	sessions           *sessionStore
-	buffer             *resultBuffer
-	queryEOFsExpected  map[uint8]int
-	seqCheckpointEvery uint64
-	clientTimeout      time.Duration
-	reaperInterval     time.Duration
-	disconnectMu       sync.Mutex
-	disconnectedAt     map[int]time.Time
-	transfersMu        sync.Mutex
-	transfersTrackers  map[int]*outputtracker.OutputTracker
+	registry                  clientregistry.ClientRegistry
+	transferClusters          []newmiddleware.ShardedCluster
+	resultsQueue              newmiddleware.Middleware
+	listener                  net.Listener
+	running                   atomic.Bool
+	sessions                  *sessionStore
+	buffer                    *resultBuffer
+	queryEOFsExpected         map[uint8]int
+	seqCheckpointEvery        uint64
+	clientTimeout             time.Duration
+	reaperInterval            time.Duration
+	disconnectMu              sync.Mutex
+	disconnectedAt            map[int]time.Time
+	transfersMu               sync.Mutex
+	transfersTrackers         map[int]*outputtracker.OutputTracker
+	transfersCountedSeq       map[int]uint64
+	pendingClose              map[int]struct{}
+	resultsBatchFlushInterval time.Duration
+	accountsCluster           newmiddleware.Middleware
+	accountsAmount            int
 }
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	accountQueues := make([]middleware.Middleware, 0, len(config.AccountQueues))
-	for _, queue := range config.AccountQueues {
-		accountQueue, err := middleware.CreateQueueMiddleware(queue, connSettings)
-		if err != nil {
-			for _, q := range accountQueues {
-				if closeErr := q.Close(); closeErr != nil {
-					slog.Error("While closing accounts queue", "err", closeErr)
-				}
-			}
-			return nil, err
-		}
-		accountQueues = append(accountQueues, accountQueue)
+	accountsCluster, err := newmiddleware.NewShardedMiddleware(newConnSettings, config.AccountsClusterPrefix, "", "")
+	if err != nil {
+		return nil, err
 	}
 
 	clusters := make([]newmiddleware.ShardedCluster, 0, len(config.TransfersClusters))
 	for _, c := range config.TransfersClusters {
 		m, err := newmiddleware.NewShardedMiddleware(newConnSettings, c.Prefix, "", "")
 		if err != nil {
-			for _, q := range accountQueues {
-				if closeErr := q.Close(); closeErr != nil {
-					slog.Error("While closing accounts queue", "err", closeErr)
-				}
+			if closeErr := accountsCluster.Close(); closeErr != nil {
+				slog.Error("While closing accounts cluster", "err", closeErr)
 			}
 			for _, cl := range clusters {
 				if closeErr := cl.Middleware.Close(); closeErr != nil {
@@ -111,13 +103,10 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		})
 	}
 
-	//TODO PASAR A NUEVO MIDDLEAWRE
-	resultsQueue, err := middleware.CreateQueueMiddleware(config.ResultsQueue, connSettings)
+	resultsQueue, err := newmiddleware.NewQueueMiddleware(newConnSettings, config.ResultsQueue)
 	if err != nil {
-		for _, q := range accountQueues {
-			if closeErr := q.Close(); closeErr != nil {
-				slog.Error("While closing accounts queue", "err", closeErr)
-			}
+		if closeErr := accountsCluster.Close(); closeErr != nil {
+			slog.Error("While closing accounts cluster", "err", closeErr)
 		}
 		for _, cl := range clusters {
 			if closeErr := cl.Middleware.Close(); closeErr != nil {
@@ -129,10 +118,8 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 
 	listener, err := net.Listen("tcp", config.ServerHost+":"+config.ServerPort)
 	if err != nil {
-		for _, q := range accountQueues {
-			if closeErr := q.Close(); closeErr != nil {
-				slog.Error("While closing accounts queue", "err", closeErr)
-			}
+		if closeErr := accountsCluster.Close(); closeErr != nil {
+			slog.Error("While closing accounts cluster", "err", closeErr)
 		}
 		for _, cl := range clusters {
 			if closeErr := cl.Middleware.Close(); closeErr != nil {
@@ -145,63 +132,66 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		return nil, err
 	}
 
+	checkpointEvery := config.SeqCheckpointEvery
+	if checkpointEvery == 0 {
+		checkpointEvery = 1
+	}
+
 	sessions, err := newSessionStore(config.SessionStorePath)
 	if err != nil {
-		for _, q := range accountQueues {
-			if err := q.Close(); err != nil {
-				slog.Error("While closing accounts queue", "err", err)
-			}
+		if closeErr := accountsCluster.Close(); closeErr != nil {
+			slog.Error("While closing accounts cluster", "err", closeErr)
 		}
 		for _, cl := range clusters {
 			if closeErr := cl.Middleware.Close(); closeErr != nil {
 				slog.Error("While closing transfer cluster middleware", "err", closeErr)
 			}
 		}
-		if err := resultsQueue.Close(); err != nil {
-			slog.Error("While closing results queue", "err", err)
+		if closeErr := resultsQueue.Close(); closeErr != nil {
+			slog.Error("While closing results queue", "err", closeErr)
 		}
-		if err := listener.Close(); err != nil {
-			slog.Error("While closing acceptor socket", "err", err)
+		if closeErr := listener.Close(); closeErr != nil {
+			slog.Error("While closing acceptor socket", "err", closeErr)
 		}
 		return nil, err
 	}
 
 	buffer, err := newResultBuffer(filepath.Join(filepath.Dir(config.SessionStorePath), "result_buffers"))
 	if err != nil {
-		for _, q := range accountQueues {
-			if err := q.Close(); err != nil {
-				slog.Error("While closing accounts queue", "err", err)
-			}
+		if closeErr := accountsCluster.Close(); closeErr != nil {
+			slog.Error("While closing accounts cluster", "err", closeErr)
 		}
 		for _, cl := range clusters {
 			if closeErr := cl.Middleware.Close(); closeErr != nil {
 				slog.Error("While closing transfer cluster middleware", "err", closeErr)
 			}
 		}
-		if err := resultsQueue.Close(); err != nil {
-			slog.Error("While closing results queue", "err", err)
+		if closeErr := resultsQueue.Close(); closeErr != nil {
+			slog.Error("While closing results queue", "err", closeErr)
 		}
-		if err := listener.Close(); err != nil {
-			slog.Error("While closing acceptor socket", "err", err)
+		if closeErr := listener.Close(); closeErr != nil {
+			slog.Error("While closing acceptor socket", "err", closeErr)
 		}
 		return nil, err
 	}
 
-	checkpointEvery := 1000
-
 	gateway := &Gateway{
-		accountQueues:      accountQueues,
-		transferClusters:   clusters,
-		resultsQueue:       resultsQueue,
-		listener:           listener,
-		sessions:           sessions,
-		buffer:             buffer,
-		queryEOFsExpected:  config.QueryEOFsExpected,
-		seqCheckpointEvery: uint64(checkpointEvery),
-		clientTimeout:      config.ClientTimeout,
-		reaperInterval:     config.ReaperInterval,
-		disconnectedAt:     map[int]time.Time{},
-		transfersTrackers:  map[int]*outputtracker.OutputTracker{},
+		transferClusters:          clusters,
+		resultsQueue:              resultsQueue,
+		listener:                  listener,
+		sessions:                  sessions,
+		buffer:                    buffer,
+		queryEOFsExpected:         config.QueryEOFsExpected,
+		seqCheckpointEvery:        checkpointEvery,
+		clientTimeout:             config.ClientTimeout,
+		reaperInterval:            config.ReaperInterval,
+		disconnectedAt:            map[int]time.Time{},
+		transfersTrackers:         map[int]*outputtracker.OutputTracker{},
+		transfersCountedSeq:       map[int]uint64{},
+		pendingClose:              map[int]struct{}{},
+		resultsBatchFlushInterval: config.ResultsBatchFlushInterval,
+		accountsCluster:           accountsCluster,
+		accountsAmount:            config.AccountsClusterAmount,
 	}
 
 	now := time.Now()
@@ -217,8 +207,8 @@ func (gateway *Gateway) Run() error {
 	defer gateway.close()
 
 	go func() {
-		if err := gateway.resultsQueue.StartConsuming(func(msg middleware.Message, ack, nack func()) {
-			gateway.handleClientResponse(msg, ack, nack)
+		if err := gateway.resultsQueue.StartConsumingBatch(int(gateway.seqCheckpointEvery), gateway.resultsBatchFlushInterval, func(msgs []newmiddleware.Message, ack, nack func()) {
+			gateway.handleBatch(msgs, ack, nack)
 		}); err != nil {
 			slog.Error("While consuming results queue", "err", err)
 		}
@@ -260,9 +250,7 @@ func (gateway *Gateway) Run() error {
 }
 
 func (gateway *Gateway) close() {
-	for _, q := range gateway.accountQueues {
-		cleanup.Close(q)
-	}
+	cleanup.Close(gateway.accountsCluster)
 	for _, cl := range gateway.transferClusters {
 		cleanup.Close(cl.Middleware)
 	}
@@ -323,8 +311,13 @@ func (gateway *Gateway) handshake(conn net.Conn, r io.Reader) (clientregistry.Cl
 	lock := gateway.buffer.lock(clientID)
 	lock.Lock()
 	defer lock.Unlock()
+	for _, queryID := range gateway.sessions.reportedQueries(clientID) {
+		if err := tcpproto.WriteQueryEOF(conn, queryID); err != nil {
+			return clientregistry.ClientState{}, 0, err
+		}
+	}
 	if err := gateway.buffer.flush(clientID, func(body []byte) error {
-		return gateway.deliverResult(client, body)
+		return gateway.deliverResult(client, body, nil)
 	}); err != nil {
 		return clientregistry.ClientState{}, 0, err
 	}
@@ -432,43 +425,68 @@ func (gateway *Gateway) runTransfersPhase(client clientregistry.ClientState, r i
 	}
 }
 
-func (gateway *Gateway) handleClientResponse(msg middleware.Message, ack func(), nack func()) {
-	_, info, err := batch.ReadHeader(msg.Body)
-	if err != nil {
-		slog.Error("While deserializing result header", "err", err)
+func (gateway *Gateway) handleBatch(msgs []newmiddleware.Message, ack func(), nack func()) {
+	failed := false
+	for _, msg := range msgs {
+		_, info, err := batch.ReadHeader(msg.Body)
+		if err != nil {
+			slog.Error("While deserializing result header", "err", err)
+			continue
+		}
+		if err := gateway.processResult(info, msg.Body, gateway.pendingClose); err != nil {
+			failed = true
+		}
+	}
+
+	if !failed {
+		if err := gateway.sessions.flush(); err != nil {
+			slog.Error("While persisting results batch", "err", err)
+			failed = true
+		}
+	}
+
+	if failed {
 		nack()
 		return
 	}
 
+	for clientID := range gateway.pendingClose {
+		lock := gateway.buffer.lock(clientID)
+		lock.Lock()
+		gateway.closeClient(clientID)
+		lock.Unlock()
+		delete(gateway.pendingClose, clientID)
+	}
+	ack()
+}
+
+func (gateway *Gateway) processResult(info batch.Info, body []byte, completed map[int]struct{}) error {
 	lock := gateway.buffer.lock(info.ClientID)
 	lock.Lock()
 	defer lock.Unlock()
 
 	if client, ok := gateway.findClient(info.ClientID); ok {
-		err := gateway.deliverResult(client, msg.Body)
-		if err == nil {
-			ack() //efectivamente se entrego, le aviso a rabbit que descarte
-			return
+		if err := gateway.deliverResult(client, body, completed); err == nil {
+			return nil
+		} else {
+			slog.Debug("Delivery failed, treating client as disconnected", "client_id", info.ClientID, "err", err)
+			gateway.markDisconnected(client)
 		}
-		slog.Debug("Delivery failed, treating client as disconnected", "client_id", info.ClientID, "err", err)
-		gateway.markDisconnected(client)
 	}
 
 	if _, alive := gateway.sessions.session(info.ClientID); alive {
-		if err := gateway.buffer.append(info.ClientID, msg.Body); err != nil {
+		if err := gateway.buffer.append(info.ClientID, body); err != nil {
 			slog.Error("While buffering result for disconnected client", "client_id", info.ClientID, "err", err)
-			nack() //fallo la escritura, le aviso a rabbit que no descarte
-			return
+			return err
 		}
-		ack() //efectivamente se escribio, le aviso a rabbit que descarte
-		return
+		return nil
 	}
 
 	slog.Warn("Result for dead or unknown client, dropping", "client_id", info.ClientID)
-	ack() //estado muerto o desconocido, no tiene sentido guardar esto, le aviso a rabbit que descarte
+	return nil
 }
 
-func (gateway *Gateway) deliverResult(client clientregistry.ClientState, body []byte) error {
+func (gateway *Gateway) deliverResult(client clientregistry.ClientState, body []byte, completed map[int]struct{}) error {
 	reader, info, err := batch.ReadHeader(body)
 	if err != nil {
 		return err
@@ -478,7 +496,7 @@ func (gateway *Gateway) deliverResult(client clientregistry.ClientState, body []
 		if err := gateway.sessions.registerEOFResult(info.ClientID, info.QueryID, info.SenderID, info.Total, info.Seq); err != nil {
 			return err
 		}
-		return gateway.maybeCompleteQuery(client, info.QueryID)
+		return gateway.maybeCompleteQuery(client, info.QueryID, completed)
 	}
 
 	if !gateway.sessions.isDuplicateResult(info.ClientID, info.QueryID, info.SenderID, info.Seq) {
@@ -489,10 +507,10 @@ func (gateway *Gateway) deliverResult(client clientregistry.ClientState, body []
 			return err
 		}
 	}
-	return gateway.maybeCompleteQuery(client, info.QueryID)
+	return gateway.maybeCompleteQuery(client, info.QueryID, completed)
 }
 
-func (gateway *Gateway) maybeCompleteQuery(client clientregistry.ClientState, queryID uint8) error {
+func (gateway *Gateway) maybeCompleteQuery(client clientregistry.ClientState, queryID uint8, completed map[int]struct{}) error {
 	if gateway.sessions.queryReported(client.ID, queryID) {
 		return nil
 	}
@@ -508,7 +526,11 @@ func (gateway *Gateway) maybeCompleteQuery(client clientregistry.ClientState, qu
 	}
 	slog.Info("Query completed", "client_id", client.ID, "query_id", queryID)
 	if allReported {
-		gateway.closeClient(client.ID)
+		if completed != nil {
+			completed[client.ID] = struct{}{}
+		} else {
+			gateway.closeClient(client.ID)
+		}
 	}
 	return nil
 }
@@ -577,6 +599,7 @@ func (gateway *Gateway) closeClient(clientID int) {
 	if err := gateway.buffer.remove(clientID); err != nil {
 		slog.Error("While removing client result buffer", "client_id", clientID, "err", err)
 	}
+	gateway.clearTransfersTracking(clientID)
 
 	slog.Info("Client closed", "client_id", clientID)
 }
@@ -656,6 +679,7 @@ func (gateway *Gateway) abortClient(clientID int) {
 	if err := gateway.buffer.remove(clientID); err != nil {
 		slog.Error("While removing client result buffer", "client_id", clientID, "err", err)
 	}
+	gateway.clearTransfersTracking(clientID)
 }
 
 func (gateway *Gateway) dispatchAbort(clientID int) {
@@ -699,19 +723,6 @@ func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bo
 	return found, ok
 }
 
-func (gateway *Gateway) sendEOF(clientID int, seq uint64, total uint32, targets ...middleware.Middleware) error {
-	body := batch.WriteEOF(clientID, 0, gatewaySenderID, seq, total)
-	var errs []error
-	slog.Info("EOF SENT", "seq", seq, "total", total)
-	for _, t := range targets {
-		if err := t.Send(middleware.Message{Body: body}); err != nil {
-			slog.Error("While sending EOF", "err", err)
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
-}
-
 func (gateway *Gateway) maybeCheckpoint(clientID int, phase tcpproto.Phase, seq uint64, lastCheckpoint *uint64) {
 	if seq-*lastCheckpoint < gateway.seqCheckpointEvery {
 		return
@@ -735,13 +746,13 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState, r 
 		idx := shard.CalculateIndexForShard(
 			client.ID,
 			normalizer.NormalizeBankID(acc.BankId),
-			len(gateway.accountQueues),
+			gateway.accountsAmount,
 		)
 		byShard[idx] = append(byShard[idx], acc)
 	}
 	for idx, group := range byShard {
 		body := batch.Write(client.ID, 0, gatewaySenderID, seq, group, records.AccountCodec)
-		if err := gateway.accountQueues[idx].Send(middleware.Message{Body: body}); err != nil {
+		if err := gateway.accountsCluster.Send(newmiddleware.Message{Body: body, RoutingKey: fmt.Sprintf("shard-%d", idx)}); err != nil {
 			slog.Debug("While sending accounts batch", "err", err)
 			return 0, err
 		}
@@ -758,6 +769,7 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 	}
 	body := batch.WriteRaw(client.ID, 0, gatewaySenderID, seq, count, payload)
 	tracker := gateway.transfersTrackerFor(client.ID)
+	countThis := gateway.shouldCountTransfers(client.ID, seq)
 
 	for ci, cluster := range gateway.transferClusters {
 		rk := fmt.Sprintf("shard-%d", cluster.Hasher.ShardFor(client.ID, strconv.FormatUint(seq, 10)))
@@ -766,7 +778,9 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 			slog.Debug("While sending transfers batch", "err", err)
 			return 0, err
 		}
-		tracker.RegisterBatch(trackerKey)
+		if countThis {
+			tracker.RegisterBatch(trackerKey)
+		}
 	}
 
 	return seq, nil
@@ -779,7 +793,9 @@ func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState, r
 		return err
 	}
 	slog.Info("Received EOF message", "kind", "accounts", "client_id", client.ID, "total", total)
-	if err := gateway.sendEOF(client.ID, seq, total, gateway.accountQueues...); err != nil {
+	eofBody := batch.WriteEOF(client.ID, 0, gatewaySenderID, seq, total)
+	slog.Info("EOF SENT", "seq", seq, "total", total)
+	if err := gateway.accountsCluster.Send(newmiddleware.Message{Body: eofBody, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
 		return err
 	}
 	return gateway.sessions.setPhase(client.ID, tcpproto.PhaseTransfers)
@@ -821,4 +837,21 @@ func (gateway *Gateway) transfersTrackerFor(clientID int) *outputtracker.OutputT
 		gateway.transfersTrackers[clientID] = t
 	}
 	return t
+}
+
+func (gateway *Gateway) shouldCountTransfers(clientID int, seq uint64) bool {
+	gateway.transfersMu.Lock()
+	defer gateway.transfersMu.Unlock()
+	if seq <= gateway.transfersCountedSeq[clientID] {
+		return false
+	}
+	gateway.transfersCountedSeq[clientID] = seq
+	return true
+}
+
+func (gateway *Gateway) clearTransfersTracking(clientID int) {
+	gateway.transfersMu.Lock()
+	defer gateway.transfersMu.Unlock()
+	delete(gateway.transfersTrackers, clientID)
+	delete(gateway.transfersCountedSeq, clientID)
 }

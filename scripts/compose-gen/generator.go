@@ -170,7 +170,6 @@ func writeRabbitmq(b *strings.Builder) {
 }
 
 func writeGateway(b *strings.Builder, cfg *Config) {
-	accountQueues := queues("Q2_accounts", cfg.FilterBankIdAlreadySeen)
 	queryEofs := fmt.Sprintf("1:%d,2:%d,3:%d,4:%d,5:1", cfg.FilterAmount, cfg.JoinQ2, cfg.AverageFilterQ3, cfg.FilterAccountSeenQ4)
 
 	b.WriteString("  gateway:\n")
@@ -180,7 +179,8 @@ func writeGateway(b *strings.Builder, cfg *Config) {
 	b.WriteString("    container_name: gateway\n")
 	rabbitmqDepends(b)
 	b.WriteString("    environment:\n")
-	fmt.Fprintf(b, "      - ACCOUNT_QUEUES=%s\n", accountQueues)
+	b.WriteString("      - ACCOUNTS_CLUSTER_PREFIX=Q2_accounts\n")
+	fmt.Fprintf(b, "      - ACCOUNTS_CLUSTER_AMOUNT=%d\n", cfg.FilterBankIdAlreadySeen)
 	transfersClusters := fmt.Sprintf("Q1234_filter_currency:%d,Q5_filter:%d",
 		cfg.FilterCurrency, cfg.FilterDateAndPayment)
 	fmt.Fprintf(b, "      - TRANSFERS_CLUSTERS=%s\n", transfersClusters)
@@ -188,6 +188,7 @@ func writeGateway(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - MOM_HOST=rabbitmq\n")
 	b.WriteString("      - MOM_PORT=5672\n")
 	b.WriteString("      - SEQ_CHECKPOINT_EVERY=100\n")
+	b.WriteString("      - PERSIST_FLUSH_INTERVAL=500ms\n")
 	b.WriteString("      - SERVER_HOST=gateway\n")
 	b.WriteString("      - SERVER_PORT=5678\n")
 	fmt.Fprintf(b, "      - QUERY_EOFS_EXPECTED=%s\n", queryEofs)
@@ -204,12 +205,13 @@ func writeFetcher(b *strings.Builder, cfg *Config) {
 	b.WriteString("    environment:\n")
 	b.WriteString("      - MOM_HOST=rabbitmq\n")
 	b.WriteString("      - MOM_PORT=5672\n")
-	b.WriteString("      - INPUT_QUEUE=Q5_filtered_fetcher_q\n")
-	b.WriteString("      - INPUT_EXCHANGE=Q5_filtered\n")
-	b.WriteString("      - INPUT_ROUTING_KEYS=shard-0\n")
-	b.WriteString("      - OUTPUT_CLUSTERS=Q5_fetcher_output:2\n")
+	b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q5_filtered\n")
+	b.WriteString("      - ID=0\n")
+	b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q5_fetcher_output\n")
 	fmt.Fprintf(b, "      - INPUT_SENDERS=%d\n", cfg.FilterDateAndPayment)
 	b.WriteString("      - QUERY_ID=5\n")
+	b.WriteString("      - PERSIST_PATH=/var/bkp/q5_fetcher\n")
+	fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.FilterAmtQ5)
 	b.WriteString("      - QUOTE=USD\n")
 	b.WriteString("\n")
 }
@@ -315,8 +317,6 @@ func writeFilterAmount(b *strings.Builder, cfg *Config) {
 }
 
 func writeReducerQ2(b *strings.Builder, cfg *Config) {
-	outputQueues := queues("Q2_reduced_transfers", cfg.ReducerQ2)
-
 	for i := range cfg.ReducerQ2 {
 		fmt.Fprintf(b, "  q2_reducer_%d:\n", i)
 		b.WriteString("    build:\n")
@@ -332,7 +332,8 @@ func writeReducerQ2(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - REDUCER_TYPE=MAX_AMOUNT_FROM_BANK\n")
 		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q2_filtered\n")
 		fmt.Fprintf(b, "      - EXPECTED_EOFS=%d\n", cfg.FilterCurrency)
-		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
+		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q2_reduced_transfers\n")
+		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.ReducerQ2)
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q2_reducer_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
@@ -342,8 +343,6 @@ func writeReducerQ2(b *strings.Builder, cfg *Config) {
 }
 
 func writeFilterBankIdAlreadySeen(b *strings.Builder, cfg *Config) {
-	outputQueues := queues("Q2_join_accounts_q", cfg.JoinQ2)
-
 	for i := range cfg.FilterBankIdAlreadySeen {
 		fmt.Fprintf(b, "  q2_filter_bank_distinct_%d:\n", i)
 		b.WriteString("    build:\n")
@@ -355,8 +354,9 @@ func writeFilterBankIdAlreadySeen(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
 		fmt.Fprintf(b, "      - ID=%d\n", i)
-		fmt.Fprintf(b, "      - INPUT_QUEUE=Q2_accounts_%d\n", i)
-		fmt.Fprintf(b, "      - OUTPUT_QUEUES=%s\n", outputQueues)
+		b.WriteString("      - INPUT_MIDDLEWARE_PREFIX=Q2_accounts\n")
+		b.WriteString("      - OUTPUT_MIDDLEWARE_PREFIX=Q2_join_accounts\n")
+		fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.JoinQ2)
 		b.WriteString("      - QUERY_ID=2\n")
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q2_filter_bank_distinct_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
@@ -378,8 +378,8 @@ func writeJoinQ2(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - MOM_HOST=rabbitmq\n")
 		b.WriteString("      - MOM_PORT=5672\n")
 		b.WriteString("      - JOIN_TYPE=transfer_account_by_bank\n")
-		fmt.Fprintf(b, "      - LEFT_INPUT_QUEUE=Q2_reduced_transfers_%d\n", i)
-		fmt.Fprintf(b, "      - RIGHT_INPUT_QUEUE=Q2_join_accounts_q_%d\n", i)
+		b.WriteString("      - LEFT_INPUT_MIDDLEWARE_PREFIX=Q2_reduced_transfers\n")
+		b.WriteString("      - RIGHT_INPUT_MIDDLEWARE_PREFIX=Q2_join_accounts\n")
 		b.WriteString("      - OUTPUT_QUEUE=results_queue\n")
 		fmt.Fprintf(b, "      - LEFT_EOFS_EXPECTED=%d\n", cfg.ReducerQ2)
 		fmt.Fprintf(b, "      - RIGHT_EOFS_EXPECTED=%d\n", cfg.FilterBankIdAlreadySeen)

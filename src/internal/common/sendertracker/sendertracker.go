@@ -7,6 +7,11 @@ import (
 )
 
 type SenderTracker struct {
+	// Maps por senders. Senders son los nodos de la capa anterior.
+	// EofSet: me guardo por cada sender el seq del EOF que me mandaron.
+	// MsgCount: me guardo por cada sender la cantidad de mensajes que me mandaron.
+	// Expected: me guardo por cada sender la cantidad de mensajes que espero recibir.
+	// SeqStores: me guardo por cada sender un seqstore para trackear los seqs que ya recibi.
 	msgCount  map[int]uint64
 	expected  map[int]uint64
 	eofSet    map[int]uint64

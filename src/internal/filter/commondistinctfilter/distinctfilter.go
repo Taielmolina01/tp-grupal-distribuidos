@@ -14,7 +14,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -29,42 +28,28 @@ func NewDistinctFilter[T comparable](
 	codec wire.Codec[T],
 ) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-	legacyConn := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware newmiddleware.Middleware
-		err             error
+		inputMiddleware  newmiddleware.Middleware
+		outputMiddleware newmiddleware.Middleware
+		err              error
 	)
-	outputQueues := make([]middleware.Middleware, 0, len(config.OutputQueues))
 
 	defer func() {
 		if err != nil {
-			if inputMiddleware != nil {
-				if closeErr := inputMiddleware.Close(); closeErr != nil {
-					slog.Error("While closing input middleware", "err", closeErr)
-				}
-			}
-			for _, q := range outputQueues {
-				if closeErr := q.Close(); closeErr != nil {
-					slog.Error("While closing output queue", "err", closeErr)
-				}
-			}
+			cleanup.Close(inputMiddleware, outputMiddleware)
 		}
 	}()
 
-	inputMiddleware, err = newmiddleware.NewQueueMiddleware(connSettings, config.InputQueue)
+	inputQueue := config.InputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	inputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.InputMiddlewarePrefix, inputQueue, fmt.Sprintf("shard-%d", config.Id))
 	if err != nil {
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	// TODO: esto tendríamos q meterlo en el archivo persist.go como hacemos ne los demas
-	for _, name := range config.OutputQueues {
-		var m middleware.Middleware
-		m, err = middleware.CreateQueueMiddleware(name, legacyConn)
-		if err != nil {
-			return nil, fmt.Errorf("creating output queue %s: %w", name, err)
-		}
-		outputQueues = append(outputQueues, m)
+	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
+	if err != nil {
+		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
 	marshalState := func(s *clientState[T]) []byte {
@@ -128,7 +113,8 @@ func NewDistinctFilter[T comparable](
 		queryId:              config.QueryID,
 		expectedEOFs:         1,
 		inputMiddleware:      inputMiddleware,
-		outputQueues:         outputQueues,
+		outputMiddleware:     outputMiddleware,
+		outputAmount:         config.OutputAmount,
 		keyFunc:              keyFunc,
 		codec:                codec,
 		states:               states,
@@ -162,10 +148,7 @@ func (d *DistinctFilter[T]) stopConsuming() {
 }
 
 func (d *DistinctFilter[T]) close() {
-	cleanup.Close(d.inputMiddleware)
-	for _, q := range d.outputQueues {
-		cleanup.Close(q)
-	}
+	cleanup.Close(d.inputMiddleware, d.outputMiddleware)
 }
 
 func (d *DistinctFilter[T]) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {
@@ -261,24 +244,25 @@ func (d *DistinctFilter[T]) emit(clientID int, state *clientState[T]) error {
 
 	byShard := make(map[int][]T)
 	for _, key := range keys {
-		idx := shard.CalculateIndexForShard(clientID, key, len(d.outputQueues))
+		idx := shard.CalculateIndexForShard(clientID, key, d.outputAmount)
 		byShard[idx] = append(byShard[idx], state.seen[key])
 	}
 
 	for idx, group := range byShard {
-		seq := ot.RegisterBatch(strconv.Itoa(idx))
+		rk := fmt.Sprintf("shard-%d", idx)
+		seq := ot.RegisterBatch(rk)
 		body := batch.Write(clientID, d.queryId, uint8(d.id), seq, group, d.codec)
-		if err := d.outputQueues[idx].Send(middleware.Message{Body: body}); err != nil {
+		if err := d.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}
 
-	for idx, q := range d.outputQueues {
-		rk := strconv.Itoa(idx)
+	for i := range d.outputAmount {
+		rk := fmt.Sprintf("shard-%d", i)
 		total := ot.CountFor(rk)
 		seq := ot.RegisterBatch(rk)
 		eofBody := batch.WriteEOF(clientID, d.queryId, uint8(d.id), seq, uint32(total))
-		if err := q.Send(middleware.Message{Body: eofBody}); err != nil {
+		if err := d.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}

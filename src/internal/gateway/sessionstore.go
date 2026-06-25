@@ -135,7 +135,7 @@ func (s *sessionStore) claimResult(clientID int, queryID uint8, senderID uint8, 
 	}
 	t.Claim(int(senderID), seq)
 	t.RegisterBatch(int(senderID))
-	return s.persist()
+	return nil
 }
 
 func (s *sessionStore) registerEOFResult(clientID int, queryID uint8, senderID uint8, total uint32, seq uint64) error {
@@ -147,7 +147,7 @@ func (s *sessionStore) registerEOFResult(clientID int, queryID uint8, senderID u
 	}
 	t := s.trackerFor(state, queryID)
 	t.RegisterEOF(int(senderID), uint64(total), seq)
-	return s.persist()
+	return nil
 }
 
 func (s *sessionStore) queryReported(clientID int, queryID uint8) bool {
@@ -159,6 +159,20 @@ func (s *sessionStore) queryReported(clientID int, queryID uint8) bool {
 	}
 	_, reported := state.reported[queryID]
 	return reported
+}
+
+func (s *sessionStore) reportedQueries(clientID int) []uint8 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[clientID]
+	if !ok {
+		return nil
+	}
+	ids := make([]uint8, 0, len(state.reported))
+	for queryID := range state.reported {
+		ids = append(ids, queryID)
+	}
+	return ids
 }
 
 func (s *sessionStore) queryComplete(clientID int, queryID uint8, expectedSenders int) bool {
@@ -227,6 +241,12 @@ func (s *sessionStore) pendingAbortIDs() []int {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+func (s *sessionStore) flush() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.persist()
 }
 
 func (s *sessionStore) persist() error {
