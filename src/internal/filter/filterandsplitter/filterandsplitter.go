@@ -63,7 +63,7 @@ func NewFilterAndSplitter(config FilterAndSplitterConfig) (worker.Worker, error)
 
 	states := statemap.New(func() *clientState {
 		return &clientState{
-			tracker:       sendertracker.New(10_000_000),
+			tracker:       sendertracker.New(uint64(config.SenderTrackerCapacity)),
 			outputTracker: outputtracker.New(),
 		}
 	})

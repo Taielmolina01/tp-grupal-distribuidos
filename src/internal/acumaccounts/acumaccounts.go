@@ -63,7 +63,7 @@ func NewAcumAccounts(config AcumAccountsConfig) (worker.Worker, error) {
 	states := statemap.New(func() *clientState {
 		return &clientState{
 			acum:            map[account.AccountPair]int8{},
-			transferTracker: sendertracker.New(10_000_000),
+			transferTracker: sendertracker.New(uint64(config.SenderTrackerCapacity)),
 		}
 	})
 	for clientID, cs := range recovered {

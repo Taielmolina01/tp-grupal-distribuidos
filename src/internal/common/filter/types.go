@@ -33,4 +33,6 @@ type FilterConfig struct {
 	PersistBatchSize     int
 	PersistFlushInterval time.Duration
 	IsLastNode           bool
+
+	SenderTrackerCapacity int
 }

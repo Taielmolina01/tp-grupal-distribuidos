@@ -33,6 +33,8 @@ type AverageFilterConfig struct {
 	PersistFlushInterval time.Duration
 
 	QueryID uint8
+
+	SenderTrackerCapacity int
 }
 
 type AverageFilter struct {
@@ -56,6 +58,8 @@ type AverageFilter struct {
 	persistFlushInterval time.Duration
 	transferLogDir       string
 	transferLogs         map[int]*appendlog.Log[transfer.TransferForQ3Filter]
+
+	senderTrackerCapacity int
 
 	lock sync.Mutex
 }

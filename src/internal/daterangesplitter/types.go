@@ -35,6 +35,8 @@ type DateRangeSplitterConfig struct {
 	PersistPath          string
 	PersistBatchSize     int
 	PersistFlushInterval time.Duration
+
+	SenderTrackerCapacity int
 }
 
 type DateRangeSplitter struct {

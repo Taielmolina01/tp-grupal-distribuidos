@@ -71,6 +71,11 @@ func loadConfig() (aggregate.AggregateConfig, error) {
 		return aggregate.AggregateConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
 	}
 
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return aggregate.AggregateConfig{}, err
+	}
+
 	return aggregate.AggregateConfig{
 		Id:                     id,
 		ExpectedEOFs:           expectedEOFs,
@@ -84,5 +89,6 @@ func loadConfig() (aggregate.AggregateConfig, error) {
 		PersistPath:            persistPath,
 		PersistBatchSize:       persistBatchSize,
 		PersistFlushInterval:   persistFlushInterval,
+		SenderTrackerCapacity:  senderTrackerCapacity,
 	}, nil
 }

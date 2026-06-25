@@ -13,6 +13,8 @@ type Config struct {
 
 	MaxBatchKB int `yaml:"max_batch_kb"`
 
+	SenderTrackerCapacity int `yaml:"sender_tracker_capacity"`
+
 	// Query 1-4
 	FilterCurrency int `yaml:"filter_currency"`
 
@@ -57,6 +59,9 @@ func loadConfig(path string) (*Config, error) {
 	}
 	if cfg.MaxBatchKB == 0 {
 		cfg.MaxBatchKB = 128
+	}
+	if cfg.SenderTrackerCapacity == 0 {
+		cfg.SenderTrackerCapacity = 10000000
 	}
 
 	return &cfg, nil

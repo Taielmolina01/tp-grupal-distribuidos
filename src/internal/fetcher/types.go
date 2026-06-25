@@ -22,6 +22,8 @@ type FetcherConfig struct {
 	QueryID                uint8
 	PersistPath            string
 	OutputAmount           int
+
+	SenderTrackerCapacity int
 }
 
 type Fetcher struct {

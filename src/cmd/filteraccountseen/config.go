@@ -71,6 +71,11 @@ func loadConfig() (filteraccountseen.FilterAccountSeenConfig, error) {
 		return filteraccountseen.FilterAccountSeenConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required")
 	}
 
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return filteraccountseen.FilterAccountSeenConfig{}, err
+	}
+
 	return filteraccountseen.FilterAccountSeenConfig{
 		Id:                    id,
 		ExpectedEOFs:          expectedEOFs,
@@ -84,5 +89,6 @@ func loadConfig() (filteraccountseen.FilterAccountSeenConfig, error) {
 		PersistPath:           persistPath,
 		PersistBatchSize:      persistBatchSize,
 		PersistFlushInterval:  persistFlushInterval,
+		SenderTrackerCapacity: senderTrackerCapacity,
 	}, nil
 }

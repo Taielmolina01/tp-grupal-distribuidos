@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/filter/filterandsplitter"
 )
 
@@ -74,6 +75,11 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		return filterandsplitter.FilterAndSplitterConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required")
 	}
 
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return filterandsplitter.FilterAndSplitterConfig{}, err
+	}
+
 	return filterandsplitter.FilterAndSplitterConfig{
 		Id:                     id,
 		StartDate:              startDate,
@@ -88,6 +94,7 @@ func loadConfig() (filterandsplitter.FilterAndSplitterConfig, error) {
 		PersistPath:            persistPath,
 		PersistBatchSize:       persistBatchSize,
 		PersistFlushInterval:   persistFlushInterval,
+		SenderTrackerCapacity:  senderTrackerCapacity,
 	}, nil
 }
 

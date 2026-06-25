@@ -41,6 +41,8 @@ type ReducerConfig struct {
 
 	InputQueue        string
 	InputEofsExpected int
+
+	SenderTrackerCapacity int
 }
 
 type Reducer struct {

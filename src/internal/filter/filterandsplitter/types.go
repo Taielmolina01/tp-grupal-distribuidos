@@ -30,6 +30,8 @@ type FilterAndSplitterConfig struct {
 
 	PersistBatchSize     int
 	PersistFlushInterval time.Duration
+
+	SenderTrackerCapacity int
 }
 
 type FilterAndSplitter struct {

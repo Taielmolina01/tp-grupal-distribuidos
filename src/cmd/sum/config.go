@@ -76,6 +76,11 @@ func loadConfig() (sum.SumConfig, error) {
 		return sum.SumConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
 	}
 
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return sum.SumConfig{}, err
+	}
+
 	return sum.SumConfig{
 		Id:                     id,
 		ExpectedEOFs:           expectedEOFs,
@@ -90,5 +95,6 @@ func loadConfig() (sum.SumConfig, error) {
 		PersistPath:            persistPath,
 		PersistBatchSize:       persistBatchSize,
 		PersistFlushInterval:   persistFlushInterval,
+		SenderTrackerCapacity:  senderTrackerCapacity,
 	}, nil
 }

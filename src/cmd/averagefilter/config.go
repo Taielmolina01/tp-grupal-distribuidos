@@ -77,6 +77,11 @@ func loadConfig() (averagefilter.AverageFilterConfig, error) {
 		return averagefilter.AverageFilterConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required and must be a valid duration")
 	}
 
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return averagefilter.AverageFilterConfig{}, err
+	}
+
 	return averagefilter.AverageFilterConfig{
 		Id:                             id,
 		MomHost:                        momHost,
@@ -92,5 +97,6 @@ func loadConfig() (averagefilter.AverageFilterConfig, error) {
 		PersistBatchSize:               persistBatchSize,
 		PersistFlushInterval:           persistFlushInterval,
 		QueryID:                        queryresult.Query3ID,
+		SenderTrackerCapacity:          senderTrackerCapacity,
 	}, nil
 }

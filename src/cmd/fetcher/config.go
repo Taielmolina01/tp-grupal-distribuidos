@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/fetcher"
 )
 
@@ -75,6 +76,11 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 		return fetcher.FetcherConfig{}, errors.New("PERSIST_PATH environment variable is required")
 	}
 
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return fetcher.FetcherConfig{}, err
+	}
+
 	return fetcher.FetcherConfig{
 		MomHost:                momHost,
 		MomPort:                momPort,
@@ -86,5 +92,6 @@ func loadConfig() (fetcher.FetcherConfig, error) {
 		ExpectedInputSenders:   inputSenders,
 		QueryID:                uint8(queryId),
 		PersistPath:            persistPath,
+		SenderTrackerCapacity:  senderTrackerCapacity,
 	}, nil
 }

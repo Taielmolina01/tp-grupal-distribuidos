@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/common/filter"
 )
 
@@ -60,6 +61,11 @@ func loadConfig() (filter.FilterConfig, error) {
 		return filter.FilterConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
 	}
 
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return filter.FilterConfig{}, err
+	}
+
 	return filter.FilterConfig{
 		Id:                     id,
 		MomHost:                momHost,
@@ -71,5 +77,6 @@ func loadConfig() (filter.FilterConfig, error) {
 		PersistPath:            persistPath,
 		PersistBatchSize:       persistBatchSize,
 		PersistFlushInterval:   persistFlushInterval,
+		SenderTrackerCapacity:  senderTrackerCapacity,
 	}, nil
 }

@@ -30,6 +30,8 @@ type AcumAccountsConfig struct {
 	PersistPath          string
 	PersistBatchSize     int
 	PersistFlushInterval time.Duration
+
+	SenderTrackerCapacity int
 }
 
 type clientState struct {

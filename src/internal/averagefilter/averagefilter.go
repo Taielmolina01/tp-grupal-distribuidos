@@ -75,8 +75,8 @@ func NewAverageFilter(config AverageFilterConfig) (worker.Worker, error) {
 	states := statemap.New(func() *clientState {
 		return &clientState{
 			avgs:             map[string]float64{},
-			transfersTracker: sendertracker.New(10_000_000),
-			avgsTracker:      sendertracker.New(10_000_000),
+			transfersTracker: sendertracker.New(uint64(config.SenderTrackerCapacity)),
+			avgsTracker:      sendertracker.New(uint64(config.SenderTrackerCapacity)),
 		}
 	})
 	for clientID, state := range recovered {
@@ -100,6 +100,7 @@ func NewAverageFilter(config AverageFilterConfig) (worker.Worker, error) {
 		persistFlushInterval:     config.PersistFlushInterval,
 		transferLogDir:           filepath.Join(config.PersistPath, "transfers"),
 		transferLogs:             map[int]*appendlog.Log[transfer.TransferForQ3Filter]{},
+		senderTrackerCapacity:    config.SenderTrackerCapacity,
 	}, nil
 }
 
@@ -373,7 +374,7 @@ func (af *AverageFilter) finalize(clientID int, state *clientState) error {
 		}
 	}()
 
-	replayTracker := sendertracker.New(10_000_000)
+	replayTracker := sendertracker.New(uint64(af.senderTrackerCapacity))
 	ot := outputtracker.New()
 	builder := batch.NewBuilder(af.maxBatchSize, af.maxBatchBytes, records.Query3ResultCodec)
 	if err := log.ReadUnique(replayTracker, func(entry appendlog.Entry[transfer.TransferForQ3Filter]) error {

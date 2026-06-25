@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/acumaccounts"
 )
 
@@ -70,6 +71,11 @@ func loadConfig() (acumaccounts.AcumAccountsConfig, error) {
 		return acumaccounts.AcumAccountsConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required")
 	}
 
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return acumaccounts.AcumAccountsConfig{}, err
+	}
+
 	return acumaccounts.AcumAccountsConfig{
 		Id:                     id,
 		OutputMiddlewareAmount: outputAmount,
@@ -83,5 +89,6 @@ func loadConfig() (acumaccounts.AcumAccountsConfig, error) {
 		PersistPath:            persistPath,
 		PersistBatchSize:       persistBatchSize,
 		PersistFlushInterval:   persistFlushInterval,
+		SenderTrackerCapacity:  senderTrackerCapacity,
 	}, nil
 }

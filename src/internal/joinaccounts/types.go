@@ -34,6 +34,8 @@ type JoinAccountsConfig struct {
 	PersistPath          string
 	PersistBatchSize     int
 	PersistFlushInterval time.Duration
+
+	SenderTrackerCapacity int
 }
 
 type transferPartialState struct {

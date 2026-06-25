@@ -46,6 +46,7 @@ type GatewayConfig struct {
 	ResultsBatchFlushInterval time.Duration
 	AccountsClusterPrefix     string
 	AccountsClusterAmount     int
+	SenderTrackerCapacity     uint64
 }
 
 const gatewaySenderID uint8 = 0
@@ -137,7 +138,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		checkpointEvery = 1
 	}
 
-	sessions, err := newSessionStore(config.SessionStorePath)
+	sessions, err := newSessionStore(config.SessionStorePath, config.SenderTrackerCapacity)
 	if err != nil {
 		if closeErr := accountsCluster.Close(); closeErr != nil {
 			slog.Error("While closing accounts cluster", "err", closeErr)

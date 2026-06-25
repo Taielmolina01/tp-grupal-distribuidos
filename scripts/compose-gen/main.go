@@ -36,6 +36,7 @@ func main() {
 	fmt.Printf("Applied configuration:\n")
 	fmt.Printf("  clients:                     %d\n", cfg.Clients)
 	fmt.Printf("  max_batch_kb:                %d\n", cfg.MaxBatchKB)
+	fmt.Printf("  sender_tracker_capacity:     %d\n", cfg.SenderTrackerCapacity)
 	fmt.Printf("  filter_currency (Q1):        %d\n", cfg.FilterCurrency)
 	fmt.Printf("  filter_amount (Q1):          %d\n", cfg.FilterAmount)
 	fmt.Printf("  reducer_q2 (Q2):             %d\n", cfg.ReducerQ2)

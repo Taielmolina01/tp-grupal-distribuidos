@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/splitter"
@@ -86,6 +87,12 @@ func loadConfig() (filter.FilterConfig, error) {
 	config.PersistPath = persistPath
 	config.PersistBatchSize = persistBatchSize
 	config.PersistFlushInterval = persistFlushInterval
+
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return filter.FilterConfig{}, err
+	}
+	config.SenderTrackerCapacity = senderTrackerCapacity
 
 	return config, nil
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/common/pinger"
 	"tp-grupal-distribuidos/internal/common/shard"
 	"tp-grupal-distribuidos/internal/common/splitter"
@@ -133,6 +134,11 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		resultsBatchFlushInterval = parsed
 	}
 
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return gateway.GatewayConfig{}, err
+	}
+
 	return gateway.GatewayConfig{
 		TransfersClusters:         transfersClusters,
 		ResultsQueue:              resultsQueue,
@@ -149,6 +155,7 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		ResultsBatchFlushInterval: resultsBatchFlushInterval,
 		AccountsClusterPrefix:     accountsClusterPrefix,
 		AccountsClusterAmount:     accountsClusterAmount,
+		SenderTrackerCapacity:     uint64(senderTrackerCapacity),
 	}, nil
 }
 

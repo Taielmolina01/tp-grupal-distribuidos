@@ -1,5 +1,6 @@
 clients: 1
 max_batch_kb: 128
+sender_tracker_capacity: 1000000
 
 # Query 1-4:
 filter_currency: 2

@@ -100,7 +100,7 @@ func NewDistinctFilter[T comparable](
 
 	states := statemap.New(func() *clientState[T] {
 		return &clientState[T]{
-			tracker: sendertracker.New(10_000_000),
+			tracker: sendertracker.New(uint64(config.SenderTrackerCapacity)),
 			seen:    map[string]T{},
 		}
 	})

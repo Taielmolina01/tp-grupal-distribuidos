@@ -16,8 +16,6 @@ import (
 const nextClientIDKey = "next"
 const pendingAbortsKey = "aborts"
 
-const seqStoreCapacity uint64 = 10_000_000
-
 type sessionState struct {
 	phase        tcpproto.Phase
 	trackers     map[uint8]*sendertracker.SenderTracker
@@ -26,18 +24,20 @@ type sessionState struct {
 }
 
 type sessionStore struct {
-	mu            sync.Mutex
-	path          string
-	nextClientID  int32
-	sessions      map[int]*sessionState
-	pendingAborts map[int]struct{}
+	mu                    sync.Mutex
+	path                  string
+	nextClientID          int32
+	sessions              map[int]*sessionState
+	pendingAborts         map[int]struct{}
+	senderTrackerCapacity uint64
 }
 
-func newSessionStore(path string) (*sessionStore, error) {
+func newSessionStore(path string, seqStoreCapacity uint64) (*sessionStore, error) {
 	s := &sessionStore{
-		path:          path,
-		sessions:      map[int]*sessionState{},
-		pendingAborts: map[int]struct{}{},
+		path:                  path,
+		sessions:              map[int]*sessionState{},
+		pendingAborts:         map[int]struct{}{},
+		senderTrackerCapacity: seqStoreCapacity,
 	}
 	if path != "" {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -102,7 +102,7 @@ func (s *sessionStore) advanceConfirmedSeq(clientID int, phase tcpproto.Phase, s
 func (s *sessionStore) trackerFor(state *sessionState, queryID uint8) *sendertracker.SenderTracker {
 	t, ok := state.trackers[queryID]
 	if !ok {
-		t = sendertracker.New(seqStoreCapacity)
+		t = sendertracker.New(s.senderTrackerCapacity)
 		state.trackers[queryID] = t
 	}
 	return t

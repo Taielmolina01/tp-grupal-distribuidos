@@ -88,7 +88,7 @@ func createFetcherImpl(config FetcherConfig) (worker.Worker, error) {
 	}
 
 	states := statemap.New(func() *clientState {
-		return &clientState{tracker: sendertracker.New(10_000_000), outputTracker: outputtracker.New()}
+		return &clientState{tracker: sendertracker.New(uint64(config.SenderTrackerCapacity)), outputTracker: outputtracker.New()}
 	})
 
 	for clientID, state := range recovered {

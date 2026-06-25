@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/join"
 )
 
@@ -65,6 +66,11 @@ func loadConfig() (join.JoinConfig, error) {
 		return join.JoinConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
 	}
 
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return join.JoinConfig{}, err
+	}
+
 	return join.JoinConfig{
 		Id:                         id,
 		MomHost:                    momHost,
@@ -72,10 +78,11 @@ func loadConfig() (join.JoinConfig, error) {
 		LeftInputMiddlewarePrefix:  leftInputQueue,
 		RightInputMiddlewarePrefix: rightInputQueue,
 		OutputQueue:                outputQueue,
-		LeftEofsExpected:     leftEofsNum,
-		RightEofsExpected:    rightEofsNum,
-		PersistPath:          persistPath,
-		PersistBatchSize:     persistBatchSize,
-		PersistFlushInterval: persistFlushInterval,
+		LeftEofsExpected:          leftEofsNum,
+		RightEofsExpected:         rightEofsNum,
+		PersistPath:               persistPath,
+		PersistBatchSize:          persistBatchSize,
+		PersistFlushInterval:      persistFlushInterval,
+		SenderTrackerCapacity:     senderTrackerCapacity,
 	}, nil
 }

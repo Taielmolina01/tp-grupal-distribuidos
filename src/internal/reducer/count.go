@@ -54,7 +54,7 @@ func newCountReducer(config ReducerConfig) (worker.Worker, error) {
 
 	states := statemap.New(func() *countClientState {
 		return &countClientState{
-			tracker: sendertracker.New(10_000_000),
+			tracker: sendertracker.New(uint64(config.SenderTrackerCapacity)),
 		}
 	})
 	for clientID, state := range recovered {

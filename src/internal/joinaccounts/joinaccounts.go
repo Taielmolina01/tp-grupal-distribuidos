@@ -92,12 +92,12 @@ func NewJoinAccounts(config JoinAccountsConfig) (worker.Worker, error) {
 			right:            map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
 			qualifyingLeft:   map[account.AccountIdentifier]struct{}{},
 			qualifyingRight:  map[account.AccountIdentifier]struct{}{},
-			transferTracker:  sendertracker.New(10_000_000),
-			qualifiedTracker: sendertracker.New(10_000_000),
+			transferTracker:  sendertracker.New(uint64(config.SenderTrackerCapacity)),
+			qualifiedTracker: sendertracker.New(uint64(config.SenderTrackerCapacity)),
 		}
 	})
 
-	recoveredStates := mergeRecoveredStates(transferRecovered, qualifiedRecovered, config.Threshold)
+	recoveredStates := mergeRecoveredStates(transferRecovered, qualifiedRecovered, config.Threshold, config.SenderTrackerCapacity)
 	for clientID, cs := range recoveredStates {
 		states.Set(clientID, cs)
 		slog.Info("recovered client state", "clientID", clientID,
@@ -132,6 +132,7 @@ func mergeRecoveredStates(
 	transferRecovered map[int]*transferPartialState,
 	qualifiedRecovered map[int]*qualifiedPartialState,
 	threshold int,
+	senderTrackerCapacity int,
 ) map[int]*clientState {
 	merged := make(map[int]*clientState, len(transferRecovered))
 
@@ -140,7 +141,7 @@ func mergeRecoveredStates(
 			transferTracker:  ts.transferTracker,
 			left:             ts.left,
 			right:            ts.right,
-			qualifiedTracker: sendertracker.New(10_000_000),
+			qualifiedTracker: sendertracker.New(uint64(senderTrackerCapacity)),
 			qualifyingLeft:   map[account.AccountIdentifier]struct{}{},
 			qualifyingRight:  map[account.AccountIdentifier]struct{}{},
 		}
@@ -152,7 +153,7 @@ func mergeRecoveredStates(
 		cs, ok := merged[clientID]
 		if !ok {
 			cs = &clientState{
-				transferTracker: sendertracker.New(10_000_000),
+				transferTracker: sendertracker.New(uint64(senderTrackerCapacity)),
 				left:            map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
 				right:           map[account.AccountIdentifier]map[account.AccountIdentifier]struct{}{},
 			}

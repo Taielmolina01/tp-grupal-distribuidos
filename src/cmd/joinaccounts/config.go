@@ -91,6 +91,11 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		return joinaccounts.JoinAccountsConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required")
 	}
 
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return joinaccounts.JoinAccountsConfig{}, err
+	}
+
 	return joinaccounts.JoinAccountsConfig{
 		Id:                     id,
 		OutputMiddlewareAmount: outputAmount,
@@ -108,5 +113,6 @@ func loadConfig() (joinaccounts.JoinAccountsConfig, error) {
 		PersistPath:            persistPath,
 		PersistBatchSize:       persistBatchSize,
 		PersistFlushInterval:   persistFlushInterval,
+		SenderTrackerCapacity:  senderTrackerCapacity,
 	}, nil
 }

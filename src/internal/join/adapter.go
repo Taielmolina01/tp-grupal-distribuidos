@@ -65,8 +65,8 @@ func NewJoin(config JoinConfig) (worker.Worker, error) {
 		return &clientState{
 			leftBuffer:   map[string]transfer.TransferForQ2{},
 			rightBuffer:  map[string]account.Account{},
-			leftTracker:  sendertracker.New(10_000_000),
-			rightTracker: sendertracker.New(10_000_000),
+			leftTracker:  sendertracker.New(uint64(config.SenderTrackerCapacity)),
+			rightTracker: sendertracker.New(uint64(config.SenderTrackerCapacity)),
 		}
 	})
 	for clientID, state := range recovered {

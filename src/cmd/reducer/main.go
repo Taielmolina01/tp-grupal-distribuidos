@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/common/pinger"
 	"tp-grupal-distribuidos/internal/common/worker"
 	"tp-grupal-distribuidos/internal/reducer"
@@ -128,6 +129,12 @@ func loadConfig() (reducer.ReducerConfig, error) {
 	default:
 		return reducer.ReducerConfig{}, fmt.Errorf("invalid REDUCER_TYPE: %s", reducerType)
 	}
+
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return reducer.ReducerConfig{}, err
+	}
+	config.SenderTrackerCapacity = senderTrackerCapacity
 
 	return config, nil
 }

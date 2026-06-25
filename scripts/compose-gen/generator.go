@@ -10,6 +10,10 @@ func writeMaxBatchConfig(b *strings.Builder, cfg *Config) {
 	fmt.Fprintf(b, "      - MAX_BATCH_KB=%d\n", cfg.MaxBatchKB)
 }
 
+func writeSenderTrackerCapacity(b *strings.Builder, cfg *Config) {
+	fmt.Fprintf(b, "      - SENDER_TRACKER_CAPACITY=%d\n", cfg.SenderTrackerCapacity)
+}
+
 func generateCompose(cfg *Config) string {
 	var b strings.Builder
 
@@ -192,6 +196,7 @@ func writeGateway(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - SERVER_HOST=gateway\n")
 	b.WriteString("      - SERVER_PORT=5678\n")
 	fmt.Fprintf(b, "      - QUERY_EOFS_EXPECTED=%s\n", queryEofs)
+	writeSenderTrackerCapacity(b, cfg)
 	b.WriteString("\n")
 }
 
@@ -213,6 +218,7 @@ func writeFetcher(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - PERSIST_PATH=/var/bkp/q5_fetcher\n")
 	fmt.Fprintf(b, "      - OUTPUT_AMOUNT=%d\n", cfg.FilterAmtQ5)
 	b.WriteString("      - QUOTE=USD\n")
+	writeSenderTrackerCapacity(b, cfg)
 	b.WriteString("\n")
 }
 
@@ -236,6 +242,7 @@ func writeCountReducerQ5(b *strings.Builder, cfg *Config) {
 	b.WriteString("      - PERSIST_PATH=/var/bkp/q5_count_reducer\n")
 	b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 	b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+	writeSenderTrackerCapacity(b, cfg)
 	b.WriteString("\n")
 }
 
@@ -286,6 +293,7 @@ func writeFilterCurrency(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q1234_filter_currency_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -311,6 +319,7 @@ func writeFilterAmount(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q1_filter_amount_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -337,6 +346,7 @@ func writeReducerQ2(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q2_reducer_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -361,6 +371,7 @@ func writeFilterBankIdAlreadySeen(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q2_filter_bank_distinct_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -387,6 +398,7 @@ func writeJoinQ2(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q2_join_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -413,6 +425,7 @@ func writeFilterAndSplitterQ4(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_filter_and_splitter_%d.bin\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=100\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -442,6 +455,7 @@ func writeJoinAccountsQ4(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_join_accounts_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=100\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -468,6 +482,7 @@ func writeAcumAccountsQ4(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_acum_accounts_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=100\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -493,6 +508,7 @@ func writeFilterAccountSeenQ4(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q4_filter_account_seen_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=100\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -520,6 +536,7 @@ func writeFilterRangeQ3(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_filter_range_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -546,6 +563,7 @@ func writeSumQ3(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_sum_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -571,6 +589,7 @@ func writeAggregateQ3(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q3_aggregate_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -598,6 +617,7 @@ func writeAverageFilterQ3(b *strings.Builder, cfg *Config) {
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
 		b.WriteString("      - QUERY_ID=3\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -624,6 +644,7 @@ func writeFilterDateAndPayment(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q5_filter_date_and_payment_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}
@@ -650,6 +671,7 @@ func writeFilterAmtQ5(b *strings.Builder, cfg *Config) {
 		fmt.Fprintf(b, "      - PERSIST_PATH=/var/bkp/q5_filter_amount_%d\n", i)
 		b.WriteString("      - PERSIST_BATCH_SIZE=50\n")
 		b.WriteString("      - PERSIST_FLUSH_INTERVAL=1s\n")
+		writeSenderTrackerCapacity(b, cfg)
 		jsonFileLogging(b)
 		b.WriteString("\n")
 	}

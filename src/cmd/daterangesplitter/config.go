@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	commonconfig "tp-grupal-distribuidos/internal/common/config"
 	"tp-grupal-distribuidos/internal/daterangesplitter"
 )
 
@@ -71,6 +72,11 @@ func loadConfig() (daterangesplitter.DateRangeSplitterConfig, error) {
 		return daterangesplitter.DateRangeSplitterConfig{}, errors.New("PERSIST_FLUSH_INTERVAL environment variable is required (e.g. '1s')")
 	}
 
+	senderTrackerCapacity, err := commonconfig.ParseSenderTrackerCapacity()
+	if err != nil {
+		return daterangesplitter.DateRangeSplitterConfig{}, err
+	}
+
 	return daterangesplitter.DateRangeSplitterConfig{
 		Id:                           id,
 		ExpectedEOFs:                 expectedEOFs,
@@ -89,5 +95,6 @@ func loadConfig() (daterangesplitter.DateRangeSplitterConfig, error) {
 		PersistPath:                  persistPath,
 		PersistBatchSize:             persistBatchSize,
 		PersistFlushInterval:         persistFlushInterval,
+		SenderTrackerCapacity:        senderTrackerCapacity,
 	}, nil
 }
