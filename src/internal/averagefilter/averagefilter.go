@@ -13,6 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/q3filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
@@ -378,8 +379,7 @@ func (af *AverageFilter) finalize(clientID int, state *clientState) error {
 	}
 
 	total := ot.CountFor("")
-	eofBody := batch.WriteEOF(clientID, af.queryID, uint8(af.id), total+1, uint32(total))
-	if err := af.outputQueue.Send(newmiddleware.Message{Body: eofBody}); err != nil {
+	if err := msgsend.SendEOF(af.outputQueue, "", clientID, af.queryID, uint8(af.id), total+1, uint32(total)); err != nil {
 		return err
 	}
 

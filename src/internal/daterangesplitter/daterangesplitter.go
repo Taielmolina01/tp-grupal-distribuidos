@@ -13,6 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/daterange"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/q3filter"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
@@ -232,8 +233,7 @@ func (s *DateRangeSplitter) finishStep(clientID int, state *clientState) error {
 	for i := range s.avgOutputAmount {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := state.outputTracker.CountFor("avg_" + rk)
-		body := daterange.WriteEOF(clientID, s.queryID, uint8(s.id), eofSeq, uint32(total))
-		if err := s.avgMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
+		if err := msgsend.SendEOF(s.avgMiddleware, rk, clientID, s.queryID, uint8(s.id), eofSeq, uint32(total)); err != nil {
 			return err
 		}
 	}
@@ -241,8 +241,7 @@ func (s *DateRangeSplitter) finishStep(clientID int, state *clientState) error {
 	for i := range s.filterOutputAmount {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := state.outputTracker.CountFor("filter_" + rk)
-		body := q3filter.WriteEOF(clientID, s.queryID, uint8(s.id), eofSeq, uint32(total))
-		if err := s.filterMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
+		if err := msgsend.SendEOF(s.filterMiddleware, rk, clientID, s.queryID, uint8(s.id), eofSeq, uint32(total)); err != nil {
 			return err
 		}
 	}

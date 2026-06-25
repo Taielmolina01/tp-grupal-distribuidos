@@ -13,6 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountchain"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -211,8 +212,7 @@ func (a *AcumAccounts) emitResults(clientID int, state *clientState) error {
 	for i := range a.outputAmount {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := ot.CountFor(rk)
-		eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), uint8(a.id), total+1, uint32(total))
-		if err := a.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+		if err := msgsend.SendEOF(a.outputMiddleware, rk, clientID, uint8(a.queryID), uint8(a.id), total+1, uint32(total)); err != nil {
 			return err
 		}
 	}

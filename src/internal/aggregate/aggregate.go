@@ -12,6 +12,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/summethod"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
@@ -218,8 +219,7 @@ func (a *AvgAggregator) finishStep(clientID int, state *clientState) error {
 
 	total := ot.CountFor("")
 	seq := ot.RegisterBatch("")
-	eofBody := avgmethod.WriteEOF(clientID, a.queryID, uint8(a.id), seq, uint32(total))
-	if err := a.outputMiddleware.Send(newmiddleware.Message{Body: eofBody}); err != nil {
+	if err := msgsend.SendEOF(a.outputMiddleware, "", clientID, a.queryID, uint8(a.id), seq, uint32(total)); err != nil {
 		return err
 	}
 	return nil

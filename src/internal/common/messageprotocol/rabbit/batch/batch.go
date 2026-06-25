@@ -61,6 +61,7 @@ type Msg[T any] struct {
 	ClientID int
 	QueryID  uint8
 	EOF      bool
+	Abort    bool
 	Total    uint32
 	SenderID uint8
 	Seq      uint64
@@ -101,9 +102,9 @@ func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uin
 	return w.Bytes()
 }
 
-func WriteAbort(clientID int, senderID uint8) []byte {
+func WriteAbort(clientID int) []byte {
 	w := wire.NewWriter()
-	envelope.Header{ClientID: clientID, Type: typeAbort, SenderID: senderID, Seq: 0}.WriteTo(w)
+	envelope.Header{ClientID: clientID, Type: typeAbort, SenderID: 0, Seq: 0}.WriteTo(w)
 	return w.Bytes()
 }
 
@@ -147,6 +148,10 @@ func Read[T any](body []byte, codec wire.Codec[T]) (Msg[T], error) {
 	if info.EOF {
 		return Msg[T]{ClientID: info.ClientID, QueryID: info.QueryID, EOF: true, Total: info.Total, SenderID: info.SenderID, Seq: info.Seq}, nil
 	}
+	if info.Abort {
+		return Msg[T]{ClientID: info.ClientID, QueryID: info.QueryID, Abort: true}, nil
+	}
+
 	records, err := ReadRecords(r, codec)
 	if err != nil {
 		return Msg[T]{}, err

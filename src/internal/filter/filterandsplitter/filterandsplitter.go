@@ -11,6 +11,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/splittransfer"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
@@ -230,8 +231,7 @@ func (f *FilterAndSplitter) finishTransfersStep(clientID int, state *clientState
 		}
 		rk := fmt.Sprintf("shard-%d", i)
 		total := state.outputTracker.CountFor(rk)
-		eofBody := splittransfer.WriteEOF(clientID, f.queryID, uint8(f.id), eofSeq, uint32(total))
-		if err := f.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+		if err := msgsend.SendEOF(f.outputMiddleware, rk, clientID, f.queryID, uint8(f.id), eofSeq, uint32(total)); err != nil {
 			slog.Error("While sending EOF", "routingKey", rk, "err", err)
 			sendErr = err
 		}

@@ -13,6 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/daterange"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/summethod"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -222,8 +223,7 @@ func (s *SumByPaymentFormat) finishStep(clientID int, state *clientState) error 
 		rk := fmt.Sprintf("shard-%d", i)
 		total := ot.CountFor(rk)
 		seq := ot.RegisterBatch(rk)
-		eofBody := summethod.WriteEOF(clientID, s.queryID, uint8(s.id), seq, uint32(total))
-		if err := s.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+		if err := msgsend.SendEOF(s.outputMiddleware, rk, clientID, s.queryID, uint8(s.id), seq, uint32(total)); err != nil {
 			return err
 		}
 	}
