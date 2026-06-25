@@ -70,21 +70,29 @@ func (client *Client) connectAndHandshake() (net.Conn, tcpproto.Phase, uint64, e
 	}
 
 	if err := tcpproto.WriteHello(conn, client.sessionID); err != nil {
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			slog.Debug("While closing connection after write hello error", "err", err)
+		}
 		return nil, 0, 0, err
 	}
 	msgType, err := tcpproto.ReadMsgType(conn)
 	if err != nil {
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			slog.Debug("While closing connection after read error", "err", err)
+		}
 		return nil, 0, 0, err
 	}
 	if msgType != tcpproto.Welcome {
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			slog.Debug("While closing connection after welcome error", "err", err)
+		}
 		return nil, 0, 0, fmt.Errorf("expected WELCOME message, got %d", msgType)
 	}
 	sessionID, phase, resumeSeq, err := tcpproto.ReadWelcome(conn)
 	if err != nil {
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			slog.Debug("While closing connection after read welcome error", "err", err)
+		}
 		return nil, 0, 0, err
 	}
 

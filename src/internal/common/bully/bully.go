@@ -172,7 +172,9 @@ func (b *BullyImpl) reconnectPeer(nodeId byte) {
 	err = node.conn.SendMessage([]byte{byte(b.id)})
 	if err != nil {
 		slog.Error("Failed to send ID to reconnected peer", "peerId", nodeId, "err", err)
-		_ = node.conn.Close()
+		if err := node.conn.Close(); err != nil {
+			slog.Error("Failed to close connection", "err", err)
+		}
 		return
 	}
 

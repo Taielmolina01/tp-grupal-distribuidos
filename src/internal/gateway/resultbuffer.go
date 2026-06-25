@@ -70,7 +70,11 @@ func (b *resultBuffer) truncateTorn(clientID int) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		if err := f.Close(); err != nil {
+			slog.Debug("While closing result file", "err", err)
+		}
+	}()
 
 	var offset int64
 	for {

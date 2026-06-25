@@ -10,7 +10,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -20,30 +19,36 @@ import (
 
 func newCountReducer(config ReducerConfig) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-	legacyConn := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	inputQueue, err := newmiddleware.NewQueueMiddleware(connSettings, config.InputQueue)
+	var (
+		inputQueue  newmiddleware.Middleware
+		outputQueue newmiddleware.Middleware
+		err         error
+	)
+
+	defer func() {
+		if err != nil {
+			cleanup.Close(inputQueue, outputQueue)
+		}
+	}()
+
+	inputQueue, err = newmiddleware.NewQueueMiddleware(connSettings, config.InputQueue)
 	if err != nil {
 		return nil, err
 	}
 
-	outputQueue, err := middleware.CreateQueueMiddleware(config.OutputQueues[0], legacyConn)
+	outputQueue, err = newmiddleware.NewQueueMiddleware(connSettings, config.OutputQueues[0])
 	if err != nil {
-		_ = inputQueue.Close()
 		return nil, err
 	}
 
 	ckpt, err := checkpoint.New(config.PersistPath, marshalCountClientState, unmarshalCountClientState)
 	if err != nil {
-		_ = inputQueue.Close()
-		_ = outputQueue.Close()
 		return nil, err
 	}
 
 	recovered, err := ckpt.Load()
 	if err != nil {
-		_ = inputQueue.Close()
-		_ = outputQueue.Close()
 		return nil, err
 	}
 
@@ -170,12 +175,12 @@ func (r *CountReducer) finishStep(clientID int, state *countClientState) error {
 		[]queryresult.Query5Result{{Qty: total}},
 		records.Query5ResultCodec,
 	)
-	if err := r.outputQueue.Send(middleware.Message{Body: resultBody}); err != nil {
+	if err := r.outputQueue.Send(newmiddleware.Message{Body: resultBody}); err != nil {
 		return err
 	}
 
 	eofBody := batch.WriteEOF(clientID, r.queryID, uint8(r.id), 0, 1)
-	if err := r.outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
+	if err := r.outputQueue.Send(newmiddleware.Message{Body: eofBody}); err != nil {
 		return err
 	}
 

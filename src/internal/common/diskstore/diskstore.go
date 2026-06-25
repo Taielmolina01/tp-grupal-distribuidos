@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 
 	"tp-grupal-distribuidos/internal/common/messageprotocol/safeio"
@@ -14,7 +15,11 @@ func WriteTmp(path string, data map[string][]byte) error {
 	if err != nil {
 		return fmt.Errorf("diskstore: create tmp: %w", err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		if err := f.Close(); err != nil {
+			slog.Error("Failed to close file", "err", err)
+		}
+	}()
 
 	if err := writeMap(f, data); err != nil {
 		return err
@@ -45,7 +50,11 @@ func Read(path string) (map[string][]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("diskstore: open: %w", err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		if err := f.Close(); err != nil {
+			slog.Error("Failed to close file", "err", err)
+		}
+	}()
 	return readMap(f)
 }
 

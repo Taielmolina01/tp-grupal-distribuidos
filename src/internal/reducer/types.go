@@ -72,7 +72,7 @@ type CountReducer struct {
 	id                   int
 	queryID              uint8
 	inputQueue           newmiddleware.Middleware
-	outputQueue          middleware.Middleware
+	outputQueue          newmiddleware.Middleware
 	prevNodeAmt          int
 	states               statemap.StateMap[countClientState]
 	checkpoint           *checkpoint.Checkpoint[countClientState]
