@@ -1,0 +1,20 @@
+scripts/compose-gen/generator.go
+  s_d73af1bdb9a6a7::t_52bfc3fc9611b5 358-359
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 182-183,335-336,357,381-382
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "ecebb75a619ec449df1fb6eb7c5e1b86beeddf99",
+  "prompts": {},
+  "sessions": {
+    "s_d73af1bdb9a6a7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "519fcc35-4f69-4b0d-9575-d43739ef98bd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
