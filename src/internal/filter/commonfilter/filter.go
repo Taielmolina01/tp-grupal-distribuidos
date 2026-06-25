@@ -12,6 +12,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
@@ -92,6 +93,7 @@ func NewFilter[T any, O any](
 		checkpoint:           ckpt,
 		persistBatchSize:     config.PersistBatchSize,
 		persistFlushInterval: config.PersistFlushInterval,
+		isLastNode:           config.IsLastNode,
 	}, nil
 }
 
@@ -129,6 +131,7 @@ func (f *Filter[T, O]) close() {
 func (f *Filter[T, O]) handleBatch(msgs []middleware.Message, ack func(), nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := batch.Read(msg.Body, f.inputCodec)
@@ -140,6 +143,12 @@ func (f *Filter[T, O]) handleBatch(msgs []middleware.Message, ack func(), nack f
 		clientID := input.ClientID
 		state := f.states.For(clientID)
 		tracker := state.tracker
+
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
 
 		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
 			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
@@ -173,6 +182,19 @@ func (f *Filter[T, O]) handleBatch(msgs []middleware.Message, ack func(), nack f
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] && !f.isLastNode {
+			for _, cl := range f.outputClusters {
+				if err := msgsend.SendAbort(cl.Middleware, middleware.BroadcastRoutingKey, clientID); err != nil {
+					slog.Error("While emitting abort", "err", err)
+					nack()
+					f.stopConsuming()
+					return
+				}
+			}
+			f.states.Delete(clientID)
+			f.checkpoint.DeleteClient(clientID)
+			continue
+		}
 		if _, done := completed[clientID]; done {
 			f.states.Delete(clientID)
 			f.checkpoint.DeleteClient(clientID)

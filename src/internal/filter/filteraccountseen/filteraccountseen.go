@@ -13,6 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
@@ -117,6 +118,7 @@ func (f *FilterAccountSeen) close() {
 func (f *FilterAccountSeen) handleBatch(msgs []middleware.Message, ack func(), nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := accountid.Read(msg.Body)
@@ -145,6 +147,12 @@ func (f *FilterAccountSeen) handleBatch(msgs []middleware.Message, ack func(), n
 		state.tracker.Claim(int(input.SenderID), input.Seq)
 		modified[clientID] = state
 
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
+
 		if state.tracker.IsComplete(f.expectedEOFs) {
 			if err := f.emitResults(clientID, state); err != nil {
 				slog.Error("While emitting results", "err", err)
@@ -157,6 +165,11 @@ func (f *FilterAccountSeen) handleBatch(msgs []middleware.Message, ack func(), n
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			f.states.Delete(clientID)
+			f.checkpoint.DeleteClient(clientID)
+			continue
+		}
 		if _, done := completed[clientID]; done {
 			f.states.Delete(clientID)
 			f.checkpoint.DeleteClient(clientID)
@@ -201,6 +214,5 @@ func (f *FilterAccountSeen) emitResults(clientID int, state *clientState) error 
 	}
 
 	total := ot.CountFor("")
-	eofBody := batch.WriteEOF(clientID, uint8(f.queryID), uint8(f.id), total+1, uint32(total))
-	return f.outputMiddleware.Send(middleware.Message{Body: eofBody})
+	return msgsend.SendEOF(f.outputMiddleware, "", clientID, uint8(f.queryID), uint8(f.id), total+1, uint32(total))
 }

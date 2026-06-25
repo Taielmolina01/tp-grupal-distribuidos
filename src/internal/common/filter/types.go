@@ -32,4 +32,5 @@ type FilterConfig struct {
 	PersistPath          string
 	PersistBatchSize     int
 	PersistFlushInterval time.Duration
+	IsLastNode           bool
 }

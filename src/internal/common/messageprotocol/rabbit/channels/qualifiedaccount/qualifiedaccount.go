@@ -28,10 +28,6 @@ func WriteBatch(clientID int, queryID uint8, senderID uint8, seq uint64, recs []
 	return batch.Write(clientID, queryID, senderID, seq, recs, codec)
 }
 
-func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uint32) []byte {
-	return batch.WriteEOF(clientID, queryID, senderID, seq, total)
-}
-
 func Read(body []byte) (Msg, error) {
 	return batch.Read(body, codec)
 }

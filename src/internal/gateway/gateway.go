@@ -695,7 +695,7 @@ func (gateway *Gateway) dispatchAbort(clientID int) {
 }
 
 func (gateway *Gateway) sendAbort(clientID int) error {
-	body := batch.WriteAbort(clientID, gatewaySenderID)
+	body := batch.WriteAbort(clientID)
 	rk := middleware.BroadcastRoutingKey
 	var errs []error
 	for _, cluster := range gateway.transferClusters {

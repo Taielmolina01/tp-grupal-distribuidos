@@ -13,6 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/daterange"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/summethod"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -118,6 +119,7 @@ func (s *SumByPaymentFormat) close() {
 func (s *SumByPaymentFormat) handleBatch(msgs []middleware.Message, ack, nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := daterange.Read(msg.Body)
@@ -129,6 +131,12 @@ func (s *SumByPaymentFormat) handleBatch(msgs []middleware.Message, ack, nack fu
 		clientID := input.ClientID
 		state := s.states.For(clientID)
 		tracker := state.tracker
+
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
 
 		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
 			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
@@ -157,6 +165,18 @@ func (s *SumByPaymentFormat) handleBatch(msgs []middleware.Message, ack, nack fu
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			if err := msgsend.SendAbort(s.outputMiddleware, middleware.BroadcastRoutingKey, clientID); err != nil {
+				slog.Error("While emitting abort", "err", err)
+				nack()
+				s.stopConsuming()
+				return
+			}
+			s.states.Delete(clientID)
+			s.checkpoint.DeleteClient(clientID)
+			continue
+		}
+
 		if _, done := completed[clientID]; done {
 			s.states.Delete(clientID)
 			s.checkpoint.DeleteClient(clientID)
@@ -222,8 +242,7 @@ func (s *SumByPaymentFormat) finishStep(clientID int, state *clientState) error 
 		rk := fmt.Sprintf("shard-%d", i)
 		total := ot.CountFor(rk)
 		seq := ot.RegisterBatch(rk)
-		eofBody := summethod.WriteEOF(clientID, s.queryID, uint8(s.id), seq, uint32(total))
-		if err := s.outputMiddleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+		if err := msgsend.SendEOF(s.outputMiddleware, rk, clientID, s.queryID, uint8(s.id), seq, uint32(total)); err != nil {
 			return err
 		}
 	}

@@ -13,6 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountchain"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/accountid"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -119,6 +120,7 @@ func (a *AcumAccounts) close() {
 func (a *AcumAccounts) handleBatch(msgs []middleware.Message, ack func(), nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := accountchain.Read(msg.Body)
@@ -130,6 +132,12 @@ func (a *AcumAccounts) handleBatch(msgs []middleware.Message, ack func(), nack f
 		clientID := input.ClientID
 		state := a.states.For(clientID)
 		tracker := state.transferTracker
+
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
 
 		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
 			slog.Warn("Discarding duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq, "EOF", input.EOF)
@@ -160,6 +168,17 @@ func (a *AcumAccounts) handleBatch(msgs []middleware.Message, ack func(), nack f
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			if err := msgsend.SendAbort(a.outputMiddleware, middleware.BroadcastRoutingKey, clientID); err != nil {
+				slog.Error("While emitting abort", "err", err)
+				nack()
+				a.stopConsuming()
+				return
+			}
+			a.states.Delete(clientID)
+			a.checkpoint.DeleteClient(clientID)
+			continue
+		}
 		if _, done := completed[clientID]; done {
 			a.states.Delete(clientID)
 			a.checkpoint.DeleteClient(clientID)
@@ -211,8 +230,7 @@ func (a *AcumAccounts) emitResults(clientID int, state *clientState) error {
 	for i := range a.outputAmount {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := ot.CountFor(rk)
-		eofBody := accountid.WriteEOF(clientID, uint8(a.queryID), uint8(a.id), total+1, uint32(total))
-		if err := a.outputMiddleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+		if err := msgsend.SendEOF(a.outputMiddleware, rk, clientID, uint8(a.queryID), uint8(a.id), total+1, uint32(total)); err != nil {
 			return err
 		}
 	}

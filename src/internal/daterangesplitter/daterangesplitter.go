@@ -13,6 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/daterange"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/q3filter"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
@@ -134,6 +135,7 @@ func (s *DateRangeSplitter) close() {
 func (s *DateRangeSplitter) handleBatch(msgs []middleware.Message, ack func(), nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
@@ -145,6 +147,12 @@ func (s *DateRangeSplitter) handleBatch(msgs []middleware.Message, ack func(), n
 		clientID := input.ClientID
 		state := s.states.For(clientID)
 		tracker := state.tracker
+
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
 
 		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
 			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
@@ -178,6 +186,23 @@ func (s *DateRangeSplitter) handleBatch(msgs []middleware.Message, ack func(), n
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			if err := msgsend.SendAbort(s.avgMiddleware, middleware.BroadcastRoutingKey, clientID); err != nil {
+				slog.Error("While emitting abort", "err", err)
+				nack()
+				s.stopConsuming()
+				return
+			}
+			if err := msgsend.SendAbort(s.filterMiddleware, middleware.BroadcastRoutingKey, clientID); err != nil {
+				slog.Error("While emitting abort", "err", err)
+				nack()
+				s.stopConsuming()
+				return
+			}
+			s.states.Delete(clientID)
+			s.checkpoint.DeleteClient(clientID)
+			continue
+		}
 		if _, done := completed[clientID]; done {
 			s.states.Delete(clientID)
 			s.checkpoint.DeleteClient(clientID)
@@ -232,8 +257,7 @@ func (s *DateRangeSplitter) finishStep(clientID int, state *clientState) error {
 	for i := range s.avgOutputAmount {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := state.outputTracker.CountFor("avg_" + rk)
-		body := daterange.WriteEOF(clientID, s.queryID, uint8(s.id), eofSeq, uint32(total))
-		if err := s.avgMiddleware.Send(middleware.Message{Body: body, RoutingKey: rk}); err != nil {
+		if err := msgsend.SendEOF(s.avgMiddleware, rk, clientID, s.queryID, uint8(s.id), eofSeq, uint32(total)); err != nil {
 			return err
 		}
 	}
@@ -241,8 +265,7 @@ func (s *DateRangeSplitter) finishStep(clientID int, state *clientState) error {
 	for i := range s.filterOutputAmount {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := state.outputTracker.CountFor("filter_" + rk)
-		body := q3filter.WriteEOF(clientID, s.queryID, uint8(s.id), eofSeq, uint32(total))
-		if err := s.filterMiddleware.Send(middleware.Message{Body: body, RoutingKey: rk}); err != nil {
+		if err := msgsend.SendEOF(s.filterMiddleware, rk, clientID, s.queryID, uint8(s.id), eofSeq, uint32(total)); err != nil {
 			return err
 		}
 	}

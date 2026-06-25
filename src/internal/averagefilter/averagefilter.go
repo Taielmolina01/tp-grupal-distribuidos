@@ -15,6 +15,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/avgmethod"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/q3filter"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
@@ -159,6 +160,7 @@ func (af *AverageFilter) handleTransferBatch(msgs []middleware.Message, ack, nac
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
 	pendingEntries := make(map[int][]appendlog.Entry[transfer.TransferForQ3Filter])
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := q3filter.Read(msg.Body)
@@ -189,6 +191,12 @@ func (af *AverageFilter) handleTransferBatch(msgs []middleware.Message, ack, nac
 
 		tracker.Claim(int(input.SenderID), input.Seq)
 		modified[input.ClientID] = state
+
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
 
 		if state.transfersTracker.IsComplete(af.expectedTransfersEofs) &&
 			state.avgsTracker.IsComplete(af.avgsExpectedEofs) {
@@ -226,6 +234,11 @@ func (af *AverageFilter) handleTransferBatch(msgs []middleware.Message, ack, nac
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			af.states.Delete(clientID)
+			af.checkpoint.DeleteClient(clientID)
+			continue
+		}
 		if _, done := completed[clientID]; done {
 			af.states.Delete(clientID)
 			af.checkpoint.DeleteClient(clientID)
@@ -378,8 +391,7 @@ func (af *AverageFilter) finalize(clientID int, state *clientState) error {
 	}
 
 	total := ot.CountFor("")
-	eofBody := batch.WriteEOF(clientID, af.queryID, uint8(af.id), total+1, uint32(total))
-	if err := af.outputQueue.Send(middleware.Message{Body: eofBody}); err != nil {
+	if err := msgsend.SendEOF(af.outputQueue, "", clientID, af.queryID, uint8(af.id), total+1, uint32(total)); err != nil {
 		return err
 	}
 

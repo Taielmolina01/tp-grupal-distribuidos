@@ -11,6 +11,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/channels/splittransfer"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
@@ -120,6 +121,7 @@ func (f *FilterAndSplitter) close() {
 func (f *FilterAndSplitter) handleBatch(msgs []middleware.Message, ack func(), nack func()) {
 	modified := make(map[int]*clientState)
 	completed := make(map[int]struct{})
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		input, err := batch.Read(msg.Body, records.TransferAfterCurrencyCodec)
@@ -131,6 +133,12 @@ func (f *FilterAndSplitter) handleBatch(msgs []middleware.Message, ack func(), n
 		clientID := input.ClientID
 		state := f.states.For(clientID)
 		tracker := state.tracker
+
+		if input.Abort || aborted[clientID] {
+			aborted[clientID] = true
+			modified[clientID] = state
+			continue
+		}
 
 		if tracker.IsDuplicate(int(input.SenderID), input.Seq) {
 			slog.Warn("duplicate", "clientID", clientID, "senderID", input.SenderID, "seq", input.Seq)
@@ -164,6 +172,17 @@ func (f *FilterAndSplitter) handleBatch(msgs []middleware.Message, ack func(), n
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			if err := msgsend.SendAbort(f.outputMiddleware, middleware.BroadcastRoutingKey, clientID); err != nil {
+				slog.Error("While emitting abort", "err", err)
+				nack()
+				f.stopConsuming()
+				return
+			}
+			f.states.Delete(clientID)
+			f.checkpoint.DeleteClient(clientID)
+			continue
+		}
 		if _, done := completed[clientID]; done {
 			f.states.Delete(clientID)
 			f.checkpoint.DeleteClient(clientID)
@@ -230,8 +249,7 @@ func (f *FilterAndSplitter) finishTransfersStep(clientID int, state *clientState
 		}
 		rk := fmt.Sprintf("shard-%d", i)
 		total := state.outputTracker.CountFor(rk)
-		eofBody := splittransfer.WriteEOF(clientID, f.queryID, uint8(f.id), eofSeq, uint32(total))
-		if err := f.outputMiddleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
+		if err := msgsend.SendEOF(f.outputMiddleware, rk, clientID, f.queryID, uint8(f.id), eofSeq, uint32(total)); err != nil {
 			slog.Error("While sending EOF", "routingKey", rk, "err", err)
 			sendErr = err
 		}

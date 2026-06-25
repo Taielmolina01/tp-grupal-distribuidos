@@ -21,6 +21,9 @@ func CreateAmountFilter(config filter.FilterConfig) (worker.Worker, error) {
 		Middleware: outputMiddleware,
 		Hasher:     shard.New(1),
 	}}
+
+	config.IsLastNode = true
+
 	return commonfilter.NewFilter(
 		config,
 		func(t transfer.TransferAfterCurrency) bool {
