@@ -35,14 +35,14 @@ func loadConfig() (join.JoinConfig, error) {
 		return join.JoinConfig{}, errors.New("RIGHT_EOFS_EXPECTED environment variable is required and must be a number >= 1")
 	}
 
-	leftInputQueue := os.Getenv("LEFT_INPUT_QUEUE")
+	leftInputQueue := os.Getenv("LEFT_INPUT_MIDDLEWARE_PREFIX")
 	if leftInputQueue == "" {
-		return join.JoinConfig{}, errors.New("LEFT_INPUT_QUEUE environment variable is required")
+		return join.JoinConfig{}, errors.New("LEFT_INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
-	rightInputQueue := os.Getenv("RIGHT_INPUT_QUEUE")
+	rightInputQueue := os.Getenv("RIGHT_INPUT_MIDDLEWARE_PREFIX")
 	if rightInputQueue == "" {
-		return join.JoinConfig{}, errors.New("RIGHT_INPUT_QUEUE environment variable is required")
+		return join.JoinConfig{}, errors.New("RIGHT_INPUT_MIDDLEWARE_PREFIX environment variable is required")
 	}
 
 	outputQueue := os.Getenv("OUTPUT_QUEUE")
@@ -66,12 +66,12 @@ func loadConfig() (join.JoinConfig, error) {
 	}
 
 	return join.JoinConfig{
-		Id:                   id,
-		MomHost:              momHost,
-		MomPort:              momPort,
-		LeftInputQueue:       leftInputQueue,
-		RightInputQueue:      rightInputQueue,
-		OutputQueue:          outputQueue,
+		Id:                         id,
+		MomHost:                    momHost,
+		MomPort:                    momPort,
+		LeftInputMiddlewarePrefix:  leftInputQueue,
+		RightInputMiddlewarePrefix: rightInputQueue,
+		OutputQueue:                outputQueue,
 		LeftEofsExpected:     leftEofsNum,
 		RightEofsExpected:    rightEofsNum,
 		PersistPath:          persistPath,

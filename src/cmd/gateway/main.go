@@ -18,12 +18,15 @@ import (
 const QUEUES_SEPARATOR = ","
 
 func loadConfig() (gateway.GatewayConfig, error) {
-	accountQueues := os.Getenv("ACCOUNT_QUEUES")
-	if accountQueues == "" {
-		return gateway.GatewayConfig{}, errors.New("ACCOUNT_QUEUES environment variable is required")
+	accountsClusterPrefix := os.Getenv("ACCOUNTS_CLUSTER_PREFIX")
+	if accountsClusterPrefix == "" {
+		return gateway.GatewayConfig{}, errors.New("ACCOUNTS_CLUSTER_PREFIX environment variable is required")
 	}
 
-	accountQueueList := splitter.Split(accountQueues, QUEUES_SEPARATOR)
+	accountsClusterAmount, err := strconv.Atoi(os.Getenv("ACCOUNTS_CLUSTER_AMOUNT"))
+	if err != nil {
+		return gateway.GatewayConfig{}, errors.New("ACCOUNTS_CLUSTER_AMOUNT environment variable is required and must be a number")
+	}
 
 	transfersClusters, err := loadTransfersClusters()
 	if err != nil {
@@ -131,7 +134,6 @@ func loadConfig() (gateway.GatewayConfig, error) {
 	}
 
 	return gateway.GatewayConfig{
-		AccountQueues:             accountQueueList,
 		TransfersClusters:         transfersClusters,
 		ResultsQueue:              resultsQueue,
 		ServerHost:                serverHost,
@@ -145,6 +147,8 @@ func loadConfig() (gateway.GatewayConfig, error) {
 		ClientTimeout:             clientTimeout,
 		ReaperInterval:            reaperInterval,
 		ResultsBatchFlushInterval: resultsBatchFlushInterval,
+		AccountsClusterPrefix:     accountsClusterPrefix,
+		AccountsClusterAmount:     accountsClusterAmount,
 	}, nil
 }
 

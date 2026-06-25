@@ -7,7 +7,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/normalizer"
 	"tp-grupal-distribuidos/internal/common/queryresult"
@@ -130,7 +129,7 @@ func (j *Join) emit(clientID int, state *clientState) error {
 	var total uint32
 	if len(results) > 0 {
 		body := batch.Write(clientID, j.queryID, uint8(j.id), seq, results, records.Query2ResultCodec)
-		if err := j.output.Send(middleware.Message{Body: body}); err != nil {
+		if err := j.output.Send(newmiddleware.Message{Body: body}); err != nil {
 			return err
 		}
 		seq++
@@ -138,5 +137,5 @@ func (j *Join) emit(clientID int, state *clientState) error {
 	}
 
 	eofBody := batch.WriteEOF(clientID, j.queryID, uint8(j.id), seq, total)
-	return j.output.Send(middleware.Message{Body: eofBody})
+	return j.output.Send(newmiddleware.Message{Body: eofBody})
 }

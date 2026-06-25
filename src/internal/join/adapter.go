@@ -5,12 +5,12 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"tp-grupal-distribuidos/internal/common/account"
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/cleanup"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
 	"tp-grupal-distribuidos/internal/common/statemap"
@@ -20,12 +20,11 @@ import (
 
 func NewJoin(config JoinConfig) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-	legacyConn := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
 		leftInput  newmiddleware.Middleware
 		rightInput newmiddleware.Middleware
-		output     middleware.Middleware
+		output     newmiddleware.Middleware
 		err        error
 	)
 
@@ -35,17 +34,19 @@ func NewJoin(config JoinConfig) (worker.Worker, error) {
 		}
 	}()
 
-	leftInput, err = newmiddleware.NewQueueMiddleware(connSettings, config.LeftInputQueue)
+	leftInputQueue := config.LeftInputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	leftInput, err = newmiddleware.NewShardedMiddleware(connSettings, config.LeftInputMiddlewarePrefix, leftInputQueue, fmt.Sprintf("shard-%d", config.Id))
 	if err != nil {
 		return nil, fmt.Errorf("creating left input middleware: %w", err)
 	}
 
-	rightInput, err = newmiddleware.NewQueueMiddleware(connSettings, config.RightInputQueue)
+	rightInputQueue := config.RightInputMiddlewarePrefix + "_" + strconv.Itoa(config.Id)
+	rightInput, err = newmiddleware.NewShardedMiddleware(connSettings, config.RightInputMiddlewarePrefix, rightInputQueue, fmt.Sprintf("shard-%d", config.Id))
 	if err != nil {
 		return nil, fmt.Errorf("creating right input middleware: %w", err)
 	}
 
-	output, err = middleware.CreateQueueMiddleware(config.OutputQueue, legacyConn)
+	output, err = newmiddleware.NewQueueMiddleware(connSettings, config.OutputQueue)
 	if err != nil {
 		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}

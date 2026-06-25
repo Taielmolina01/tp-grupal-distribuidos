@@ -13,7 +13,6 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/sendertracker"
@@ -31,20 +30,16 @@ func newReducer(
 	outputCodec wire.Codec[transfer.TransferForQ2],
 ) (worker.Worker, error) {
 	connSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
-	legacyConn := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
 	var (
-		inputMiddleware newmiddleware.Middleware
-		err             error
+		inputMiddleware  newmiddleware.Middleware
+		outputMiddleware newmiddleware.Middleware
+		err              error
 	)
-	outputQueues := make([]middleware.Middleware, 0, len(config.OutputQueues))
 
 	defer func() {
 		if err != nil {
-			cleanup.Close(inputMiddleware)
-			for _, q := range outputQueues {
-				cleanup.Close(q)
-			}
+			cleanup.Close(inputMiddleware, outputMiddleware)
 		}
 	}()
 
@@ -55,13 +50,9 @@ func newReducer(
 		return nil, fmt.Errorf("creating input middleware: %w", err)
 	}
 
-	for _, name := range config.OutputQueues {
-		var m middleware.Middleware
-		m, err = middleware.CreateQueueMiddleware(name, legacyConn)
-		if err != nil {
-			return nil, fmt.Errorf("creating output queue %s: %w", name, err)
-		}
-		outputQueues = append(outputQueues, m)
+	outputMiddleware, err = newmiddleware.NewShardedMiddleware(connSettings, config.OutputMiddlewarePrefix, "", "")
+	if err != nil {
+		return nil, fmt.Errorf("creating output middleware: %w", err)
 	}
 
 	ckpt, err := checkpoint.New(config.PersistPath, marshalClientState, unmarshalClientState)
@@ -89,7 +80,8 @@ func newReducer(
 		id:                   config.Id,
 		queryID:              config.QueryID,
 		inputMiddleware:      inputMiddleware,
-		outputQueues:         outputQueues,
+		outputMiddleware:     outputMiddleware,
+		outputAmount:         config.OutputAmount,
 		prevNodeAmt:          config.ExpectedEOFs,
 		reducerFunction:      reducerFunction,
 		keyFunc:              keyFunc,
@@ -126,10 +118,7 @@ func (r *Reducer) stopConsuming() {
 }
 
 func (r *Reducer) close() {
-	cleanup.Close(r.inputMiddleware)
-	for _, q := range r.outputQueues {
-		cleanup.Close(q)
-	}
+	cleanup.Close(r.inputMiddleware, r.outputMiddleware)
 }
 
 func (r *Reducer) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {
@@ -208,24 +197,25 @@ func (r *Reducer) finishStep(clientID int, state *clientState) error {
 
 	byShard := make(map[int][]transfer.TransferForQ2)
 	for _, v := range state.maxByBank {
-		idx := shard.CalculateIndexForShard(clientID, r.keyFunc(v), len(r.outputQueues))
+		idx := shard.CalculateIndexForShard(clientID, r.keyFunc(v), r.outputAmount)
 		byShard[idx] = append(byShard[idx], r.projectFunc(v))
 	}
 
 	for idx, group := range byShard {
-		seq := ot.RegisterBatch(strconv.Itoa(idx))
+		rk := fmt.Sprintf("shard-%d", idx)
+		seq := ot.RegisterBatch(rk)
 		body := batch.Write(clientID, r.queryID, uint8(r.id), seq, group, r.outputCodec)
-		if err := r.outputQueues[idx].Send(middleware.Message{Body: body}); err != nil {
+		if err := r.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}
 
-	for idx, q := range r.outputQueues {
-		rk := strconv.Itoa(idx)
+	for i := range r.outputAmount {
+		rk := fmt.Sprintf("shard-%d", i)
 		total := ot.CountFor(rk)
 		seq := ot.RegisterBatch(rk)
 		eofBody := batch.WriteEOF(clientID, r.queryID, uint8(r.id), seq, uint32(total))
-		if err := q.Send(middleware.Message{Body: eofBody}); err != nil {
+		if err := r.outputMiddleware.Send(newmiddleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			return err
 		}
 	}

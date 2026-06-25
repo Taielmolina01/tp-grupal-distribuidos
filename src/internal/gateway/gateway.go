@@ -23,17 +23,14 @@ import (
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/tcpproto"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
-	"tp-grupal-distribuidos/internal/common/middleware"
-	"tp-grupal-distribuidos/internal/common/outputtracker"
-
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/normalizer"
+	"tp-grupal-distribuidos/internal/common/outputtracker"
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/shard"
 )
 
 type GatewayConfig struct {
-	AccountQueues             []string
 	TransfersClusters         []shard.ClusterConfig
 	ResultsQueue              string
 	ServerHost                string
@@ -47,6 +44,8 @@ type GatewayConfig struct {
 	ClientTimeout             time.Duration
 	ReaperInterval            time.Duration
 	ResultsBatchFlushInterval time.Duration
+	AccountsClusterPrefix     string
+	AccountsClusterAmount     int
 }
 
 const gatewaySenderID uint8 = 0
@@ -55,7 +54,6 @@ const readBufferSize = 64 * 1024
 
 type Gateway struct {
 	registry                  clientregistry.ClientRegistry
-	accountQueues             []middleware.Middleware
 	transferClusters          []newmiddleware.ShardedCluster
 	resultsQueue              newmiddleware.Middleware
 	listener                  net.Listener
@@ -73,34 +71,24 @@ type Gateway struct {
 	transfersCountedSeq       map[int]uint64
 	pendingClose              map[int]struct{}
 	resultsBatchFlushInterval time.Duration
+	accountsCluster           newmiddleware.Middleware
+	accountsAmount            int
 }
 
 func NewGateway(config GatewayConfig) (*Gateway, error) {
-	connSettings := middleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 	newConnSettings := newmiddleware.ConnSettings{Hostname: config.MomHost, Port: config.MomPort}
 
-	accountQueues := make([]middleware.Middleware, 0, len(config.AccountQueues))
-	for _, queue := range config.AccountQueues {
-		accountQueue, err := middleware.CreateQueueMiddleware(queue, connSettings)
-		if err != nil {
-			for _, q := range accountQueues {
-				if closeErr := q.Close(); closeErr != nil {
-					slog.Error("While closing accounts queue", "err", closeErr)
-				}
-			}
-			return nil, err
-		}
-		accountQueues = append(accountQueues, accountQueue)
+	accountsCluster, err := newmiddleware.NewShardedMiddleware(newConnSettings, config.AccountsClusterPrefix, "", "")
+	if err != nil {
+		return nil, err
 	}
 
 	clusters := make([]newmiddleware.ShardedCluster, 0, len(config.TransfersClusters))
 	for _, c := range config.TransfersClusters {
 		m, err := newmiddleware.NewShardedMiddleware(newConnSettings, c.Prefix, "", "")
 		if err != nil {
-			for _, q := range accountQueues {
-				if closeErr := q.Close(); closeErr != nil {
-					slog.Error("While closing accounts queue", "err", closeErr)
-				}
+			if closeErr := accountsCluster.Close(); closeErr != nil {
+				slog.Error("While closing accounts cluster", "err", closeErr)
 			}
 			for _, cl := range clusters {
 				if closeErr := cl.Middleware.Close(); closeErr != nil {
@@ -117,10 +105,8 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 
 	resultsQueue, err := newmiddleware.NewQueueMiddleware(newConnSettings, config.ResultsQueue)
 	if err != nil {
-		for _, q := range accountQueues {
-			if closeErr := q.Close(); closeErr != nil {
-				slog.Error("While closing accounts queue", "err", closeErr)
-			}
+		if closeErr := accountsCluster.Close(); closeErr != nil {
+			slog.Error("While closing accounts cluster", "err", closeErr)
 		}
 		for _, cl := range clusters {
 			if closeErr := cl.Middleware.Close(); closeErr != nil {
@@ -132,10 +118,8 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 
 	listener, err := net.Listen("tcp", config.ServerHost+":"+config.ServerPort)
 	if err != nil {
-		for _, q := range accountQueues {
-			if closeErr := q.Close(); closeErr != nil {
-				slog.Error("While closing accounts queue", "err", closeErr)
-			}
+		if closeErr := accountsCluster.Close(); closeErr != nil {
+			slog.Error("While closing accounts cluster", "err", closeErr)
 		}
 		for _, cl := range clusters {
 			if closeErr := cl.Middleware.Close(); closeErr != nil {
@@ -155,48 +139,43 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 
 	sessions, err := newSessionStore(config.SessionStorePath)
 	if err != nil {
-		for _, q := range accountQueues {
-			if err := q.Close(); err != nil {
-				slog.Error("While closing accounts queue", "err", err)
-			}
+		if closeErr := accountsCluster.Close(); closeErr != nil {
+			slog.Error("While closing accounts cluster", "err", closeErr)
 		}
 		for _, cl := range clusters {
 			if closeErr := cl.Middleware.Close(); closeErr != nil {
 				slog.Error("While closing transfer cluster middleware", "err", closeErr)
 			}
 		}
-		if err := resultsQueue.Close(); err != nil {
-			slog.Error("While closing results queue", "err", err)
+		if closeErr := resultsQueue.Close(); closeErr != nil {
+			slog.Error("While closing results queue", "err", closeErr)
 		}
-		if err := listener.Close(); err != nil {
-			slog.Error("While closing acceptor socket", "err", err)
+		if closeErr := listener.Close(); closeErr != nil {
+			slog.Error("While closing acceptor socket", "err", closeErr)
 		}
 		return nil, err
 	}
 
 	buffer, err := newResultBuffer(filepath.Join(filepath.Dir(config.SessionStorePath), "result_buffers"))
 	if err != nil {
-		for _, q := range accountQueues {
-			if err := q.Close(); err != nil {
-				slog.Error("While closing accounts queue", "err", err)
-			}
+		if closeErr := accountsCluster.Close(); closeErr != nil {
+			slog.Error("While closing accounts cluster", "err", closeErr)
 		}
 		for _, cl := range clusters {
 			if closeErr := cl.Middleware.Close(); closeErr != nil {
 				slog.Error("While closing transfer cluster middleware", "err", closeErr)
 			}
 		}
-		if err := resultsQueue.Close(); err != nil {
-			slog.Error("While closing results queue", "err", err)
+		if closeErr := resultsQueue.Close(); closeErr != nil {
+			slog.Error("While closing results queue", "err", closeErr)
 		}
-		if err := listener.Close(); err != nil {
-			slog.Error("While closing acceptor socket", "err", err)
+		if closeErr := listener.Close(); closeErr != nil {
+			slog.Error("While closing acceptor socket", "err", closeErr)
 		}
 		return nil, err
 	}
 
 	gateway := &Gateway{
-		accountQueues:             accountQueues,
 		transferClusters:          clusters,
 		resultsQueue:              resultsQueue,
 		listener:                  listener,
@@ -211,6 +190,8 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		transfersCountedSeq:       map[int]uint64{},
 		pendingClose:              map[int]struct{}{},
 		resultsBatchFlushInterval: config.ResultsBatchFlushInterval,
+		accountsCluster:           accountsCluster,
+		accountsAmount:            config.AccountsClusterAmount,
 	}
 
 	now := time.Now()
@@ -269,9 +250,7 @@ func (gateway *Gateway) Run() error {
 }
 
 func (gateway *Gateway) close() {
-	for _, q := range gateway.accountQueues {
-		cleanup.Close(q)
-	}
+	cleanup.Close(gateway.accountsCluster)
 	for _, cl := range gateway.transferClusters {
 		cleanup.Close(cl.Middleware)
 	}
@@ -744,19 +723,6 @@ func (gateway *Gateway) findClient(clientID int) (clientregistry.ClientState, bo
 	return found, ok
 }
 
-func (gateway *Gateway) sendEOF(clientID int, seq uint64, total uint32, targets ...middleware.Middleware) error {
-	body := batch.WriteEOF(clientID, 0, gatewaySenderID, seq, total)
-	var errs []error
-	slog.Info("EOF SENT", "seq", seq, "total", total)
-	for _, t := range targets {
-		if err := t.Send(middleware.Message{Body: body}); err != nil {
-			slog.Error("While sending EOF", "err", err)
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
-}
-
 func (gateway *Gateway) maybeCheckpoint(clientID int, phase tcpproto.Phase, seq uint64, lastCheckpoint *uint64) {
 	if seq-*lastCheckpoint < gateway.seqCheckpointEvery {
 		return
@@ -780,13 +746,13 @@ func (gateway *Gateway) handleAccountBatch(client clientregistry.ClientState, r 
 		idx := shard.CalculateIndexForShard(
 			client.ID,
 			normalizer.NormalizeBankID(acc.BankId),
-			len(gateway.accountQueues),
+			gateway.accountsAmount,
 		)
 		byShard[idx] = append(byShard[idx], acc)
 	}
 	for idx, group := range byShard {
 		body := batch.Write(client.ID, 0, gatewaySenderID, seq, group, records.AccountCodec)
-		if err := gateway.accountQueues[idx].Send(middleware.Message{Body: body}); err != nil {
+		if err := gateway.accountsCluster.Send(newmiddleware.Message{Body: body, RoutingKey: fmt.Sprintf("shard-%d", idx)}); err != nil {
 			slog.Debug("While sending accounts batch", "err", err)
 			return 0, err
 		}
@@ -827,7 +793,9 @@ func (gateway *Gateway) handleEndOfAccounts(client clientregistry.ClientState, r
 		return err
 	}
 	slog.Info("Received EOF message", "kind", "accounts", "client_id", client.ID, "total", total)
-	if err := gateway.sendEOF(client.ID, seq, total, gateway.accountQueues...); err != nil {
+	eofBody := batch.WriteEOF(client.ID, 0, gatewaySenderID, seq, total)
+	slog.Info("EOF SENT", "seq", seq, "total", total)
+	if err := gateway.accountsCluster.Send(newmiddleware.Message{Body: eofBody, RoutingKey: newmiddleware.BroadcastRoutingKey}); err != nil {
 		return err
 	}
 	return gateway.sessions.setPhase(client.ID, tcpproto.PhaseTransfers)
