@@ -191,7 +191,7 @@ func (fetcher *Fetcher) consume(msg newmiddleware.Message, ack, nack func()) {
 		} else {
 			fetcher.fetchExchangeRateWithCache(&response, t, base)
 		}
-		keys := []string{strconv.FormatFloat(t.AmountPaid, 'f', -1, 64)}
+		keys := []string{strconv.Itoa(int(input.SenderID)), strconv.Itoa(int(input.Seq))}
 		rk := fmt.Sprintf("shard-%d", fetcher.hasher.ShardFor(input.ClientID, keys...))
 		byRoutingKeys[rk] = append(byRoutingKeys[rk], response)
 	}
@@ -206,7 +206,7 @@ func (fetcher *Fetcher) consume(msg newmiddleware.Message, ack, nack func()) {
 		if err := fetcher.outputMiddleware.Send(newmiddleware.Message{Body: body, RoutingKey: rk}); err != nil {
 			slog.Error("while publishing batch to output cluster", "err", err)
 		}
-		state.outputTracker.RegisterBatch(fmt.Sprintf("%d_%s", 0, rk))
+		state.outputTracker.RegisterBatch(rk)
 	}
 
 	if err := fetcher.checkpoint.SaveClient(clientID, state); err != nil {
