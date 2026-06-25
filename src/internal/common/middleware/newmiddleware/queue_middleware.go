@@ -43,7 +43,7 @@ func (q *queueMiddleware) Send(msg Message) error {
 		return ErrDisconnected
 	}
 
-	err := publishPersistent(q.channel, "", q.queue.Name, true, amqp.Publishing{
+	err := publish(q.channel, "", q.queue.Name, true, amqp.Publishing{
 		Body: msg.Body,
 	})
 	if err != nil {

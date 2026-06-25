@@ -70,7 +70,7 @@ func (f *fanoutMiddleware) Send(msg Message) error {
 		return ErrDisconnected
 	}
 
-	err := publishPersistent(f.channel, f.exchange, "", true, amqp.Publishing{Body: msg.Body})
+	err := publish(f.channel, f.exchange, "", true, amqp.Publishing{Body: msg.Body})
 	if err != nil {
 		return ErrSend
 	}
