@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -20,6 +21,40 @@ import (
 	"tp-grupal-distribuidos/internal/common/queryresult"
 	"tp-grupal-distribuidos/internal/common/transfer"
 )
+
+const numQueries = 5
+
+type ClientConfig struct {
+	ServerHost               string
+	ServerPort               string
+	InputFileAccounts        string
+	InputFileTrans           string
+	OutputFilePrefix         string
+	MaxBatchSize             int
+	MaxBatchBytes            int
+	ConnectionAttempts       int
+	ConnectionAttemptDelayMs int
+}
+
+type Client struct {
+	config    ClientConfig
+	running   atomic.Bool
+	sessionID uint32
+
+	connMu sync.Mutex
+	conn   net.Conn
+
+	files       []*os.File
+	writers     []*csv.Writer
+	doneCount   int
+	seenResults map[resultKey]struct{}
+}
+
+type resultKey struct {
+	queryID  uint8
+	senderID uint8
+	seq      uint64
+}
 
 func NewClient(config ClientConfig) (*Client, error) {
 	return &Client{config: config}, nil
@@ -70,29 +105,21 @@ func (client *Client) connectAndHandshake() (net.Conn, tcpproto.Phase, uint64, e
 	}
 
 	if err := tcpproto.WriteHello(conn, client.sessionID); err != nil {
-		if err := conn.Close(); err != nil {
-			slog.Debug("While closing connection after write hello error", "err", err)
-		}
+		conn.Close()
 		return nil, 0, 0, err
 	}
 	msgType, err := tcpproto.ReadMsgType(conn)
 	if err != nil {
-		if err := conn.Close(); err != nil {
-			slog.Debug("While closing connection after read error", "err", err)
-		}
+		conn.Close()
 		return nil, 0, 0, err
 	}
 	if msgType != tcpproto.Welcome {
-		if err := conn.Close(); err != nil {
-			slog.Debug("While closing connection after welcome error", "err", err)
-		}
+		conn.Close()
 		return nil, 0, 0, fmt.Errorf("expected WELCOME message, got %d", msgType)
 	}
 	sessionID, phase, resumeSeq, err := tcpproto.ReadWelcome(conn)
 	if err != nil {
-		if err := conn.Close(); err != nil {
-			slog.Debug("While closing connection after read welcome error", "err", err)
-		}
+		conn.Close()
 		return nil, 0, 0, err
 	}
 
@@ -105,24 +132,24 @@ func (client *Client) runSession(conn net.Conn, phase tcpproto.Phase, resumeSeq 
 	var wg sync.WaitGroup
 	var sendErr, recvErr error
 
-	wg.Go(func() {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		recvErr = client.recvResults(conn)
 		if recvErr != nil {
-			if err := conn.Close(); err != nil {
-				slog.Debug("While closing connection after receive error", "err", err)
-			}
+			conn.Close()
 		}
-	})
+	}()
 
 	if phase != tcpproto.PhaseResults {
-		wg.Go(func() {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			sendErr = client.sendRecords(conn, phase, resumeSeq)
 			if sendErr != nil {
-				if err := conn.Close(); err != nil {
-					slog.Debug("While closing connection after send error", "err", err)
-				}
+				conn.Close()
 			}
-		})
+		}()
 	}
 
 	wg.Wait()
@@ -196,10 +223,10 @@ func (client *Client) sendAccountRecords(conn net.Conn, seq *uint64, skip bool, 
 	}
 
 	var total uint32
-	var cols [accountColumns][]byte
+	var cols [5][]byte
 	scanner.Scan()
 	for scanner.Scan() {
-		if csvutil.SplitFields(scanner.Bytes(), cols[:]) < accountColumns {
+		if csvutil.SplitFields(scanner.Bytes(), cols[:]) < 5 {
 			continue
 		}
 		acc := account.Account{
@@ -256,10 +283,10 @@ func (client *Client) sendTransRecords(conn net.Conn, seq *uint64, skip bool, re
 	}
 
 	var total uint32
-	var cols [transferColumns][]byte
+	var cols [11][]byte
 	scanner.Scan()
 	for scanner.Scan() {
-		if csvutil.SplitFields(scanner.Bytes(), cols[:]) < transferColumns {
+		if csvutil.SplitFields(scanner.Bytes(), cols[:]) < 11 {
 			continue
 		}
 		tsUnix, ok := csvutil.ParseTimestampUnix(cols[0])
