@@ -191,7 +191,7 @@ func (fetcher *Fetcher) consume(msg newmiddleware.Message, ack, nack func()) {
 		} else {
 			fetcher.fetchExchangeRateWithCache(&response, t, base)
 		}
-		keys := []string{strconv.Itoa(int(input.SenderID)), strconv.Itoa(int(input.Seq))}
+		keys := []string{strconv.Itoa(int(input.Seq))}
 		rk := fmt.Sprintf("shard-%d", fetcher.hasher.ShardFor(input.ClientID, keys...))
 		byRoutingKeys[rk] = append(byRoutingKeys[rk], response)
 	}
