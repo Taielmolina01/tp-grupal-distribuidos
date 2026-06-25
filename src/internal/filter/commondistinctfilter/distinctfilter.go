@@ -13,6 +13,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/filter"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
 	"tp-grupal-distribuidos/internal/common/outputtracker"
@@ -206,16 +207,15 @@ func (d *DistinctFilter[T]) handleBatch(msgs []newmiddleware.Message, ack, nack 
 
 	for clientID, state := range modified {
 		if aborted[clientID] {
-			// TODO: Migrar a newgateway
-			// if err := msgsend.SendAbort(d.outputMiddleware, newmiddleware.BroadcastRoutingKey, clientID); err != nil {
-			// 	slog.Error("While emitting abort", "err", err)
-			// 	nack()
-			// 	d.stopConsuming()
-			// 	return
-			// }
-			// d.states.Delete(clientID)
-			// d.checkpoint.DeleteClient(clientID)
-			// continue
+			if err := msgsend.SendAbort(d.outputMiddleware, newmiddleware.BroadcastRoutingKey, clientID); err != nil {
+				slog.Error("While emitting abort", "err", err)
+				nack()
+				d.stopConsuming()
+				return
+			}
+			d.states.Delete(clientID)
+			d.checkpoint.DeleteClient(clientID)
+			continue
 		}
 		if _, done := completed[clientID]; done {
 			d.states.Delete(clientID)

@@ -142,8 +142,8 @@ func (j *Join) handleRightBatch(msgs []newmiddleware.Message, ack, nack func()) 
 }
 
 func (j *Join) handleBatch(msgs []newmiddleware.Message, ack, nack func(), isLeft bool) {
-	//TODO REVISAR. En este no hay que enviar el ABORT pero si limpiar estado
 	modified := make(map[int]*clientState)
+	aborted := make(map[int]bool)
 
 	for _, msg := range msgs {
 		clientID, ok := j.processMessage(msg, isLeft)
@@ -154,17 +154,27 @@ func (j *Join) handleBatch(msgs []newmiddleware.Message, ack, nack func(), isLef
 	}
 
 	for clientID, state := range modified {
+		if aborted[clientID] {
+			j.states.Delete(clientID)
+			j.checkpoint.DeleteClient(clientID)
+			continue
+		}
 		if err := j.maybeEmit(clientID, state); err != nil {
 			slog.Error("emit failed, stopping", "err", err)
 			nack()
 			j.stopConsuming()
 			return
 		}
-		if err := j.checkpoint.SaveClient(clientID, state); err != nil {
-			slog.Error("persist failed, stopping", "err", err)
-			nack()
-			j.stopConsuming()
-			return
+		if state.emitted {
+			j.states.Delete(clientID)
+			j.checkpoint.DeleteClient(clientID)
+		} else {
+			if err := j.checkpoint.SaveClient(clientID, state); err != nil {
+				slog.Error("persist failed, stopping", "err", err)
+				nack()
+				j.stopConsuming()
+				return
+			}
 		}
 	}
 

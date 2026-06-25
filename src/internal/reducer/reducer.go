@@ -11,6 +11,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/checkpoint"
 	"tp-grupal-distribuidos/internal/common/cleanup"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/batch"
+	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/msgsend"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/rabbit/records"
 	"tp-grupal-distribuidos/internal/common/messageprotocol/wire"
 	"tp-grupal-distribuidos/internal/common/middleware/newmiddleware"
@@ -170,18 +171,17 @@ func (r *Reducer) handleBatch(msgs []newmiddleware.Message, ack, nack func()) {
 	}
 
 	for clientID, state := range modified {
-		// TODO Migrar a new middleware
-		// if aborted[clientID] {
-		// 	if err := msgsend.SendAbort(r.outputMiddleware, newmiddleware.BroadcastRoutingKey, clientID); err != nil {
-		// 		slog.Error("While emitting abort", "err", err)
-		// 		nack()
-		// 		r.stopConsuming()
-		// 		return
-		// 	}
-		// 	r.states.Delete(clientID)
-		// 	r.checkpoint.DeleteClient(clientID)
-		// 	continue
-		// }
+		if aborted[clientID] {
+			if err := msgsend.SendAbort(r.outputMiddleware, newmiddleware.BroadcastRoutingKey, clientID); err != nil {
+				slog.Error("While emitting abort", "err", err)
+				nack()
+				r.stopConsuming()
+				return
+			}
+			r.states.Delete(clientID)
+			r.checkpoint.DeleteClient(clientID)
+			continue
+		}
 		if _, done := completed[clientID]; done {
 			r.states.Delete(clientID)
 			r.checkpoint.DeleteClient(clientID)
