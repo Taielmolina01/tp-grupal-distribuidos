@@ -104,6 +104,8 @@ func (client *Client) connectAndHandshake() (net.Conn, tcpproto.Phase, uint64, e
 		return nil, 0, 0, err
 	}
 
+	enableKeepAlive(conn)
+
 	if err := tcpproto.WriteHello(conn, client.sessionID); err != nil {
 		conn.Close()
 		return nil, 0, 0, err
@@ -167,6 +169,21 @@ func (client *Client) handleSignals() {
 	slog.Info("SIGTERM signal received")
 	client.running.Store(false)
 	client.closeConn()
+}
+
+func enableKeepAlive(conn net.Conn) {
+	tcpConn, ok := conn.(*net.TCPConn)
+	if !ok {
+		return
+	}
+	if err := tcpConn.SetKeepAliveConfig(net.KeepAliveConfig{
+		Enable:   true,
+		Idle:     5 * time.Second,
+		Interval: 3 * time.Second,
+		Count:    3,
+	}); err != nil {
+		slog.Error("While enabling TCP keepalive", "err", err)
+	}
 }
 
 func (client *Client) setConn(conn net.Conn) {
