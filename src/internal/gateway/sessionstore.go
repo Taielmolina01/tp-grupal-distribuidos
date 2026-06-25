@@ -161,6 +161,20 @@ func (s *sessionStore) queryReported(clientID int, queryID uint8) bool {
 	return reported
 }
 
+func (s *sessionStore) reportedQueries(clientID int) []uint8 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[clientID]
+	if !ok {
+		return nil
+	}
+	ids := make([]uint8, 0, len(state.reported))
+	for queryID := range state.reported {
+		ids = append(ids, queryID)
+	}
+	return ids
+}
+
 func (s *sessionStore) queryComplete(clientID int, queryID uint8, expectedSenders int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

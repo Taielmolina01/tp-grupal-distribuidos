@@ -71,6 +71,11 @@ func loadConfig() (client.ClientConfig, error) {
 		connectionAttemptDelayMs = parsed
 	}
 
+	sessionFilePath := os.Getenv("SESSION_FILE")
+	if sessionFilePath == "" {
+		sessionFilePath = "/data/client_session.bin"
+	}
+
 	return client.ClientConfig{
 		ServerHost:               serverHost,
 		ServerPort:               serverPort,
@@ -81,6 +86,7 @@ func loadConfig() (client.ClientConfig, error) {
 		MaxBatchBytes:            maxBatchBytes,
 		ConnectionAttempts:       connectionAttempts,
 		ConnectionAttemptDelayMs: connectionAttemptDelayMs,
+		SessionFilePath:          sessionFilePath,
 	}, nil
 }
 

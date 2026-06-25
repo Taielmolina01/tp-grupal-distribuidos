@@ -67,7 +67,9 @@ type Gateway struct {
 	reaperInterval            time.Duration
 	disconnectMu              sync.Mutex
 	disconnectedAt            map[int]time.Time
+	transfersMu               sync.Mutex
 	transfersTrackers         map[int]*outputtracker.OutputTracker
+	transfersCountedSeq       map[int]uint64
 	pendingClose              map[int]struct{}
 	resultsBatchFlushInterval time.Duration
 }
@@ -205,6 +207,7 @@ func NewGateway(config GatewayConfig) (*Gateway, error) {
 		reaperInterval:            config.ReaperInterval,
 		disconnectedAt:            map[int]time.Time{},
 		transfersTrackers:         map[int]*outputtracker.OutputTracker{},
+		transfersCountedSeq:       map[int]uint64{},
 		pendingClose:              map[int]struct{}{},
 		resultsBatchFlushInterval: config.ResultsBatchFlushInterval,
 	}
@@ -334,6 +337,11 @@ func (gateway *Gateway) handshake(conn net.Conn, r io.Reader) (clientregistry.Cl
 	lock := gateway.buffer.lock(clientID)
 	lock.Lock()
 	defer lock.Unlock()
+	for _, queryID := range gateway.sessions.reportedQueries(clientID) {
+		if err := tcpproto.WriteQueryEOF(conn, queryID); err != nil {
+			return clientregistry.ClientState{}, 0, err
+		}
+	}
 	if err := gateway.buffer.flush(clientID, func(body []byte) error {
 		return gateway.deliverResult(client, body, nil)
 	}); err != nil {
@@ -617,6 +625,7 @@ func (gateway *Gateway) closeClient(clientID int) {
 	if err := gateway.buffer.remove(clientID); err != nil {
 		slog.Error("While removing client result buffer", "client_id", clientID, "err", err)
 	}
+	gateway.clearTransfersTracking(clientID)
 
 	slog.Info("Client closed", "client_id", clientID)
 }
@@ -691,6 +700,7 @@ func (gateway *Gateway) abortClient(clientID int) {
 	if err := gateway.buffer.remove(clientID); err != nil {
 		slog.Error("While removing client result buffer", "client_id", clientID, "err", err)
 	}
+	gateway.clearTransfersTracking(clientID)
 }
 
 func (gateway *Gateway) dispatchAbort(clientID int) {
@@ -793,6 +803,7 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 	}
 	body := batch.WriteRaw(client.ID, 0, gatewaySenderID, seq, count, payload)
 	tracker := gateway.transfersTrackerFor(client.ID)
+	countThis := gateway.shouldCountTransfers(client.ID, seq)
 
 	for ci, cluster := range gateway.transferClusters {
 		rk := fmt.Sprintf("shard-%d", cluster.Hasher.ShardFor(client.ID, strconv.FormatUint(seq, 10)))
@@ -801,7 +812,9 @@ func (gateway *Gateway) handleTransBatch(client clientregistry.ClientState, r io
 			slog.Debug("While sending transfers batch", "err", err)
 			return 0, err
 		}
-		tracker.RegisterBatch(trackerKey)
+		if countThis {
+			tracker.RegisterBatch(trackerKey)
+		}
 	}
 
 	return seq, nil
@@ -848,10 +861,29 @@ func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState, 
 }
 
 func (gateway *Gateway) transfersTrackerFor(clientID int) *outputtracker.OutputTracker {
+	gateway.transfersMu.Lock()
+	defer gateway.transfersMu.Unlock()
 	t, ok := gateway.transfersTrackers[clientID]
 	if !ok {
 		t = outputtracker.New()
 		gateway.transfersTrackers[clientID] = t
 	}
 	return t
+}
+
+func (gateway *Gateway) shouldCountTransfers(clientID int, seq uint64) bool {
+	gateway.transfersMu.Lock()
+	defer gateway.transfersMu.Unlock()
+	if seq <= gateway.transfersCountedSeq[clientID] {
+		return false
+	}
+	gateway.transfersCountedSeq[clientID] = seq
+	return true
+}
+
+func (gateway *Gateway) clearTransfersTracking(clientID int) {
+	gateway.transfersMu.Lock()
+	defer gateway.transfersMu.Unlock()
+	delete(gateway.transfersTrackers, clientID)
+	delete(gateway.transfersCountedSeq, clientID)
 }
