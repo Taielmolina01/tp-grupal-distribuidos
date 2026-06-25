@@ -6,7 +6,7 @@ import (
 	"tp-grupal-distribuidos/internal/common/middleware"
 )
 
-func SendEOF(mw middleware.Middleware, rk string, clientID int, queryID uint8, senderID uint8, seq uint64, total uint32) error {
+func SendEOF(mw middleware.Middleware, rk string, clientID int, queryID uint8, senderID uint8, seq uint64, total uint64) error {
 	body := batch.WriteEOF(clientID, queryID, senderID, seq, total)
 	return mw.Send(middleware.Message{Body: body, RoutingKey: rk})
 }

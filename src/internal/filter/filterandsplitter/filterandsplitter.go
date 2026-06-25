@@ -249,7 +249,7 @@ func (f *FilterAndSplitter) finishTransfersStep(clientID int, state *clientState
 		}
 		rk := fmt.Sprintf("shard-%d", i)
 		total := state.outputTracker.CountFor(rk)
-		if err := msgsend.SendEOF(f.outputMiddleware, rk, clientID, f.queryID, uint8(f.id), eofSeq, uint32(total)); err != nil {
+		if err := msgsend.SendEOF(f.outputMiddleware, rk, clientID, f.queryID, uint8(f.id), eofSeq, total); err != nil {
 			slog.Error("While sending EOF", "routingKey", rk, "err", err)
 			sendErr = err
 		}

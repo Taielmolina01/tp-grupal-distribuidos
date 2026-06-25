@@ -242,7 +242,7 @@ func (s *SumByPaymentFormat) finishStep(clientID int, state *clientState) error 
 		rk := fmt.Sprintf("shard-%d", i)
 		total := ot.CountFor(rk)
 		seq := ot.RegisterBatch(rk)
-		if err := msgsend.SendEOF(s.outputMiddleware, rk, clientID, s.queryID, uint8(s.id), seq, uint32(total)); err != nil {
+		if err := msgsend.SendEOF(s.outputMiddleware, rk, clientID, s.queryID, uint8(s.id), seq, total); err != nil {
 			return err
 		}
 	}

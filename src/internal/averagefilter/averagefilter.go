@@ -391,7 +391,7 @@ func (af *AverageFilter) finalize(clientID int, state *clientState) error {
 	}
 
 	total := ot.CountFor("")
-	if err := msgsend.SendEOF(af.outputQueue, "", clientID, af.queryID, uint8(af.id), total+1, uint32(total)); err != nil {
+	if err := msgsend.SendEOF(af.outputQueue, "", clientID, af.queryID, uint8(af.id), total+1, total); err != nil {
 		return err
 	}
 

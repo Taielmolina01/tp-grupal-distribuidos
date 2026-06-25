@@ -393,7 +393,7 @@ func (j *JoinAccounts) finishTransfersStep(clientID int, state *clientState) err
 	}
 
 	eofSeq := ot.RegisterBatch("")
-	if err := msgsend.SendEOF(j.qualifiedOutputMiddleware, "", clientID, uint8(j.queryID), uint8(j.id), eofSeq, uint32(eofSeq-1)); err != nil {
+	if err := msgsend.SendEOF(j.qualifiedOutputMiddleware, "", clientID, uint8(j.queryID), uint8(j.id), eofSeq, eofSeq-1); err != nil {
 		slog.Error("While sending qualified EOF", "err", err)
 		return err
 	}
@@ -547,7 +547,7 @@ func (j *JoinAccounts) finishQualifiedStep(clientID int, state *clientState) err
 		rk := fmt.Sprintf("shard-%d", i)
 		total := ot.CountFor(rk)
 		seq := ot.RegisterBatch(rk)
-		if err := msgsend.SendEOF(j.outputMiddleware, rk, clientID, uint8(j.queryID), uint8(j.id), seq, uint32(total)); err != nil {
+		if err := msgsend.SendEOF(j.outputMiddleware, rk, clientID, uint8(j.queryID), uint8(j.id), seq, total); err != nil {
 			slog.Error("While sending EOF message", "routingKey", rk, "err", err)
 			sendErr = err
 		}

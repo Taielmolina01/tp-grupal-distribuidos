@@ -233,7 +233,7 @@ func (r *Reducer) finishStep(clientID int, state *clientState) error {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := ot.CountFor(rk)
 		seq := ot.RegisterBatch(rk)
-		eofBody := batch.WriteEOF(clientID, r.queryID, uint8(r.id), seq, uint32(total))
+		eofBody := batch.WriteEOF(clientID, r.queryID, uint8(r.id), seq, total)
 		if err := r.outputMiddleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			return err
 		}

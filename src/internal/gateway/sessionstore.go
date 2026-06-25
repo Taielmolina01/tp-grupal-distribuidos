@@ -138,7 +138,7 @@ func (s *sessionStore) claimResult(clientID int, queryID uint8, senderID uint8, 
 	return nil
 }
 
-func (s *sessionStore) registerEOFResult(clientID int, queryID uint8, senderID uint8, total uint32, seq uint64) error {
+func (s *sessionStore) registerEOFResult(clientID int, queryID uint8, senderID uint8, total uint64, seq uint64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	state, ok := s.sessions[clientID]
@@ -146,7 +146,7 @@ func (s *sessionStore) registerEOFResult(clientID int, queryID uint8, senderID u
 		return nil
 	}
 	t := s.trackerFor(state, queryID)
-	t.RegisterEOF(int(senderID), uint64(total), seq)
+	t.RegisterEOF(int(senderID), total, seq)
 	return nil
 }
 

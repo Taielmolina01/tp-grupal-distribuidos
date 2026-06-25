@@ -817,7 +817,7 @@ func (gateway *Gateway) handleEndOfTransfers(client clientregistry.ClientState, 
 			rk := fmt.Sprintf("shard-%d", i)
 			trackerKey := fmt.Sprintf("%d_%s", ci, rk)
 			total := tracker.CountFor(trackerKey)
-			eofBody := batch.WriteEOF(client.ID, 0, gatewaySenderID, seq, uint32(total))
+			eofBody := batch.WriteEOF(client.ID, 0, gatewaySenderID, seq, total)
 			if err := cluster.Middleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 				slog.Debug("While sending transfers batch", "err", err)
 				return err

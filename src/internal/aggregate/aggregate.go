@@ -237,7 +237,7 @@ func (a *AvgAggregator) finishStep(clientID int, state *clientState) error {
 
 	total := ot.CountFor("")
 	seq := ot.RegisterBatch("")
-	if err := msgsend.SendEOF(a.outputMiddleware, "", clientID, a.queryID, uint8(a.id), seq, uint32(total)); err != nil {
+	if err := msgsend.SendEOF(a.outputMiddleware, "", clientID, a.queryID, uint8(a.id), seq, total); err != nil {
 		return err
 	}
 	return nil

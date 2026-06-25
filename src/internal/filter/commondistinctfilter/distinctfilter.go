@@ -261,7 +261,7 @@ func (d *DistinctFilter[T]) emit(clientID int, state *clientState[T]) error {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := ot.CountFor(rk)
 		seq := ot.RegisterBatch(rk)
-		eofBody := batch.WriteEOF(clientID, d.queryId, uint8(d.id), seq, uint32(total))
+		eofBody := batch.WriteEOF(clientID, d.queryId, uint8(d.id), seq, total)
 		if err := d.outputMiddleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			return err
 		}

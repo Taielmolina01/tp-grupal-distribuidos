@@ -62,7 +62,7 @@ type Msg[T any] struct {
 	QueryID  uint8
 	EOF      bool
 	Abort    bool
-	Total    uint32
+	Total    uint64
 	SenderID uint8
 	Seq      uint64
 	Records  []T
@@ -73,7 +73,7 @@ type Info struct {
 	QueryID  uint8
 	EOF      bool
 	Abort    bool
-	Total    uint32
+	Total    uint64
 	SenderID uint8
 	Seq      uint64
 }
@@ -95,10 +95,10 @@ func Write[T any](clientID int, queryID uint8, senderID uint8, seq uint64, recor
 	return w.Bytes()
 }
 
-func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uint32) []byte {
+func WriteEOF(clientID int, queryID uint8, senderID uint8, seq uint64, total uint64) []byte {
 	w := wire.NewWriter()
 	envelope.Header{ClientID: clientID, QueryID: queryID, Type: typeEOF, SenderID: senderID, Seq: seq}.WriteTo(w)
-	w.Uint32(total)
+	w.Uint64(total)
 	return w.Bytes()
 }
 
@@ -116,7 +116,7 @@ func ReadHeader(body []byte) (*wire.Reader, Info, error) {
 	case typeBatch:
 		return r, Info{ClientID: h.ClientID, QueryID: h.QueryID, SenderID: h.SenderID, Seq: h.Seq}, r.Err()
 	case typeEOF:
-		total := r.Uint32()
+		total := r.Uint64()
 		if err := r.Err(); err != nil {
 			return r, Info{}, err
 		}

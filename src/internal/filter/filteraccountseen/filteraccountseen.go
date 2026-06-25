@@ -214,5 +214,5 @@ func (f *FilterAccountSeen) emitResults(clientID int, state *clientState) error 
 	}
 
 	total := ot.CountFor("")
-	return msgsend.SendEOF(f.outputMiddleware, "", clientID, uint8(f.queryID), uint8(f.id), total+1, uint32(total))
+	return msgsend.SendEOF(f.outputMiddleware, "", clientID, uint8(f.queryID), uint8(f.id), total+1, total)
 }

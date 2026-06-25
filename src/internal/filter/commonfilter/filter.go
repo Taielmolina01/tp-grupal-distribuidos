@@ -249,7 +249,7 @@ func (f *Filter[T, O]) finishStep(clientID int, state *clientState) error {
 		for i := range cluster.Hasher.TotalShards() {
 			rk := fmt.Sprintf("shard-%d", i)
 			total := state.outputTracker.CountFor(fmt.Sprintf("%d_%s", ci, rk))
-			eofBody := batch.WriteEOF(clientID, f.queryId, uint8(f.id), eofSeq, uint32(total))
+			eofBody := batch.WriteEOF(clientID, f.queryId, uint8(f.id), eofSeq, total)
 			if err := cluster.Middleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 				slog.Error("finish step: send EOF failed", "cluster", ci, "routingKey", rk, "err", err)
 				return err

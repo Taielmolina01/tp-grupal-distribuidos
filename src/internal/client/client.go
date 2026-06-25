@@ -222,7 +222,7 @@ func (client *Client) sendAccountRecords(conn net.Conn, seq *uint64, skip bool, 
 		return builder.Flush(conn, *seq)
 	}
 
-	var total uint32
+	var total uint64
 	var cols [5][]byte
 	scanner.Scan()
 	for scanner.Scan() {
@@ -282,7 +282,7 @@ func (client *Client) sendTransRecords(conn net.Conn, seq *uint64, skip bool, re
 		return builder.Flush(conn, *seq)
 	}
 
-	var total uint32
+	var total uint64
 	var cols [11][]byte
 	scanner.Scan()
 	for scanner.Scan() {
@@ -339,7 +339,7 @@ func (client *Client) sendTransRecords(conn net.Conn, seq *uint64, skip bool, re
 	return client.sendEndOfRecords(conn, seq, skip, total)
 }
 
-func (client *Client) sendEndOfRecords(conn net.Conn, seq *uint64, skip bool, total uint32) error {
+func (client *Client) sendEndOfRecords(conn net.Conn, seq *uint64, skip bool, total uint64) error {
 	*seq++
 	if skip {
 		return nil

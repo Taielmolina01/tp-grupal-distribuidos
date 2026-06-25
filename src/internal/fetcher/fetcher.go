@@ -227,7 +227,7 @@ func (fetcher *Fetcher) consume(msg middleware.Message, ack, nack func()) {
 func (fetcher *Fetcher) finishTransfersStep(clientID int, state *clientState) error {
 	for i := range fetcher.outputAmount {
 		rk := fmt.Sprintf("shard-%d", i)
-		count := uint32(state.outputTracker.CountFor(rk))
+		count := state.outputTracker.CountFor(rk)
 		eofBody := batch.WriteEOF(clientID, fetcher.queryId, 0, 0, count)
 		if err := fetcher.outputMiddleware.Send(middleware.Message{Body: eofBody, RoutingKey: rk}); err != nil {
 			return err

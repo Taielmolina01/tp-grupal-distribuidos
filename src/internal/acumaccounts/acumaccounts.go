@@ -230,7 +230,7 @@ func (a *AcumAccounts) emitResults(clientID int, state *clientState) error {
 	for i := range a.outputAmount {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := ot.CountFor(rk)
-		if err := msgsend.SendEOF(a.outputMiddleware, rk, clientID, uint8(a.queryID), uint8(a.id), total+1, uint32(total)); err != nil {
+		if err := msgsend.SendEOF(a.outputMiddleware, rk, clientID, uint8(a.queryID), uint8(a.id), total+1, total); err != nil {
 			return err
 		}
 	}

@@ -57,20 +57,20 @@ func ReadWelcome(reader io.Reader) (sessionID uint32, phase Phase, nextSeq uint6
 	return sessionID, Phase(phaseByte[0]), nextSeq, nil
 }
 
-func WriteEndOfRecords(writer io.Writer, seq uint64, total uint32) error {
+func WriteEndOfRecords(writer io.Writer, seq uint64, total uint64) error {
 	var buf [13]byte
 	b := wire.AppendUint8(buf[:0], uint8(EndOfRecords))
 	b = wire.AppendUint64(b, seq)
-	b = wire.AppendUint32(b, total)
+	b = wire.AppendUint64(b, total)
 	return safeio.WriteAll(writer, b)
 }
 
-func ReadEndOfRecords(reader io.Reader) (seq uint64, total uint32, err error) {
+func ReadEndOfRecords(reader io.Reader) (seq uint64, total uint64, err error) {
 	seq, err = readUint64(reader)
 	if err != nil {
 		return 0, 0, err
 	}
-	total, err = readUint32(reader)
+	total, err = readUint64(reader)
 	if err != nil {
 		return 0, 0, err
 	}

@@ -257,7 +257,7 @@ func (s *DateRangeSplitter) finishStep(clientID int, state *clientState) error {
 	for i := range s.avgOutputAmount {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := state.outputTracker.CountFor("avg_" + rk)
-		if err := msgsend.SendEOF(s.avgMiddleware, rk, clientID, s.queryID, uint8(s.id), eofSeq, uint32(total)); err != nil {
+		if err := msgsend.SendEOF(s.avgMiddleware, rk, clientID, s.queryID, uint8(s.id), eofSeq, total); err != nil {
 			return err
 		}
 	}
@@ -265,7 +265,7 @@ func (s *DateRangeSplitter) finishStep(clientID int, state *clientState) error {
 	for i := range s.filterOutputAmount {
 		rk := fmt.Sprintf("shard-%d", i)
 		total := state.outputTracker.CountFor("filter_" + rk)
-		if err := msgsend.SendEOF(s.filterMiddleware, rk, clientID, s.queryID, uint8(s.id), eofSeq, uint32(total)); err != nil {
+		if err := msgsend.SendEOF(s.filterMiddleware, rk, clientID, s.queryID, uint8(s.id), eofSeq, total); err != nil {
 			return err
 		}
 	}

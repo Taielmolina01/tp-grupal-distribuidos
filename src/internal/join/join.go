@@ -126,7 +126,7 @@ func (j *Join) emit(clientID int, state *clientState) error {
 	}
 
 	var seq uint64
-	var total uint32
+	var total uint64
 	if len(results) > 0 {
 		body := batch.Write(clientID, j.queryID, uint8(j.id), seq, results, records.Query2ResultCodec)
 		if err := j.output.Send(middleware.Message{Body: body}); err != nil {
