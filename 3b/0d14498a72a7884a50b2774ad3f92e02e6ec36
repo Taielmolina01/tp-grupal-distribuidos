@@ -1,0 +1,57 @@
+src/internal/reducer/types.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 33-38,50-52
+src/internal/join/join.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 132,140
+src/internal/filter/commondistinctfilter/types.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 23-25
+src/cmd/gateway/main.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 21-23,26-29,128-130
+src/internal/reducer/reducer.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 35-37,42,53-55,83-84,121,200,205-206,208,213-214,218
+src/internal/common/filter/types.go
+  s_d73af1bdb9a6a7::t_4d35863862b795 17-21
+src/cmd/fetcher/config.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 26-30,80-87
+src/internal/join/adapter.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 8,27,37-38,43-44,49
+src/cmd/reducer/main.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 45-49,64-73,91-92,97-102,122
+src/cmd/join/config.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 38,40,43,45,69-74
+src/internal/filter/commondistinctfilter/distinctfilter.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 33-35,40,44-45,51-52,116,151,228,233-234,236,241-242,246
+  s_d73af1bdb9a6a7::t_9dabee884ed1df 117
+  s_d73af1bdb9a6a7::t_7ce590a49bf94c 50
+src/internal/fetcher/fetcher.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 60,112
+docker-compose.yaml
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 31-32,187-188,214-215,237,262,287-288,314-315,944
+  s_d73af1bdb9a6a7::t_80657ed2534d35 238-239
+  s_d73af1bdb9a6a7::t_bb0a9fb9695f7c 263-264
+src/cmd/bankdistinctfilter/config.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 28-30,36
+  s_d73af1bdb9a6a7::t_a92875e11b8dd8 33-35,37-40,64-73
+src/internal/join/types.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 27-29,52
+scripts/compose-gen/generator.go
+  s_d73af1bdb9a6a7::t_52bfc3fc9611b5 355-356
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 182-183,207,332-333,354,378-379
+src/internal/fetcher/types.go
+  s_d73af1bdb9a6a7::t_cfeee42173cb85 16,30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "3b0d14498a72a7884a50b2774ad3f92e02e6ec36",
+  "prompts": {},
+  "sessions": {
+    "s_d73af1bdb9a6a7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "519fcc35-4f69-4b0d-9575-d43739ef98bd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Nasher3296 <ignaciofernandez3296@gmail.com>"
+    }
+  }
+}
